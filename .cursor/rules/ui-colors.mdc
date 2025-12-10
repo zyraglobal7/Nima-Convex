@@ -1,0 +1,229 @@
+---
+globs: *.tsx,*.css
+alwaysApply: false
+---
+
+# 🎨 **Nima AI Color System**
+
+### _Inspired by Loro Piana's Quiet Luxury Aesthetic_
+
+## The Loro Piana Vibe
+
+Loro Piana is all about **understated elegance** — neutral palettes like camel, ivory, navy, and charcoal that prioritize versatility and timelessness [S6][S8]. Their colors tell a story of "warmth of a sunset" with rich caramel, warm toffee, and soft camel tones [S7]. No screaming logos, no flashy colors — just _quality you can feel_.
+
+Your existing colors (`#44242d` burgundy, `#8c6a50` warm brown) are actually a solid foundation — they're in the right family. Let's refine them into a cohesive system.
+
+---
+
+## 🌞 **Light Mode Palette**
+
+| Role                | Color Name     | Hex       | Usage                                                      |
+| ------------------- | -------------- | --------- | ---------------------------------------------------------- |
+| **Background**      | Ivory Cream    | `#FAF8F5` | Main page background                                       |
+| **Surface**         | Soft Champagne | `#F5F0E8` | Cards, modals, elevated surfaces                           |
+| **Surface Alt**     | Warm Linen     | `#EDE6DC` | Secondary cards, hover states                              |
+| **Primary**         | Nima Burgundy  | `#5C2A33` | Primary buttons, key accents (refined from your `#44242d`) |
+| **Primary Hover**   | Deep Wine      | `#44242D` | Button hover state (your original!)                        |
+| **Secondary**       | Camel Brown    | `#A67C52` | Secondary buttons, links, icons                            |
+| **Secondary Hover** | Toffee         | `#8C6A50` | Hover state (your original!)                               |
+| **Text Primary**    | Charcoal       | `#2D2926` | Headlines, body text                                       |
+| **Text Secondary**  | Warm Gray      | `#6B635B` | Captions, muted text                                       |
+| **Text Muted**      | Stone          | `#9C948A` | Placeholders, disabled text                                |
+| **Border**          | Sand           | `#E0D8CC` | Dividers, input borders                                    |
+| **Success**         | Sage           | `#6B7F5E` | Success states                                             |
+| **Error**           | Dusty Rose     | `#B85C5C` | Errors (warm, not jarring)                                 |
+
+### Light Mode Preview
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Background: #FAF8F5                                │
+│  ┌───────────────────────────────────────────────┐  │
+│  │  Surface Card: #F5F0E8                        │  │
+│  │                                               │  │
+│  │  Headline Text: #2D2926                       │  │
+│  │  Body text here in warm charcoal              │  │
+│  │  Secondary text: #6B635B                      │  │
+│  │                                               │  │
+│  │  ┌─────────────────┐  ┌─────────────────┐     │  │
+│  │  │  Primary Btn    │  │  Secondary Btn  │     │  │
+│  │  │  #5C2A33        │  │  #A67C52        │     │  │
+│  │  └─────────────────┘  └─────────────────┘     │  │
+│  └───────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🌙 **Dark Mode Palette**
+
+For dark mode, luxury brands use deep, rich backgrounds with warm undertones — not pure black, which feels harsh [S2][S3]. We'll keep that burgundy/brown warmth even in dark mode.
+
+| Role                | Color Name    | Hex       | Usage                                          |
+| ------------------- | ------------- | --------- | ---------------------------------------------- |
+| **Background**      | Deep Espresso | `#1A1614` | Main page background (warm black)              |
+| **Surface**         | Dark Cocoa    | `#252220` | Cards, modals                                  |
+| **Surface Alt**     | Coffee        | `#302B28` | Secondary cards, hover states                  |
+| **Primary**         | Rose Gold     | `#C9A07A` | Primary buttons, key accents (inverted warmth) |
+| **Primary Hover**   | Champagne     | `#D4B896` | Button hover                                   |
+| **Secondary**       | Soft Burgundy | `#A66B73` | Secondary buttons, accents                     |
+| **Secondary Hover** | Dusty Rose    | `#B8828A` | Hover state                                    |
+| **Text Primary**    | Warm White    | `#F5F0E8` | Headlines, body text                           |
+| **Text Secondary**  | Sand          | `#C4B8A8` | Captions, muted text                           |
+| **Text Muted**      | Warm Gray     | `#8C8078` | Placeholders, disabled                         |
+| **Border**          | Dark Sand     | `#3D3835` | Dividers, input borders                        |
+| **Success**         | Soft Sage     | `#8FA881` | Success states                                 |
+| **Error**           | Warm Coral    | `#D4807A` | Errors                                         |
+
+### Dark Mode Preview
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Background: #1A1614                                │
+│  ┌───────────────────────────────────────────────┐  │
+│  │  Surface Card: #252220                        │  │
+│  │                                               │  │
+│  │  Headline Text: #F5F0E8                       │  │
+│  │  Body text in warm white                      │  │
+│  │  Secondary text: #C4B8A8                      │  │
+│  │                                               │  │
+│  │  ┌─────────────────┐  ┌─────────────────┐     │  │
+│  │  │  Primary Btn    │  │  Secondary Btn  │     │  │
+│  │  │  #C9A07A        │  │  #A66B73        │     │  │
+│  │  └─────────────────┘  └─────────────────┘     │  │
+│  └───────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🧩 **CSS Variables (Ready to Use)**
+
+```css
+:root {
+  /* Light Mode (default) */
+  --background: #faf8f5;
+  --surface: #f5f0e8;
+  --surface-alt: #ede6dc;
+
+  --primary: #5c2a33;
+  --primary-hover: #44242d;
+  --primary-foreground: #faf8f5;
+
+  --secondary: #a67c52;
+  --secondary-hover: #8c6a50;
+  --secondary-foreground: #faf8f5;
+
+  --text-primary: #2d2926;
+  --text-secondary: #6b635b;
+  --text-muted: #9c948a;
+
+  --border: #e0d8cc;
+  --ring: #5c2a33;
+
+  --success: #6b7f5e;
+  --error: #b85c5c;
+  --warning: #c4a35a;
+}
+
+[data-theme='dark'] {
+  --background: #1a1614;
+  --surface: #252220;
+  --surface-alt: #302b28;
+
+  --primary: #c9a07a;
+  --primary-hover: #d4b896;
+  --primary-foreground: #1a1614;
+
+  --secondary: #a66b73;
+  --secondary-hover: #b8828a;
+  --secondary-foreground: #1a1614;
+
+  --text-primary: #f5f0e8;
+  --text-secondary: #c4b8a8;
+  --text-muted: #8c8078;
+
+  --border: #3d3835;
+  --ring: #c9a07a;
+
+  --success: #8fa881;
+  --error: #d4807a;
+  --warning: #d4c078;
+}
+```
+
+---
+
+## 🎯 **Tailwind Config (if you're using it)**
+
+```js
+// tailwind.config.js
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        // Brand Colors
+        'nima': {
+          burgundy: {
+            DEFAULT: '#5C2A33',
+            dark: '#44242D',
+            light: '#A66B73',
+          },
+          camel: {
+            DEFAULT: '#A67C52',
+            dark: '#8C6A50',
+            light: '#C9A07A',
+          },
+        },
+        // Semantic (use CSS vars for theme switching)
+        'background': 'var(--background)',
+        'surface': 'var(--surface)',
+        'surface-alt': 'var(--surface-alt)',
+        'primary': 'var(--primary)',
+        'secondary': 'var(--secondary)',
+        'text-primary': 'var(--text-primary)',
+        'text-secondary': 'var(--text-secondary)',
+        'text-muted': 'var(--text-muted)',
+        'border': 'var(--border)',
+      },
+    },
+  },
+};
+```
+
+---
+
+## 💡 **Design Tips for that Loro Piana Feel**
+
+| Element        | Recommendation                                                                                                                |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Typography** | Use a refined serif for headlines (like Playfair Display, Cormorant) paired with a clean sans-serif for body (Inter, DM Sans) |
+| **Spacing**    | Generous whitespace — let elements breathe. Loro Piana's aesthetic is _restrained_                                            |
+| **Imagery**    | Warm, soft lighting. Muted tones. No harsh shadows. Think golden hour vibes                                                   |
+| **Buttons**    | Subtle rounded corners (4-8px), no heavy shadows. Quiet, not loud                                                             |
+| **Animations** | Slow, elegant transitions (300-500ms). Nothing snappy or jarring                                                              |
+| **Icons**      | Thin, refined line icons. Not chunky                                                                                          |
+
+---
+
+## 🔥 **Quick Visual Summary**
+
+### Light Mode
+
+|              |                    |
+| ------------ | ------------------ |
+| 🟫 `#5C2A33` | Primary (Burgundy) |
+| 🟤 `#A67C52` | Secondary (Camel)  |
+| ⬜ `#FAF8F5` | Background (Ivory) |
+| ⬛ `#2D2926` | Text (Charcoal)    |
+
+### Dark Mode
+
+|              |                           |
+| ------------ | ------------------------- |
+| 🟨 `#C9A07A` | Primary (Rose Gold)       |
+| 🟪 `#A66B73` | Secondary (Soft Burgundy) |
+| ⬛ `#1A1614` | Background (Espresso)     |
+| ⬜ `#F5F0E8` | Text (Warm White)         |
+
+---

@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+Convex does not allow "use node" in files that define queries and mutations. Always ensure we keep separate files for queries/mutations and actions

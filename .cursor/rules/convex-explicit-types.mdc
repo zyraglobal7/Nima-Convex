@@ -1,0 +1,658 @@
+---
+alwaysApply: true
+---
+
+---
+alwaysApply: true
+---
+
+# Convex Explicit Type Definitions — MANDATORY
+
+**Status:** Always enforced — this rule must be followed for ALL Convex functions.
+
+## Core Principle
+
+Never rely on type inference in Convex function handlers. All parameters, return types, and handler signatures MUST be explicitly typed.
+
+## Required Pattern
+
+Every Convex function (query, mutation, internalQuery, internalMutation, action, internalAction) must follow this structure:
+
+```typescript
+export const functionName = query({
+  args: {
+    // Convex validators
+  },
+  returns: v.object({
+    // Explicit return validator
+  }),
+  handler: async (
+    ctx: QueryCtx, // Explicit context type
+    args: {
+      // Explicit args type matching validators
+    },
+  ): Promise<{
+    // Explicit Promise return type matching the return validator
+  }> => {
+    // Implementation
+  },
+});
+```
+
+## Specific Requirements
+
+### 1. Context Parameter
+
+✅ **CORRECT:**
+
+```typescript
+handler: async (ctx: QueryCtx, args: { ... })
+handler: async (ctx: MutationCtx, args: { ... })
+handler: async (ctx: ActionCtx, args: { ... })
+```
+
+❌ **WRONG:**
+
+```typescript
+handler: async(ctx, args); // Inferred type - NOT ALLOWED
+```
+
+### 2. Args Parameter
+
+✅ **CORRECT:**
+
+```typescript
+handler: async (
+  ctx: QueryCtx,
+  args: {
+    environment: "sandbox" | "live";
+    accountId?: Id<"accounts"> | Id<"accounts_sandbox">;
+    organizationId?: Id<"organizations">;
+  },
+)
+```
+
+❌ **WRONG:**
+
+```typescript
+handler: async (ctx: QueryCtx, args)  // Inferred type - NOT ALLOWED
+```
+
+### 3. Return Type
+
+✅ **CORRECT:**
+
+```typescript
+handler: async (
+  ctx: QueryCtx,
+  args: { ... },
+): Promise<{
+  organizationId: Id<"organizations">;
+  accountId: Id<"accounts"> | Id<"accounts_sandbox">;
+  name: string;
+  currency: string;
+  available: bigint;
+}> => {
+  // ...
+}
+```
+
+❌ **WRONG:**
+
+```typescript
+handler: async (ctx: QueryCtx, args: { ... }) => {
+  // Inferred return type - NOT ALLOWED
+}
+```
+
+### 4. Both Validator and TypeScript Return Type
+
+ALWAYS include both:
+
+- The Convex `returns` validator
+- The TypeScript `Promise<...>` return type annotation
+
+✅ **CORRECT:**
+
+```typescript
+export const getBalance = query({
+  args: { accountId: v.id("accounts") },
+  returns: v.object({
+    available: v.int64(),
+    pending: v.int64(),
+  }),
+  handler: async (
+    ctx: QueryCtx,
+    args: { accountId: Id<"accounts"> },
+  ): Promise<{
+    available: bigint;
+    pending: bigint;
+  }> => {
+    // ...
+  },
+});
+```
+
+## Reference Example from Codebase
+
+From `convex/accounting/accounts.ts`:
+
+```typescript
+export const getAccountBalance = query({
+  args: {
+    environment: v.union(v.literal("sandbox"), v.literal("live")),
+    accountId: v.optional(v.union(v.id("accounts"), v.id("accounts_sandbox"))),
+    organizationId: v.optional(v.id("organizations")),
+    accountNo: v.optional(v.string()),
+  },
+  returns: v.object({
+    organizationId: v.id("organizations"),
+    accountId: v.union(v.id("accounts"), v.id("accounts_sandbox")),
+    name: v.string(),
+    currency: v.string(),
+    available: v.int64(),
+    pending: v.int64(),
+    entries: v.array(
+      v.object({
+        createdAt: v.number(),
+        entryType: v.union(v.literal("debit"), v.literal("credit")),
+        amount: v.int64(),
+        balance: v.int64(),
+        description: v.string(),
+      }),
+    ),
+  }),
+  handler: async (
+    ctx: QueryCtx,
+    args: {
+      environment: "sandbox" | "live";
+      accountId?: any;
+      organizationId?: Id<"organizations">;
+      accountNo?: string;
+    },
+  ): Promise<{
+    organizationId: Id<"organizations">;
+    accountId: any;
+    name: string;
+    currency: string;
+    available: bigint;
+    pending: bigint;
+    entries: Array<{
+      createdAt: number;
+      entryType: "debit" | "credit";
+      amount: bigint;
+      balance: bigint;
+      description: string;
+    }>;
+  }> => {
+    // Implementation
+  },
+});
+```
+
+## Type Import Requirements
+
+Always import required types:
+
+```typescript
+import {
+  query,
+  mutation,
+  internalQuery,
+  internalMutation,
+  action,
+  internalAction,
+  QueryCtx,
+  MutationCtx,
+  ActionCtx,
+} from "./_generated/server";
+import { Id, Doc } from "./_generated/dataModel";
+import { v } from "convex/values";
+```
+
+## Why This Matters
+
+1. **Type Safety:** Explicit types catch errors at compile time
+2. **Documentation:** Function signatures are self-documenting
+3. **Maintainability:** Other developers immediately understand the function contract
+4. **Refactoring:** Changes to types are caught immediately
+5. **IDE Support:** Better autocomplete and inline documentation
+
+## Enforcement
+
+This rule is **always applied** and is **non-negotiable**. Any Convex function that relies on type inference must be refactored to include explicit types before merging.
+
+When reviewing or writing Convex code:
+
+- ✅ Check: Does the handler have explicit context type?
+- ✅ Check: Does the handler have explicit args type?
+- ✅ Check: Does the handler have explicit Promise return type?
+- ✅ Check: Are all nested objects and arrays fully typed?
+
+If any answer is NO, the code does NOT meet standards and must be updated.
+
+# Convex Types Usage Guide
+
+This guide shows how to use the types from `convex/types.ts` when refactoring Convex functions to have explicit types.
+
+## Quick Reference
+
+```typescript
+import type {
+  Environment,
+  Transaction,
+  TransactionStatus,
+  Account,
+  Organization,
+  // ... other types
+} from "./types";
+import type { Id, Doc } from "./_generated/dataModel";
+import { QueryCtx, MutationCtx, ActionCtx } from "./_generated/server";
+```
+
+## Pattern 1: Using Types for Function Arguments
+
+### ❌ Before (no explicit types):
+
+```typescript
+export const getTransaction = query({
+  args: { publicId: v.string() },
+  returns: v.object({
+    /* ... */
+  }),
+  handler: async (ctx, args) => {
+    // Implicit types - NOT ALLOWED
+    const transaction = await ctx.db
+      .query("transactions")
+      .withIndex("by_publicId", (q) => q.eq("publicId", args.publicId))
+      .unique();
+    return transaction;
+  },
+});
+```
+
+### ✅ After (explicit types):
+
+```typescript
+export const getTransaction = query({
+  args: { publicId: v.string() },
+  returns: v.union(
+    v.object({
+      _id: v.id("transactions"),
+      _creationTime: v.number(),
+      organizationId: v.id("organizations"),
+      publicId: v.string(),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("completed"),
+        v.literal("failed"),
+        v.literal("settled"),
+        v.literal("initiated"),
+        v.literal("rejected"),
+      ),
+      // ... all other fields
+    }),
+    v.null(),
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { publicId: string },
+  ): Promise<Doc<"transactions"> | null> => {
+    const transaction = await ctx.db
+      .query("transactions")
+      .withIndex("by_publicId", (q) => q.eq("publicId", args.publicId))
+      .unique();
+    return transaction;
+  },
+});
+```
+
+## Pattern 2: Using Imported Types for Complex Arguments
+
+### ✅ Good:
+
+```typescript
+import type { TransactionStatus, Environment } from "./types";
+
+export const listTransactions = query({
+  args: {
+    organizationId: v.id("organizations"),
+    status: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("completed"),
+        v.literal("failed"),
+        v.literal("settled"),
+        v.literal("initiated"),
+        v.literal("rejected"),
+      ),
+    ),
+    environment: v.union(v.literal("sandbox"), v.literal("live")),
+    limit: v.number(),
+  },
+  returns: v.array(
+    v.object({
+      /* ... */
+    }),
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: {
+      organizationId: Id<"organizations">;
+      status?: TransactionStatus; // Use the imported type
+      environment: Environment; // Use the imported type
+      limit: number;
+    },
+  ): Promise<Array<Doc<"transactions"> | Doc<"transactions_sandbox">>> => {
+    // Implementation
+  },
+});
+```
+
+## Pattern 3: Helper Functions with Explicit Types
+
+### ✅ Good:
+
+```typescript
+import type { Environment, Transaction, TransactionStatus } from "./types";
+import { DatabaseReader } from "./_generated/server";
+import { Id, Doc } from "./_generated/dataModel";
+
+/**
+ * Helper function to get a transaction by public ID
+ * Environment-aware to work with both live and sandbox
+ */
+async function getTransactionByPublicId(
+  db: DatabaseReader,
+  opts: {
+    publicId: string;
+    environment: Environment;
+  },
+): Promise<Doc<"transactions"> | Doc<"transactions_sandbox"> | null> {
+  const table =
+    opts.environment === "live" ? "transactions" : "transactions_sandbox";
+
+  return await db
+    .query(table)
+    .withIndex("by_publicId", (q) => q.eq("publicId", opts.publicId))
+    .unique();
+}
+```
+
+## Pattern 4: Using Environment-Aware Code
+
+When writing code that works with both live and sandbox tables, use runtime conditionals:
+
+```typescript
+import type { Environment } from "./types";
+import { DatabaseWriter } from "./_generated/server";
+import { Id, Doc } from "./_generated/dataModel";
+
+// Example: Environment-aware account lookup using function overloads
+async function getAccountById(
+  db: DatabaseWriter,
+  opts: {
+    environment: "live";
+    accountId: Id<"accounts">;
+  },
+): Promise<Doc<"accounts"> | null>;
+async function getAccountById(
+  db: DatabaseWriter,
+  opts: {
+    environment: "sandbox";
+    accountId: Id<"accounts_sandbox">;
+  },
+): Promise<Doc<"accounts_sandbox"> | null>;
+async function getAccountById(
+  db: DatabaseWriter,
+  opts: {
+    environment: Environment;
+    accountId: Id<"accounts"> | Id<"accounts_sandbox">;
+  },
+): Promise<Doc<"accounts"> | Doc<"accounts_sandbox"> | null> {
+  if (opts.environment === "live") {
+    return await db.get(opts.accountId as Id<"accounts">);
+  } else {
+    return await db.get(opts.accountId as Id<"accounts_sandbox">);
+  }
+}
+```
+
+## Pattern 5: Return Types for Projected/Transformed Data
+
+When you're NOT returning the full document (e.g., for API responses), create explicit type interfaces:
+
+```typescript
+import type { TransactionStatus, PaymentMethod } from "./types";
+import { Id } from "./_generated/dataModel";
+
+// Define the API response shape
+interface TransactionApiResponse {
+  id: string;
+  merchantTransactionId?: string;
+  status: TransactionStatus;
+  amount: bigint;
+  currency: string;
+  paymentMethod: PaymentMethod;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export const getTransactionForApi = query({
+  args: { publicId: v.string() },
+  returns: v.union(
+    v.object({
+      id: v.string(),
+      merchantTransactionId: v.optional(v.string()),
+      status: v.union(/* ... */),
+      amount: v.int64(),
+      currency: v.string(),
+      paymentMethod: v.union(/* ... */),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }),
+    v.null(),
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { publicId: string },
+  ): Promise<TransactionApiResponse | null> => {
+    const transaction = await ctx.db
+      .query("transactions")
+      .withIndex("by_publicId", (q) => q.eq("publicId", args.publicId))
+      .unique();
+
+    if (!transaction) {
+      return null;
+    }
+
+    // Project to API shape
+    return {
+      id: transaction.publicId,
+      merchantTransactionId: transaction.merchantTransactionId,
+      status: transaction.status,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      paymentMethod: transaction.paymentMethod,
+      createdAt: transaction.createdAt,
+      updatedAt: transaction.updatedAt,
+    };
+  },
+});
+```
+
+## Pattern 6: Mutations with Explicit Input Types
+
+```typescript
+import type { TransactionType, PaymentMethod, DebitOrCredit } from "./types";
+import { Id } from "./_generated/dataModel";
+
+export const createTransaction = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    accountType: v.union(v.literal("collections"), v.literal("payouts")),
+    type: v.union(
+      v.literal("charge"),
+      v.literal("transfer"),
+      v.literal("payment"),
+      // ... all transaction types
+    ),
+    paymentMethod: v.union(
+      v.literal("mobile_money"),
+      v.literal("airtime"),
+      v.literal("bank_transfer"),
+    ),
+    amount: v.int64(),
+    currency: v.string(),
+    debitOrCredit: v.union(v.literal("debit"), v.literal("credit")),
+  },
+  returns: v.object({
+    transactionId: v.id("transactions"),
+    publicId: v.string(),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: {
+      organizationId: Id<"organizations">;
+      accountType: "collections" | "payouts";
+      type: TransactionType; // Use imported type
+      paymentMethod: PaymentMethod; // Use imported type
+      amount: bigint;
+      currency: string;
+      debitOrCredit: DebitOrCredit; // Use imported type
+    },
+  ): Promise<{
+    transactionId: Id<"transactions">;
+    publicId: string;
+  }> => {
+    const publicId = `txn_${generateId()}`;
+
+    const transactionId = await ctx.db.insert("transactions", {
+      organizationId: args.organizationId,
+      publicId,
+      accountType: args.accountType,
+      type: args.type,
+      paymentMethod: args.paymentMethod,
+      amount: args.amount,
+      currency: args.currency,
+      debitOrCredit: args.debitOrCredit,
+      processor: "mpesa",
+      status: "pending",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    return { transactionId, publicId };
+  },
+});
+```
+
+## Pattern 7: Actions with Explicit Types
+
+```typescript
+import type { Environment, TransactionStatus } from "./types";
+
+export const processCallback = internalAction({
+  args: {
+    transactionId: v.id("transactions"),
+    environment: v.union(v.literal("sandbox"), v.literal("live")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("completed"),
+      v.literal("failed"),
+      // ... all statuses
+    ),
+    processorReference: v.string(),
+  },
+  returns: v.null(),
+  handler: async (
+    ctx: ActionCtx,
+    args: {
+      transactionId: Id<"transactions">;
+      environment: Environment;
+      status: TransactionStatus;
+      processorReference: string;
+    },
+  ): Promise<null> => {
+    // Actions don't have ctx.db, so use runMutation
+    await ctx.runMutation(internal.transactions.mutations.updateStatus, {
+      transactionId: args.transactionId,
+      status: args.status,
+      processorReference: args.processorReference,
+    });
+
+    return null;
+  },
+});
+```
+
+## Common Patterns Summary
+
+### 1. Always import specific types:
+
+```typescript
+import type {
+  Environment,
+  TransactionStatus,
+  AccountType,
+  // ... other types you need
+} from "./types";
+```
+
+### 2. Always annotate context:
+
+```typescript
+handler: async (ctx: QueryCtx, args: {...}) => { }
+handler: async (ctx: MutationCtx, args: {...}) => { }
+handler: async (ctx: ActionCtx, args: {...}) => { }
+```
+
+### 3. Always annotate args explicitly:
+
+```typescript
+args: {
+  organizationId: Id<"organizations">;
+  status: TransactionStatus;
+  environment: Environment;
+}
+```
+
+### 4. Always annotate Promise return type:
+
+```typescript
+): Promise<Doc<"transactions"> | null> => { }
+): Promise<Array<Doc<"accounts">>> => { }
+): Promise<{ id: string; name: string }> => { }
+```
+
+### 5. For helpers, pass `db` not `ctx`:
+
+```typescript
+async function helper(
+  db: DatabaseReader,  // or DatabaseWriter
+  opts: { ... }
+): Promise<ReturnType> {
+  // ...
+}
+```
+
+## Migration Checklist
+
+When refactoring a function:
+
+- [ ] Import required types from `./types`
+- [ ] Import `Id`, `Doc` from `./_generated/dataModel`
+- [ ] Import context types from `./_generated/server`
+- [ ] Add explicit `ctx: QueryCtx | MutationCtx | ActionCtx` parameter
+- [ ] Add explicit `args: { ... }` type annotation
+- [ ] Add explicit `Promise<...>` return type
+- [ ] Ensure all validators match the TypeScript types
+- [ ] Test the function still compiles and works
+
+## Benefits
+
+✅ **Type Safety**: Catch errors at compile time
+✅ **Auto-complete**: Better IDE support
+✅ **Documentation**: Function signatures are self-documenting
+✅ **Refactoring**: Changes to types are caught immediately
+✅ **Consistency**: Shared types across the codebase

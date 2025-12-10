@@ -1,65 +1,219 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Authenticated, Unauthenticated, useQuery } from 'convex/react';
+import { GateSplash, OnboardingWizard } from '@/components/onboarding';
+import { useOnboardingCompletion } from '@/lib/hooks/useOnboardingCompletion';
+import { api } from '@/convex/_generated/api';
+import { Loader2 } from 'lucide-react';
+
+type View = 'gate' | 'onboarding' | 'app';
 
 export default function Home() {
+  const [view, setView] = useState<View>('gate');
+
+  const handleGetStarted = () => {
+    setView('onboarding');
+  };
+
+  const handleBackToGate = () => {
+    setView('gate');
+  };
+
+  const handleOnboardingComplete = () => {
+    // This will redirect to auth via the AccountStep
+    // After auth, the user will be redirected back and
+    // the AuthenticatedContent component will handle the rest
+    setView('app');
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <>
+      <Authenticated>
+        <AuthenticatedContent />
+      </Authenticated>
+      <Unauthenticated>
+        {view === 'gate' && <GateSplash onGetStarted={handleGetStarted} />}
+        {view === 'onboarding' && (
+          <OnboardingWizard onComplete={handleOnboardingComplete} onBack={handleBackToGate} />
+        )}
+        {view === 'app' && <OnboardingCompletePlaceholder />}
+      </Unauthenticated>
+    </>
+  );
+}
+
+/**
+ * Content shown to authenticated users
+ * Handles onboarding completion and redirects to main feed
+ */
+function AuthenticatedContent() {
+  const { user, isProcessing, error, needsOnboarding } = useOnboardingCompletion();
+
+  // Show loading while processing onboarding
+  if (isProcessing || user === undefined) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
+        <div className="max-w-md text-center space-y-6">
+          <Loader2 className="w-12 h-12 mx-auto text-primary animate-spin" />
+          <p className="text-muted-foreground">Setting up your profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error if onboarding failed
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
+        <div className="max-w-md text-center space-y-6">
+          <div className="w-20 h-20 mx-auto rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+            <span className="text-3xl">😕</span>
+          </div>
+          <h1 className="text-2xl font-serif font-semibold text-foreground">
+            Something went wrong
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          <p className="text-muted-foreground">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-primary text-primary-foreground rounded-full hover:bg-primary-hover transition-colors"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // If user needs onboarding (signed up but didn't complete onboarding flow)
+  if (needsOnboarding) {
+    return <NeedsOnboardingPrompt />;
+  }
+
+  // Main feed for authenticated users with completed onboarding
+  return <MainFeedPlaceholder />;
+}
+
+/**
+ * Prompt shown when user is authenticated but hasn't completed onboarding
+ */
+function NeedsOnboardingPrompt() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
+      <div className="max-w-md text-center space-y-6">
+        <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+          <span className="text-3xl">👋</span>
+        </div>
+        <h1 className="text-3xl font-serif font-semibold text-foreground">
+          Welcome to Nima!
+        </h1>
+        <p className="text-muted-foreground">
+          Let&apos;s set up your style profile so I can show you outfits you&apos;ll love.
+        </p>
+        <a
+          href="/"
+          onClick={() => {
+            // Clear any stale data and reload to start fresh onboarding
+            localStorage.removeItem('nima-onboarding-data');
+          }}
+          className="inline-block px-6 py-3 bg-primary text-primary-foreground rounded-full hover:bg-primary-hover transition-colors"
+        >
+          Complete Your Profile
+        </a>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Placeholder for the main feed (to be implemented)
+ */
+function MainFeedPlaceholder() {
+  const user = useQuery(api.users.queries.getCurrentUser);
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
+      <div className="max-w-md text-center space-y-6">
+        <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+          <span className="text-3xl">🎉</span>
+        </div>
+        <h1 className="text-3xl font-serif font-semibold text-foreground">
+          Welcome back{user?.firstName ? `, ${user.firstName}` : ''}!
+        </h1>
+        <p className="text-muted-foreground">
+          Your personalized feed is coming soon. Check back later!
+        </p>
+
+        {/* Profile Summary */}
+        {user && (
+          <div className="bg-surface rounded-xl p-4 text-left space-y-2 text-sm">
+            <p className="font-medium text-foreground">Your Profile</p>
+            {user.stylePreferences.length > 0 && (
+              <p className="text-muted-foreground">
+                Style: {user.stylePreferences.slice(0, 3).join(', ')}
+              </p>
+            )}
+            {user.budgetRange && (
+              <p className="text-muted-foreground">
+                Budget:{' '}
+                {user.budgetRange === 'low'
+                  ? 'Smart Saver'
+                  : user.budgetRange === 'mid'
+                    ? 'Best of Both'
+                    : 'Treat Yourself'}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3">
+          <a
+            href="/discover"
+            className="inline-block px-6 py-3 bg-primary text-primary-foreground rounded-full hover:bg-primary-hover transition-colors"
+          >
+            Explore Looks
           </a>
           <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/sign-out"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            Documentation
+            Sign out
           </a>
         </div>
-      </main>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Placeholder after completing onboarding - redirects to sign-up
+ */
+function OnboardingCompletePlaceholder() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
+      <div className="max-w-md text-center space-y-6">
+        <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+          <span className="text-3xl">🎉</span>
+        </div>
+        <h1 className="text-3xl font-serif font-semibold text-foreground">You&apos;re all set!</h1>
+        <p className="text-muted-foreground">
+          Your style profile has been created. The main feed experience is coming soon!
+        </p>
+        <div className="flex flex-col gap-3">
+          <a
+            href="/sign-up"
+            className="inline-block px-6 py-3 bg-primary text-primary-foreground rounded-full hover:bg-primary-hover transition-colors"
+          >
+            Complete Sign Up
+          </a>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Start over
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

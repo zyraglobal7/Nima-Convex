@@ -1,0 +1,402 @@
+---
+alwaysApply: true
+---
+
+# 📋 **NIMA AI – Product Requirements Document (PRD)**
+
+### _AI Fashion Discovery & Personal Styling Platform_
+
+**Version:** 1.0 (MVP)  
+**Author:** Panel AI for Ian N.  
+**Date:** January 2025
+
+---
+
+## 🎯 **1. Executive Summary**
+
+### 1.1 Vision
+
+Nima AI is a **Pinterest-meets-personal-stylist** platform where users become the model in every outfit they browse. Unlike generic search-based fashion tools (Google, ChatGPT), Nima goes deep into fashion discovery by combining AI virtual try-on technology, personalized styling, and optional concierge shopping—all wrapped in a visually immersive, scroll-worthy experience.
+
+### 1.2 Why This Wins
+
+The fashion discovery economy has shifted from "search" to "visual-first discovery" [S6]. Users don't want to type "beige formal pants"—they want to scroll, see themselves in outfits, and feel inspired. Zalando credited an **18% year-on-year profitability increase** partly from AI-driven discovery features [S11]. Apps like OneOff are positioning themselves as the "Spotify of Fashion" with personalization at every layer [S4].
+
+**Nima's edge:** You ARE the model. Every outfit on your feed shows _you_ wearing it—not some random person. That's sticky, that's shareable, that's conversion gold.
+
+---
+
+## 👤 **2. Target Personas**
+
+| Persona                      | Description                                                                        | Pain Points                                              |
+| ---------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **"Scroll Sarah"**           | 22-35, loves Pinterest/TikTok, visual browser, buys on impulse if she can "see it" | Can't visualize herself in clothes; tired of returns     |
+| **"Busy Bola"**              | 28-45, working professional, wants style without effort                            | No time to shop across multiple stores; wants it handled |
+| **"Budget-Conscious Chris"** | 20-40, cares about price, compares before buying                                   | Needs to see prices upfront; wants value                 |
+| **"International Ife"**      | Lives in a region where certain stores don't ship directly                         | Can't access items; needs someone to buy on their behalf |
+
+---
+
+## 🔄 **3. User Journey & Core Flows**
+
+### 3.1 **Onboarding Flow** (First-Time User)
+
+This is CRITICAL. Best practices say onboarding should be interactive, engaging, and hands-on from the start [S23]. Make it feel like a game, not a form.
+
+**Flow Steps:**
+
+| Step                      | What Happens                                                                                                                                                                      | Data Captured                                           |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| **1. Welcome**            | AI stylist (Nima) greets user with personality: _"Hey gorgeous! I'm Nima, your personal stylist. Let's get you set up so I can show you YOUR best looks."_                        | —                                                       |
+| **2. Style Vibe**         | Visual quiz: show 8-12 outfit images, user taps the ones they love (Pinterest-style). _"Tap outfits that make you say 'THAT'S me!'"_                                              | `style_preferences[]`                                   |
+| **3. Size & Fit**         | Interactive body input: _"What's your usual t-shirt size? Waist? Don't worry, I won't judge."_ Dropdowns + illustrations                                                          | `shirt_size`, `waist_size`, `pants_size`, `shoe_size`   |
+| **4. Location & Budget**  | _"Where are you based? And what's your vibe—thrift queen or treat yourself?"_                                                                                                     | `country`, `currency`, `budget_range` (Low/Mid/Premium) |
+| **5. Photo Upload**       | _"Now for the fun part! Upload 2-4 photos of yourself so I can show you in every outfit."_ Clear instructions: full body, close-up, different angles. **Privacy note displayed.** | `user_photos[]` (stored securely)                       |
+| **6. Account Creation**   | Email/Google sign-up. Frictionless.                                                                                                                                               | `email`, `auth_provider`                                |
+| **7. Discovery Unlocked** | _"You're all set! Let's find your new favorite fits."_ → Redirect to main feed                                                                                                    | —                                                       |
+
+**Pro Tips for MVP:**
+
+- Use a progress bar (5 steps) to reduce drop-off [S23]
+- Allow "Skip for now" on photos (degrade experience but don't block)
+- Keep VTO load times under 7 seconds—users won't wait [S17]
+
+---
+
+### 3.2 **Main Feed (Discovery)**
+
+A Pinterest-style masonry grid showing outfit cards. Each card displays the user as the model (via AI try-on).
+
+**Feed Card Components:**
+
+- **Outfit Image** (user wearing the outfit via AI generation)
+- **Quick Save Heart** (tap to save)
+- **Price Range Badge** (e.g., "$50-$120")
+- **Style Tag** (e.g., "Casual Friday", "Date Night")
+
+**Feed Algorithm Inputs:**
+
+- Style preferences from onboarding
+- Body measurements (to surface correct sizes)
+- Budget range
+- Past saves & engagement
+- Seasonal/trending data
+
+**Daily Limits (Free Tier):**
+Based on competitor analysis [S43], free tiers typically limit:
+
+- **15-25 outfit views/day** (with AI try-on)
+- **Unlimited browse** (without try-on preview)
+- **5 saves/day** to collections
+
+---
+
+### 3.3 **Collection/Wardrobe Feature**
+
+#### 🎯 **Naming Decision: "Lookbooks"**
+
+Ian, you asked about "Collections" vs "Wardrobes." Here's my take:
+
+| Name             | Pros                                             | Cons                                           |
+| ---------------- | ------------------------------------------------ | ---------------------------------------------- |
+| **Collections**  | Pinterest-familiar, broad                        | Overused, generic                              |
+| **Wardrobes**    | Fashion-specific, tangible                       | Implies ownership (user doesn't own these yet) |
+| **Closet**       | Very common (Acloset, Whering use it) [S31][S33] | Overused in space                              |
+| **Lookbooks** ✅ | Fashion-forward, aspirational, implies curation  | Slightly longer word                           |
+| **Boards**       | Pinterest exact                                  | Too derivative                                 |
+
+**Recommendation:** **"Lookbooks"** — it's aspirational ("my summer lookbook"), fashion-native, and implies curation without implying ownership. Users save outfits to their lookbooks for later.
+
+**Lookbook Features:**
+
+- Create multiple lookbooks (e.g., "Summer Vacation", "Work Mode", "Date Night")
+- Share lookbooks publicly (growth/viral feature)
+- Collaborative lookbooks (invite friends to add)
+
+---
+
+### 3.4 **Outfit Detail View**
+
+When user taps an outfit card:
+
+| Section              | Content                                                                                                                                                                                       |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hero Image**       | Full outfit with user as model                                                                                                                                                                |
+| **Nima's Note**      | AI-generated stylist comment: _"This earthy palette complements your skin tone beautifully. The relaxed fit keeps it effortless but the layering adds depth. You'd turn heads at brunch! 🔥"_ |
+| **Products List**    | Each item in the outfit: image, name, brand, price, "Buy" link                                                                                                                                |
+| **Total Price**      | Sum of all items                                                                                                                                                                              |
+| **Nima Shop Button** | (if available) "Let Nima Buy This For You"                                                                                                                                                    |
+| **Similar Looks**    | Carousel of related outfits                                                                                                                                                                   |
+
+---
+
+### 3.5 **Nima Shop (Concierge Buying Service)**
+
+#### 🎯 **Naming Options:**
+
+| Name                 | Vibe                              |
+| -------------------- | --------------------------------- |
+| Nima Buy             | Simple, clear                     |
+| Nima Shop            | Feels like a service              |
+| **Nima Delivers** ✅ | Action-oriented, promises outcome |
+| Shop For Me          | Too generic                       |
+| Personal Shopper     | Sounds expensive                  |
+
+**Recommendation:** **"Nima Delivers"** or keep it simple with **"Shop For Me"**
+
+**How It Works:**
+
+1. User clicks "Nima Delivers" on an outfit
+2. Sees breakdown: Item costs + Nima Service Fee (% or flat) + Estimated Shipping
+3. Enters shipping address + payment
+4. Nima's backend (or ops team initially) purchases items from stores
+5. Items consolidated and shipped to user
+6. User receives tracking + delivery
+
+**Concierge services like Jetblack and Ship Out From USA have proven this model** [S37][S40]. It's especially valuable for international users who can't access certain stores directly.
+
+**MVP Approach:**
+
+- Start with **manual fulfillment** (you literally buy and ship)
+- Charge **10-15% service fee** or **flat $10-20**
+- Only offer for select countries/regions initially
+- Track margins closely before automating
+
+---
+
+## 💰 **4. Monetization Model**
+
+Freemium with multiple revenue streams is the most effective model in fashion tech [S1].
+
+| Stream                     | Description                                                                | MVP?         |
+| -------------------------- | -------------------------------------------------------------------------- | ------------ |
+| **Freemium Subscriptions** | Free tier with limits; paid unlocks unlimited try-ons, saves, early access | ✅           |
+| **Affiliate Commissions**  | Earn % when users click through and purchase                               | ✅           |
+| **Nima Delivers Fee**      | Service fee on concierge purchases                                         | ✅           |
+| **Seller Subscriptions**   | Brands/stores pay to be featured more prominently                          | ✅ (Phase 2) |
+| **Promoted Outfits**       | Brands pay to have outfits surface higher in feeds                         | Phase 2      |
+| **Data Insights**          | Sell anonymized trend data to brands                                       | Phase 3      |
+
+### Subscription Tiers (Proposed)
+
+| Tier           | Price     | Features                                                                                 |
+| -------------- | --------- | ---------------------------------------------------------------------------------------- |
+| **Free**       | $0        | 20 AI try-on views/day, 5 saves/day, ads                                                 |
+| **Style Pass** | $7.99/mo  | Unlimited try-ons, unlimited saves, no ads, early access to drops                        |
+| **VIP Closet** | $19.99/mo | All above + priority Nima Delivers, exclusive collabs, personal styling sessions (async) |
+
+---
+
+## 🗄️ **5. Data Model (Convex-Ready)**
+
+Convex is perfect for this—real-time sync means saved outfits appear instantly across devices, and the reactive database keeps feeds fresh [S25][S26][S27].
+
+### Core Tables
+
+```typescript
+// users
+{
+  _id: Id<"users">,
+  email: string,
+  name: string,
+  country: string,
+  currency: string,
+  budgetRange: "low" | "mid" | "premium",
+  shirtSize: string,
+  waistSize: string,
+  pantsSize: string,
+  shoeSize: string,
+  stylePreferences: string[], // tags from onboarding
+  photos: string[], // URLs to stored images
+  subscriptionTier: "free" | "style_pass" | "vip",
+  createdAt: number,
+}
+
+// products
+{
+  _id: Id<"products">,
+  name: string,
+  brand: string,
+  category: "top" | "bottom" | "shoes" | "accessory" | "outerwear",
+  price: number,
+  currency: string,
+  imageUrl: string,
+  sourceUrl: string, // where to buy
+  sourceStore: string,
+  sizes: string[],
+  colors: string[],
+  tags: string[], // "casual", "formal", "summer", etc.
+  isActive: boolean,
+  createdAt: number,
+}
+
+// outfits
+{
+  _id: Id<"outfits">,
+  productIds: Id<"products">[],
+  totalPrice: number,
+  styleTags: string[],
+  occasion: string,
+  season: string,
+  nimaNote: string, // AI-generated comment
+  createdAt: number,
+}
+
+// lookbooks (collections)
+{
+  _id: Id<"lookbooks">,
+  userId: Id<"users">,
+  name: string,
+  description?: string,
+  outfitIds: Id<"outfits">[],
+  isPublic: boolean,
+  createdAt: number,
+}
+
+// tryOnImages (cached AI generations)
+{
+  _id: Id<"tryOnImages">,
+  userId: Id<"users">,
+  outfitId: Id<"outfits">,
+  imageUrl: string, // generated image URL
+  createdAt: number,
+}
+
+// orders (for Nima Delivers)
+{
+  _id: Id<"orders">,
+  userId: Id<"users">,
+  outfitId: Id<"outfits">,
+  status: "pending" | "purchased" | "shipped" | "delivered",
+  itemsCost: number,
+  serviceFee: number,
+  shippingCost: number,
+  totalCost: number,
+  shippingAddress: object,
+  trackingNumber?: string,
+  createdAt: number,
+}
+
+// stores (for seller marketplace)
+{
+  _id: Id<"stores">,
+  name: string,
+  website: string,
+  logo?: string,
+  subscriptionTier: "free" | "basic" | "premium",
+  isVerified: boolean,
+  createdAt: number,
+}
+```
+
+---
+
+## ⚙️ **6. Technical Architecture (MVP)**
+
+### Stack
+
+| Layer             | Tech                                           |
+| ----------------- | ---------------------------------------------- |
+| **Frontend**      | Next.js / React                                |
+| **Backend**       | Convex (real-time DB + serverless functions)   |
+| **Auth**          | Convex Auth or Clerk                           |
+| **AI Try-On**     | API integration (Fashn AI, Kolors, or similar) |
+| **AI Stylist**    | OpenAI GPT-4 / Claude for Nima's personality   |
+| **Image Storage** | Convex file storage or Cloudflare R2           |
+| **Payments**      | Stripe                                         |
+
+### AI Integrations
+
+| Feature                         | API/Model                                             |
+| ------------------------------- | ----------------------------------------------------- |
+| Virtual Try-On                  | Fashn AI, Kolors VTO, or similar [S21]                |
+| Nima's Notes (styling comments) | GPT-4 / Claude with fashion prompts                   |
+| Outfit Generation               | Curate from product DB; can use AI for matching later |
+| Onboarding Quiz                 | Simple logic + GPT for personalized welcome           |
+
+---
+
+## 📊 **7. Success Metrics (MVP)**
+
+| Metric                           | Target (30 days post-launch) |
+| -------------------------------- | ---------------------------- |
+| **Onboarding Completion Rate**   | >60%                         |
+| **Daily Active Users (DAU)**     | 500+                         |
+| **Saves per User/Day**           | 3+                           |
+| **Affiliate Click-Through Rate** | >5%                          |
+| **Nima Delivers Orders**         | 20+                          |
+| **Paid Conversion**              | 3-5% of free users           |
+
+---
+
+## 🚀 **8. MVP Scope (Locked-in Evening Build)**
+
+### ✅ Must Have (MVP Night 1)
+
+- [ ] Onboarding flow (style quiz, sizes, photo upload)
+- [ ] User auth (Convex Auth / Clerk)
+- [ ] Product database seeded with 50-100 items
+- [ ] 10-20 pre-curated outfits
+- [ ] Pinterest-style feed (masonry grid)
+- [ ] Outfit detail view with products + prices + buy links
+- [ ] Lookbook save functionality
+- [ ] Basic AI try-on integration (even if slow/limited)
+- [ ] Nima's Note (GPT-generated per outfit)
+
+### 🔜 Fast Follow (Week 2)
+
+- [ ] Subscription tiers + Stripe integration
+- [ ] Daily limits enforcement
+- [ ] Nima Delivers order flow (manual fulfillment)
+- [ ] More products scraped/added
+- [ ] Feed personalization algorithm
+
+### 📅 Phase 2 (Month 2-3)
+
+- [ ] Seller portal (claim store, manage products)
+- [ ] Promoted outfits
+- [ ] Social sharing of lookbooks
+- [ ] Mobile app (React Native / Expo)
+
+---
+
+## 🧩 **9. Things You Might Have Missed**
+
+Here are some additions I'd recommend:
+
+| Feature                        | Why It Matters                                                                                             |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| **"Why This Works" Tooltips**  | When Nima explains why an outfit suits the user (color theory, body shape), it builds trust and engagement |
+| **Outfit Remixing**            | Let users swap one item in an outfit ("I like this but with different shoes")                              |
+| **Price Drop Alerts**          | Notify users when items in saved outfits go on sale—high conversion                                        |
+| **Size Confidence Score**      | "95% confident this will fit based on your measurements"—reduces anxiety                                   |
+| **Occasion Filters**           | Quick filters: Work, Weekend, Date Night, Wedding Guest, etc.                                              |
+| **"Shop My Lookbook" Sharing** | Users share lookbook links; when friends buy, user gets credit (referral program)                          |
+| **Seasonal Refresh**           | Auto-archive "Summer 2024" lookbooks, prompt for new season looks                                          |
+| **Try-On Comparison**          | Side-by-side view of user in 2 different outfits                                                           |
+| **Dislike Button**             | Important for algorithm—knowing what they DON'T want is as valuable as likes                               |
+| **Photo Guidelines Enforcer**  | AI check on uploaded photos: "This photo is too dark, try another!"                                        |
+
+---
+
+## ⚠️ **10. Risks & Mitigations**
+
+| Risk                            | Mitigation                                                                         |
+| ------------------------------- | ---------------------------------------------------------------------------------- |
+| **AI try-on quality issues**    | Start with waist-up or simple poses; set expectations in onboarding                |
+| **Photo privacy concerns**      | Clear privacy policy; allow photo deletion; don't use for training without consent |
+| **Low initial product catalog** | Seed with popular stores (Zara, H&M, ASOS); manual curation beats automation early |
+| **Nima Delivers logistics**     | Start with ONE region/country; manual fulfillment to learn before scaling          |
+| **High AI API costs**           | Cache try-on images; limit free tier aggressively                                  |
+
+---
+
+## 📝 **11. Open Questions**
+
+1. **What's the primary launch region?** (Affects currency, stores, Nima Delivers feasibility)
+2. **Photo storage policy?** How long do we keep user photos? GDPR compliance?
+3. **Which try-on API?** Need to test Fashn AI, Kolors, etc. for quality + cost
+4. **Manual vs automated product scraping?** Budget for data pipeline?
+5. **Nima's personality?** Sassy? Supportive? Depends on brand voice—let's nail this.
+
+---

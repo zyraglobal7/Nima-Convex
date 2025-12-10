@@ -1,26 +1,368 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+@import "tw-animate-css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ============================================
+   NIMA AI - Loro Piana Inspired Color System
+   ============================================ */
+
+:root {
+  /* Border Radius */
+  --radius: 0.5rem;
+
+  /* Light Mode - Loro Piana Quiet Luxury */
+  
+  /* Backgrounds */
+  --background: #FAF8F5;           /* Ivory Cream - Main page */
+  --surface: #F5F0E8;              /* Soft Champagne - Cards, modals */
+  --surface-alt: #EDE6DC;          /* Warm Linen - Secondary surfaces */
+  
+  /* Primary - Nima Burgundy */
+  --primary: #5C2A33;
+  --primary-hover: #44242D;
+  --primary-foreground: #FAF8F5;
+  
+  /* Secondary - Camel Brown */
+  --secondary: #A67C52;
+  --secondary-hover: #8C6A50;
+  --secondary-foreground: #FAF8F5;
+  
+  /* Text Colors */
+  --foreground: #2D2926;           /* Charcoal - Headlines, body */
+  --muted: #F5F0E8;
+  --muted-foreground: #6B635B;     /* Warm Gray - Captions */
+  --text-muted: #9C948A;           /* Stone - Placeholders */
+  
+  /* UI Elements */
+  --card: #F5F0E8;
+  --card-foreground: #2D2926;
+  --popover: #F5F0E8;
+  --popover-foreground: #2D2926;
+  --border: #E0D8CC;               /* Sand */
+  --input: #E0D8CC;
+  --ring: #5C2A33;
+  
+  /* Accent */
+  --accent: #F5F0E8;
+  --accent-foreground: #5C2A33;
+  
+  /* Status Colors */
+  --success: #6B7F5E;              /* Sage */
+  --destructive: #B85C5C;          /* Dusty Rose */
+  --warning: #C4A35A;
+  
+  /* Charts */
+  --chart-1: #5C2A33;
+  --chart-2: #A67C52;
+  --chart-3: #6B7F5E;
+  --chart-4: #C4A35A;
+  --chart-5: #8C6A50;
+  
+  /* Sidebar */
+  --sidebar: #F5F0E8;
+  --sidebar-foreground: #2D2926;
+  --sidebar-primary: #5C2A33;
+  --sidebar-primary-foreground: #FAF8F5;
+  --sidebar-accent: #EDE6DC;
+  --sidebar-accent-foreground: #2D2926;
+  --sidebar-border: #E0D8CC;
+  --sidebar-ring: #5C2A33;
+}
+
+.dark {
+  /* Dark Mode - Deep Espresso Luxury */
+  
+  /* Backgrounds */
+  --background: #1A1614;           /* Deep Espresso - Warm black */
+  --surface: #252220;              /* Dark Cocoa - Cards */
+  --surface-alt: #302B28;          /* Coffee - Secondary */
+  
+  /* Primary - Rose Gold (inverted warmth) */
+  --primary: #C9A07A;
+  --primary-hover: #D4B896;
+  --primary-foreground: #1A1614;
+  
+  /* Secondary - Soft Burgundy */
+  --secondary: #A66B73;
+  --secondary-hover: #B8828A;
+  --secondary-foreground: #1A1614;
+  
+  /* Text Colors */
+  --foreground: #F5F0E8;           /* Warm White */
+  --muted: #302B28;
+  --muted-foreground: #C4B8A8;     /* Sand */
+  --text-muted: #8C8078;           /* Warm Gray */
+  
+  /* UI Elements */
+  --card: #252220;
+  --card-foreground: #F5F0E8;
+  --popover: #252220;
+  --popover-foreground: #F5F0E8;
+  --border: #3D3835;               /* Dark Sand */
+  --input: #3D3835;
+  --ring: #C9A07A;
+  
+  /* Accent */
+  --accent: #302B28;
+  --accent-foreground: #C9A07A;
+  
+  /* Status Colors */
+  --success: #8FA881;              /* Soft Sage */
+  --destructive: #D4807A;          /* Warm Coral */
+  --warning: #D4C078;
+  
+  /* Charts */
+  --chart-1: #C9A07A;
+  --chart-2: #A66B73;
+  --chart-3: #8FA881;
+  --chart-4: #D4C078;
+  --chart-5: #B8828A;
+  
+  /* Sidebar */
+  --sidebar: #252220;
+  --sidebar-foreground: #F5F0E8;
+  --sidebar-primary: #C9A07A;
+  --sidebar-primary-foreground: #1A1614;
+  --sidebar-accent: #302B28;
+  --sidebar-accent-foreground: #F5F0E8;
+  --sidebar-border: #3D3835;
+  --sidebar-ring: #C9A07A;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-serif);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Custom utility classes for Nima */
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent;
+  }
+  
+  .surface-card {
+    @apply bg-surface border border-border;
+  }
+  
+  .surface-alt-card {
+    @apply bg-surface-alt border border-border;
+  }
+}
+
+/* Custom animations for Nima */
+@layer utilities {
+  /* Smooth hover lift effect */
+  .hover-lift {
+    @apply transition-all duration-300 ease-out;
+  }
+  .hover-lift:hover {
+    @apply -translate-y-1 shadow-lg;
+  }
+  
+  /* Pulse glow effect */
+  .pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  
+  /* Stagger animation delays */
+  .stagger-1 { animation-delay: 100ms; }
+  .stagger-2 { animation-delay: 200ms; }
+  .stagger-3 { animation-delay: 300ms; }
+  .stagger-4 { animation-delay: 400ms; }
+  .stagger-5 { animation-delay: 500ms; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(92, 42, 51, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 20px 10px rgba(92, 42, 51, 0.1);
+  }
+}
+
+/* Rising Sun Gradient Animation */
+@keyframes rising-sun {
+  0% {
+    background-position: 50% 100%;
+    opacity: 0.3;
+  }
+  50% {
+    background-position: 50% 50%;
+    opacity: 0.6;
+  }
+  100% {
+    background-position: 50% 0%;
+    opacity: 0.4;
+  }
+}
+
+.animate-rising-sun {
+  animation: rising-sun 8s ease-in-out infinite alternate;
+  background-size: 200% 200%;
+}
+
+/* Chat bubble float animation */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* Typing cursor blink */
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+.animate-blink {
+  animation: blink 1s step-end infinite;
+}
+
+/* Chat bubble pop in */
+@keyframes pop-in {
+  0% {
+    transform: scale(0.8) translateY(10px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Slider track fill animation */
+@keyframes slider-fill {
+  0% {
+    transform: scaleX(0);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+.animate-slider-fill {
+  animation: slider-fill 0.3s ease-out forwards;
+  transform-origin: left;
+}
+
+/* Subtle shimmer effect */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 3s infinite;
+}
+
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* Selection styling */
+::selection {
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
