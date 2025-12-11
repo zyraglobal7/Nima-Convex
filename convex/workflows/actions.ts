@@ -122,9 +122,9 @@ export const selectItemsForLooks = internalAction({
       throw new Error('No items available for look generation');
     }
 
-    // Build prompt for AI - Generate only 1 look with multiple items
+    // Build prompt for AI - Generate 3 looks with multiple items each
     const systemPrompt = `You are Nima, an expert fashion stylist with a fun, energetic personality. 
-Your task is to create 1 complete, stylish outfit combination (look) for a user based on their preferences.
+Your task is to create 3 unique, stylish outfit combinations (looks) for a new user based on their preferences.
 
 User Profile:
 - Gender preference: ${userProfile.gender || 'not specified'}
@@ -136,31 +136,43 @@ Available Items (use these item IDs exactly):
 ${uniqueItems.map((item) => `- ID: ${item._id}, Name: "${item.name}", Category: ${item.category}, Colors: ${item.colors.join(', ')}, Tags: ${item.tags.join(', ')}, Price: ${item.price} ${item.currency}`).join('\n')}
 
 IMPORTANT RULES:
-1. Create exactly 1 complete outfit look
-2. The look MUST have AT LEAST 2-4 items that work well together (top + bottom, or dress + accessories, etc.)
-3. Include variety - mix categories like top, bottom, shoes, accessory
-4. Make sure items complement each other in style and color
+1. Create exactly 3 different outfit looks
+2. Each look MUST have AT LEAST 2-4 items that work well together (top + bottom, or dress + accessories, etc.)
+3. Include variety across looks - different occasions like casual, work, date night, weekend, etc.
+4. Make sure items complement each other in style and color within each look
 5. Use ONLY the item IDs from the available items list
-6. Give it a catchy name and describe why these items work together
+6. Give each look a catchy name and describe why these items work together
+7. Try not to repeat items across looks if possible
 
-Return the look as a JSON array with 1 element.`;
+Return exactly 3 looks as a JSON array.`;
 
-    // Use AI to generate look composition
+    // Use AI to generate look compositions
     const result = await generateText({
       model: openai('gpt-5'),
       system: systemPrompt,
-      prompt: `Create 1 complete outfit with at least 2 items that work beautifully together. Return a JSON array with this exact structure:
+      prompt: `Create 3 complete outfits, each with at least 2 items that work beautifully together. Return a JSON array with this exact structure:
 [
   {
     "items": [{"itemId": "actual_item_id", "category": "top/bottom/etc", "name": "item name"}, {"itemId": "second_item_id", "category": "category", "name": "item name"}],
     "occasion": "casual/work/date_night/weekend/etc",
     "styleTags": ["tag1", "tag2"],
     "name": "Catchy Look Name"
+  },
+  {
+    "items": [...],
+    "occasion": "...",
+    "styleTags": [...],
+    "name": "..."
+  },
+  {
+    "items": [...],
+    "occasion": "...",
+    "styleTags": [...],
+    "name": "..."
   }
 ]
 
-IMPORTANT: Include at least 2 items in the look. Be creative with the name! Examples: "Sunday Brunch Vibes", "Boss Mode Monday"`,
-      temperature: 0.8,
+IMPORTANT: Each look must have at least 2 items. Be creative with the names! Examples: "Sunday Brunch Vibes", "Boss Mode Monday", "Date Night Chic"`,
     });
 
     console.log(`[WORKFLOW:ONBOARDING] AI response received, parsing...`);
@@ -182,7 +194,7 @@ IMPORTANT: Include at least 2 items in the look. Be creative with the name! Exam
 
     // Validate and filter looks - ensure each look has at least 2 items
     const validLooks = lookCompositions
-      .slice(0, 1) // Only take 1 look
+      .slice(0, 3) // Take up to 3 looks
       .map((look) => {
         // Validate item IDs exist
         const validItemIds = look.items
@@ -218,12 +230,13 @@ IMPORTANT: Include at least 2 items in the look. Be creative with the name! Exam
       })
       .filter((look): look is NonNullable<typeof look> => look !== null);
 
-    // Ensure we have at least 1 look with multiple items
-    if (validLooks.length === 0) {
-      console.warn(`[WORKFLOW:ONBOARDING] No valid looks from AI, using fallback`);
+    // Ensure we have at least 3 looks with multiple items
+    if (validLooks.length < 3) {
+      console.warn(`[WORKFLOW:ONBOARDING] Only ${validLooks.length} valid looks from AI, using fallback for remaining`);
       const fallback = createFallbackLooks(uniqueItems);
+      const neededLooks = 3 - validLooks.length;
       validLooks.push(
-        ...fallback.slice(0, 1).map((look) => ({
+        ...fallback.slice(0, neededLooks).map((look) => ({
           itemIds: look.items.map((i) => i.itemId),
           occasion: look.occasion,
           styleTags: look.styleTags,
@@ -281,7 +294,7 @@ Keep it under 100 characters if possible. No emojis. Examples of tone: "You're g
 }
 
 /**
- * Create fallback looks when AI fails - ensures at least 2 items per look
+ * Create fallback looks when AI fails - creates 3 looks with at least 2 items per look
  */
 function createFallbackLooks(items: ItemForAI[]): LookComposition[] {
   const looks: LookComposition[] = [];
@@ -299,33 +312,72 @@ function createFallbackLooks(items: ItemForAI[]): LookComposition[] {
     {} as Record<string, ItemForAI[]>
   );
 
-  // Create 1 look with multiple items
-  const lookItems: Array<{ itemId: string; category: string; name: string }> = [];
-
-  // Try to pick items from different categories for a complete look
-  const priorityCategories = ['top', 'bottom', 'shoes', 'dress', 'outerwear', 'accessory'];
-  
-  for (const category of priorityCategories) {
-    const categoryItems = byCategory[category] || [];
-    const available = categoryItems.find((item) => !usedItems.has(item._id));
-    if (available && lookItems.length < 4) {
-      lookItems.push({
-        itemId: available._id,
-        category: available.category,
-        name: available.name,
-      });
-      usedItems.add(available._id);
-    }
-  }
-
-  // Ensure at least 2 items
-  if (lookItems.length >= 2) {
-    looks.push({
-      items: lookItems,
+  // Define 3 different look configurations
+  const lookConfigs = [
+    {
       occasion: 'Everyday Casual',
       styleTags: ['casual', 'comfortable', 'versatile'],
       name: 'Effortless Style',
-    });
+      categories: ['top', 'bottom', 'shoes', 'accessory'],
+    },
+    {
+      occasion: 'Weekend Ready',
+      styleTags: ['relaxed', 'weekend', 'laid-back'],
+      name: 'Weekend Vibes',
+      categories: ['dress', 'shoes', 'bag', 'accessory'],
+    },
+    {
+      occasion: 'Smart Casual',
+      styleTags: ['smart', 'polished', 'versatile'],
+      name: 'Polished Look',
+      categories: ['outerwear', 'top', 'bottom', 'shoes'],
+    },
+  ];
+
+  // Create up to 3 looks
+  for (const config of lookConfigs) {
+    const lookItems: Array<{ itemId: string; category: string; name: string }> = [];
+
+    // Try to pick items from specified categories
+    for (const category of config.categories) {
+      const categoryItems = byCategory[category] || [];
+      const available = categoryItems.find((item) => !usedItems.has(item._id));
+      if (available && lookItems.length < 4) {
+        lookItems.push({
+          itemId: available._id,
+          category: available.category,
+          name: available.name,
+        });
+        usedItems.add(available._id);
+      }
+    }
+
+    // If not enough items from preferred categories, pick from any
+    if (lookItems.length < 2) {
+      for (const item of items) {
+        if (!usedItems.has(item._id) && lookItems.length < 3) {
+          lookItems.push({
+            itemId: item._id,
+            category: item.category,
+            name: item.name,
+          });
+          usedItems.add(item._id);
+        }
+      }
+    }
+
+    // Ensure at least 2 items for a valid look
+    if (lookItems.length >= 2) {
+      looks.push({
+        items: lookItems,
+        occasion: config.occasion,
+        styleTags: config.styleTags,
+        name: config.name,
+      });
+    }
+
+    // Stop if we have 3 looks
+    if (looks.length >= 3) break;
   }
 
   return looks;

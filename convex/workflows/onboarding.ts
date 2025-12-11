@@ -1,12 +1,12 @@
 /**
  * Onboarding Workflow Definition
  * 
- * This workflow generates a personalized look for new users after they complete onboarding.
+ * This workflow generates 3 personalized looks for new users after they complete onboarding.
  * 
  * Steps:
- * 1. Curate Look: AI selects multiple items and creates 1 complete outfit with nimaComment
- * 2. Generate Image: Use Google GenAI with user photo + item images as references to generate try-on image
- * 3. Finish: Look is ready for the user to view on discover page
+ * 1. Curate Looks: AI selects multiple items and creates 3 complete outfits with nimaComment
+ * 2. Generate Images: Use Google GenAI with user photo + item images as references to generate try-on images
+ * 3. Finish: Looks are ready for the user to view on discover page
  */
 
 import { v } from 'convex/values';
