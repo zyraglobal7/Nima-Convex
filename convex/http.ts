@@ -54,9 +54,9 @@ http.route({
             workosUserId: data.id,
             email: data.email ?? '',
             emailVerified: data.email_verified ?? false,
-            firstName: data.first_name,
-            lastName: data.last_name,
-            profileImageUrl: data.profile_picture_url,
+            firstName: data.first_name ?? undefined,
+            lastName: data.last_name ?? undefined,
+            profileImageUrl: data.profile_picture_url ?? undefined,
           });
           break;
         }
@@ -68,7 +68,7 @@ http.route({
             emailVerified: data.email_verified,
             firstName: data.first_name,
             lastName: data.last_name,
-            profileImageUrl: data.profile_picture_url,
+            profileImageUrl: data.profile_picture_url ?? undefined,
           });
           break;
         }
