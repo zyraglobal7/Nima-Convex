@@ -2,11 +2,25 @@
 
 import { motion } from 'framer-motion';
 import { Heart, Bookmark, Shuffle, X, ExternalLink } from 'lucide-react';
-import type { Product } from '@/lib/mock-data';
-import { formatPrice } from '@/lib/mock-data';
+import { formatPrice } from '@/lib/utils/format';
+
+// Product type that works with both mock and Convex data
+export interface ProductData {
+  id: string;
+  name: string;
+  brand?: string;
+  category: string;
+  price: number; // In cents
+  currency: string;
+  imageUrl: string;
+  storeUrl?: string;
+  storeName?: string;
+  color?: string;
+  colors?: string[];
+}
 
 interface ProductItemProps {
-  product: Product;
+  product: ProductData;
   index: number;
   isLiked?: boolean;
   isSaved?: boolean;
@@ -30,6 +44,8 @@ export function ProductItem({
   showActions = true,
   className = '',
 }: ProductItemProps) {
+  const colorDisplay = product.color || product.colors?.[0] || '';
+  
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -51,13 +67,17 @@ export function ProductItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">
-                {product.brand}
-              </p>
+              {product.brand && (
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">
+                  {product.brand}
+                </p>
+              )}
               <h4 className="text-sm font-medium text-foreground truncate">
                 {product.name}
               </h4>
-              <p className="text-xs text-muted-foreground mt-0.5">{product.color}</p>
+              {colorDisplay && (
+                <p className="text-xs text-muted-foreground mt-0.5">{colorDisplay}</p>
+              )}
             </div>
             <p className="text-sm font-semibold text-foreground whitespace-nowrap">
               {formatPrice(product.price, product.currency)}
@@ -129,15 +149,17 @@ export function ProductItem({
               </div>
 
               {/* Shop link */}
-              <a
-                href={product.storeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2 py-1 text-xs text-primary hover:text-primary-hover transition-colors"
-              >
-                Shop
-                <ExternalLink className="w-3 h-3" />
-              </a>
+              {product.storeUrl && (
+                <a
+                  href={product.storeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-primary hover:text-primary-hover transition-colors"
+                >
+                  Shop
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
             </div>
           )}
         </div>
@@ -152,7 +174,7 @@ export function ProductItemCompact({
   isSelected = false,
   onClick,
 }: {
-  product: Product;
+  product: ProductData;
   isSelected?: boolean;
   onClick?: () => void;
 }) {
@@ -176,9 +198,11 @@ export function ProductItemCompact({
           className="w-full h-full object-cover"
         />
       </div>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-        {product.brand}
-      </p>
+      {product.brand && (
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+          {product.brand}
+        </p>
+      )}
       <p className="text-xs font-medium text-foreground text-center line-clamp-1">
         {product.name}
       </p>
@@ -188,4 +212,3 @@ export function ProductItemCompact({
     </motion.button>
   );
 }
-

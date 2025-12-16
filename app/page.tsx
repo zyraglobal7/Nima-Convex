@@ -111,7 +111,7 @@ function NeedsOnboardingPrompt() {
           Let&apos;s set up your style profile so I can show you outfits you&apos;ll love.
         </p>
         <a
-          href="/"
+          href="/onboarding"
           onClick={() => {
             // Clear any stale data and reload to start fresh onboarding
             localStorage.removeItem('nima-onboarding-data');

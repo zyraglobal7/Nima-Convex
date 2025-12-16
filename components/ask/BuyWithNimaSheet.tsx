@@ -22,7 +22,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { formatPrice, type Product } from '@/lib/mock-data';
+import { formatPrice as formatPriceUtils } from '@/lib/utils/format';
+import { type Product } from '@/lib/mock-data';
 import type { FittingLook } from '@/lib/mock-chat-data';
 
 interface CartItem {
@@ -233,7 +234,7 @@ export function BuyWithNimaSheet({
                               <p className="text-xs text-muted-foreground">{product.brand}</p>
                               <p className="text-sm font-medium text-foreground truncate">{product.name}</p>
                               <p className="text-sm text-secondary font-medium">
-                                {formatPrice(product.price, currency)}
+                                {formatPriceUtils(product.price, currency)}
                               </p>
                             </div>
 
@@ -366,7 +367,7 @@ export function BuyWithNimaSheet({
                           <span className="text-foreground truncate max-w-[180px]">{item.product.name}</span>
                         </div>
                         <span className="text-foreground font-medium">
-                          {formatPrice(item.product.price * item.quantity, currency)}
+                          {formatPriceUtils(item.product.price * item.quantity, currency, true)}
                         </span>
                       </div>
                     ))}
@@ -374,7 +375,7 @@ export function BuyWithNimaSheet({
                     <div className="border-t border-border/30 pt-3 space-y-2">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">Subtotal</span>
-                        <span className="text-foreground">{formatPrice(subtotal, currency)}</span>
+                        <span className="text-foreground">{formatPriceUtils(subtotal, currency, true)}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-1">
@@ -383,11 +384,11 @@ export function BuyWithNimaSheet({
                             <Info className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        <span className="text-foreground">{formatPrice(conciergeFee, currency)}</span>
+                        <span className="text-foreground">{formatPriceUtils(conciergeFee, currency, true)}</span>
                       </div>
                       <div className="flex items-center justify-between text-base font-semibold pt-2 border-t border-border/30">
                         <span className="text-foreground">Total</span>
-                        <span className="text-primary">{formatPrice(total, currency)}</span>
+                        <span className="text-primary">{formatPriceUtils(total, currency, true)}</span>
                       </div>
                     </div>
                   </div>
@@ -490,7 +491,7 @@ export function BuyWithNimaSheet({
             {cart.length > 0 && step === 'cart' && (
               <div className="flex items-center justify-between mb-3 text-sm">
                 <span className="text-muted-foreground">{cart.reduce((sum, item) => sum + item.quantity, 0)} items</span>
-                <span className="font-semibold text-foreground">{formatPrice(total, currency)}</span>
+                <span className="font-semibold text-foreground">{formatPriceUtils(total, currency)}</span>
               </div>
             )}
             
@@ -525,7 +526,7 @@ export function BuyWithNimaSheet({
               ) : (
                 <>
                   <Phone className="w-5 h-5" />
-                  Pay {formatPrice(total, currency)} with M-Pesa
+                  Pay {formatPriceUtils(total, currency, true)} with M-Pesa
                 </>
               )}
             </button>

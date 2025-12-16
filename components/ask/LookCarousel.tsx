@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Heart, ThumbsDown, Bookmark } from 'lucide-react';
 import {
@@ -11,10 +11,19 @@ import {
   CarouselPrevious,
   type CarouselApi,
 } from '@/components/ui/carousel';
-import type { FittingLook } from '@/lib/mock-chat-data';
+
+// Generic look type that works with real data
+export interface LookData {
+  id: string;
+  imageUrl: string; // User try-on image URL
+  styleTags: string[];
+  occasion?: string;
+  isLiked?: boolean;
+  isSaved?: boolean;
+}
 
 interface LookCarouselProps {
-  looks: FittingLook[];
+  looks: LookData[];
   currentIndex: number;
   onIndexChange: (index: number) => void;
   onLikeLook: (lookId: string) => void;
@@ -75,7 +84,7 @@ export function LookCarousel({
               >
                 {/* Try-on image */}
                 <img
-                  src={look.userTryOnImageUrl}
+                  src={look.imageUrl}
                   alt={`Look ${index + 1}`}
                   className="w-full h-full object-cover"
                 />
@@ -95,9 +104,11 @@ export function LookCarousel({
                       </span>
                     ))}
                   </div>
-                  <p className="text-xs text-white/80">
-                    Perfect for {look.occasion}
-                  </p>
+                  {look.occasion && (
+                    <p className="text-xs text-white/80">
+                      Perfect for {look.occasion}
+                    </p>
+                  )}
                 </div>
 
                 {/* Like/Save overlay actions */}
@@ -234,4 +245,3 @@ export function LookCarousel({
     </div>
   );
 }
-

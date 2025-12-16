@@ -106,6 +106,65 @@ export const sendMessage = mutation({
 });
 
 /**
+ * Save an assistant message (client-callable - for saving AI responses)
+ * User must own the thread to save a message
+ */
+export const saveAssistantMessage = mutation({
+  args: {
+    threadId: v.id('threads'),
+    content: v.string(),
+    model: v.optional(v.string()),
+  },
+  returns: v.id('messages'),
+  handler: async (
+    ctx: MutationCtx,
+    args: {
+      threadId: Id<'threads'>;
+      content: string;
+      model?: string;
+    }
+  ): Promise<Id<'messages'>> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error('Not authenticated');
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Verify thread access
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread || thread.userId !== user._id) {
+      throw new Error('Thread not found or access denied');
+    }
+
+    const messageId = await ctx.db.insert('messages', {
+      threadId: args.threadId,
+      userId: user._id,
+      role: 'assistant',
+      content: args.content,
+      model: args.model,
+      status: 'sent',
+      createdAt: Date.now(),
+    });
+
+    // Update thread metadata
+    await ctx.runMutation(internal.threads.mutations.updateThreadMetadata, {
+      threadId: args.threadId,
+      incrementMessageCount: true,
+    });
+
+    return messageId;
+  },
+});
+
+/**
  * Create an assistant message (internal - called from AI action)
  */
 export const createAssistantMessage = internalMutation({
