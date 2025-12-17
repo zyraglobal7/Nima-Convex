@@ -212,6 +212,213 @@ export const getLookbookItems = query({
 });
 
 /**
+ * Get lookbook items with full details (looks or items with images)
+ */
+export const getLookbookItemsWithDetails = query({
+  args: {
+    lookbookId: v.id('lookbooks'),
+  },
+  returns: v.array(
+    v.union(
+      v.object({
+        lookbookItem: lookbookItemValidator,
+        type: v.literal('look'),
+        look: v.object({
+          _id: v.id('looks'),
+          publicId: v.string(),
+          totalPrice: v.number(),
+          currency: v.string(),
+          styleTags: v.array(v.string()),
+          occasion: v.optional(v.string()),
+        }),
+        lookImageUrl: v.union(v.string(), v.null()),
+      }),
+      v.object({
+        lookbookItem: lookbookItemValidator,
+        type: v.literal('item'),
+        item: v.object({
+          _id: v.id('items'),
+          name: v.string(),
+          brand: v.optional(v.string()),
+          category: v.string(),
+          price: v.number(),
+          currency: v.string(),
+          colors: v.array(v.string()),
+        }),
+        itemImageUrl: v.union(v.string(), v.null()),
+      })
+    )
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { lookbookId: Id<'lookbooks'> }
+  ): Promise<
+    Array<
+      | {
+          lookbookItem: Doc<'lookbook_items'>;
+          type: 'look';
+          look: {
+            _id: Id<'looks'>;
+            publicId: string;
+            totalPrice: number;
+            currency: string;
+            styleTags: string[];
+            occasion?: string;
+          };
+          lookImageUrl: string | null;
+        }
+      | {
+          lookbookItem: Doc<'lookbook_items'>;
+          type: 'item';
+          item: {
+            _id: Id<'items'>;
+            name: string;
+            brand?: string;
+            category: string;
+            price: number;
+            currency: string;
+            colors: string[];
+          };
+          itemImageUrl: string | null;
+        }
+    >
+  > => {
+    // First verify access to the lookbook
+    const lookbook = await ctx.db.get(args.lookbookId);
+    if (!lookbook) {
+      return [];
+    }
+
+    // Check access
+    if (!lookbook.isPublic) {
+      const identity = await ctx.auth.getUserIdentity();
+      if (!identity) {
+        return [];
+      }
+
+      const user = await ctx.db
+        .query('users')
+        .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+        .unique();
+
+      if (!user || (user._id !== lookbook.userId && !lookbook.collaboratorIds?.includes(user._id))) {
+        return [];
+      }
+    }
+
+    // Get all lookbook items
+    const lookbookItems = await ctx.db
+      .query('lookbook_items')
+      .withIndex('by_lookbook', (q) => q.eq('lookbookId', args.lookbookId))
+      .collect();
+
+    // Sort by sortOrder
+    lookbookItems.sort((a, b) => a.sortOrder - b.sortOrder);
+
+    // Fetch details for each item
+    const itemsWithDetails = await Promise.all(
+      lookbookItems.map(async (lookbookItem) => {
+        if (lookbookItem.itemType === 'look' && lookbookItem.lookId) {
+          const look = await ctx.db.get(lookbookItem.lookId);
+          if (!look || !look.isActive) {
+            return null;
+          }
+
+          // Get look image
+          const identity = await ctx.auth.getUserIdentity();
+          let lookImageUrl: string | null = null;
+          
+          if (identity) {
+            const user = await ctx.db
+              .query('users')
+              .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+              .unique();
+            
+            if (user) {
+              const lookImage = await ctx.db
+                .query('look_images')
+                .withIndex('by_look_and_user', (q) => q.eq('lookId', look._id).eq('userId', user._id))
+                .first();
+              
+              if (lookImage?.storageId) {
+                lookImageUrl = await ctx.storage.getUrl(lookImage.storageId);
+              }
+            }
+          }
+
+          // If no user-specific image, get any image for this look
+          if (!lookImageUrl) {
+            const lookImage = await ctx.db
+              .query('look_images')
+              .withIndex('by_look', (q) => q.eq('lookId', look._id))
+              .first();
+            
+            if (lookImage?.storageId) {
+              lookImageUrl = await ctx.storage.getUrl(lookImage.storageId);
+            }
+          }
+
+          return {
+            lookbookItem,
+            type: 'look' as const,
+            look: {
+              _id: look._id,
+              publicId: look.publicId,
+              totalPrice: look.totalPrice,
+              currency: look.currency,
+              styleTags: look.styleTags,
+              occasion: look.occasion,
+            },
+            lookImageUrl,
+          };
+        } else if (lookbookItem.itemType === 'item' && lookbookItem.itemId) {
+          const item = await ctx.db.get(lookbookItem.itemId);
+          if (!item || !item.isActive) {
+            return null;
+          }
+
+          // Get item image
+          const primaryImage = await ctx.db
+            .query('item_images')
+            .withIndex('by_item_and_primary', (q) => q.eq('itemId', item._id).eq('isPrimary', true))
+            .unique();
+
+          let itemImageUrl: string | null = null;
+          if (primaryImage) {
+            if (primaryImage.storageId) {
+              itemImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+            } else if (primaryImage.externalUrl) {
+              itemImageUrl = primaryImage.externalUrl;
+            }
+          }
+
+          return {
+            lookbookItem,
+            type: 'item' as const,
+            item: {
+              _id: item._id,
+              name: item.name,
+              brand: item.brand,
+              category: item.category,
+              price: item.price,
+              currency: item.currency,
+              colors: item.colors,
+            },
+            itemImageUrl,
+          };
+        }
+        return null;
+      })
+    );
+
+    // Filter out null items
+    return itemsWithDetails.filter(
+      (item): item is NonNullable<typeof item> => item !== null
+    );
+  },
+});
+
+/**
  * Check if a look or item is saved in any of the user's lookbooks
  */
 export const isItemSaved = query({
@@ -331,4 +538,3 @@ export const getLookbookWithCover = query({
     };
   },
 });
-

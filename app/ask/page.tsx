@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { ThemeToggle } from '@/components/theme-toggle';
 import {
   WelcomeHero,
@@ -12,18 +13,21 @@ import {
   PromptSuggestions,
   ChatHistoryButton,
 } from '@/components/ask';
-import { generateChatId, FREE_SEARCHES_PER_DAY } from '@/lib/mock-chat-data';
 
 export default function AskNimaPage() {
   const router = useRouter();
-  const [remainingSearches] = useState(FREE_SEARCHES_PER_DAY);
+  
+  // Get current user for remaining searches count
+  const currentUser = useQuery(api.users.queries.getCurrentUser);
+  const remainingSearches = currentUser 
+    ? Math.max(0, 20 - (currentUser.dailyTryOnCount || 0)) 
+    : 2;
 
   const handleSendMessage = (message: string) => {
-    // Create new chat and redirect
-    const newChatId = generateChatId();
     // Store the initial message in sessionStorage to pick up in the chat page
     sessionStorage.setItem('nima-pending-message', message);
-    router.push(`/ask/${newChatId}`);
+    // Redirect to new chat - the thread will be created when the first message is sent
+    router.push('/ask/new');
   };
 
   const handlePromptSelect = (prompt: string) => {

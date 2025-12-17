@@ -33,13 +33,13 @@ interface StoredOnboardingData {
  */
 function getStoredOnboardingData(): StoredOnboardingData | null {
   if (typeof window === 'undefined') return null;
-  
+
   const stored = localStorage.getItem(ONBOARDING_STORAGE_KEY);
   if (!stored) return null;
-  
+
   try {
     const data = JSON.parse(stored) as StoredOnboardingData;
-    
+
     // Check if data is too old (more than 1 hour)
     const oneHour = 60 * 60 * 1000;
     if (Date.now() - data.savedAt > oneHour) {
@@ -47,7 +47,7 @@ function getStoredOnboardingData(): StoredOnboardingData | null {
       localStorage.removeItem(ONBOARDING_TOKEN_KEY);
       return null;
     }
-    
+
     return data;
   } catch {
     localStorage.removeItem(ONBOARDING_STORAGE_KEY);
@@ -82,7 +82,7 @@ export function useOnboardingCompletion() {
 
   // Get current user
   const user = useQuery(api.users.queries.getCurrentUser);
-  
+
   // Mutations
   const getOrCreateUser = useMutation(api.users.mutations.getOrCreateUser);
   const completeOnboarding = useMutation(api.users.mutations.completeOnboarding);
@@ -90,17 +90,40 @@ export function useOnboardingCompletion() {
 
   useEffect(() => {
     async function processOnboarding() {
-      // Wait for user query to resolve
+      // Step 0: Ensure user exists in database (creates if missing, returns existing if present)
+      // This handles the case where user is authenticated but webhook didn't create the DB record
+      let currentUser = user;
+
+      // If user query hasn't resolved yet, wait
       if (user === undefined) return;
-      
-      // If not authenticated, nothing to do
+
+      // If user is null, try to create/get them - this distinguishes between
+      // "not authenticated" vs "authenticated but no DB record"
       if (user === null) {
+        try {
+          const createdUser = await getOrCreateUser();
+          if (!createdUser) {
+            // Truly not authenticated
+            setCompleted(true);
+            return;
+          }
+          currentUser = createdUser;
+        } catch (err) {
+          console.error('Failed to get or create user:', err);
+          setError(err instanceof Error ? err.message : 'Failed to authenticate');
+          setCompleted(true);
+          return;
+        }
+      }
+
+      // At this point, currentUser is guaranteed to exist
+      if (!currentUser) {
         setCompleted(true);
         return;
       }
 
       // If onboarding already completed, clear any stored data and return
-      if (user.onboardingCompleted) {
+      if (currentUser.onboardingCompleted) {
         clearStoredOnboardingData();
         setCompleted(true);
         return;
@@ -173,7 +196,7 @@ export function useOnboardingCompletion() {
         // Clear stored data after successful submission
         clearStoredOnboardingData();
         setCompleted(true);
-        
+
         console.log('Onboarding completed successfully');
       } catch (err) {
         console.error('Failed to complete onboarding:', err);
@@ -184,7 +207,7 @@ export function useOnboardingCompletion() {
     }
 
     processOnboarding();
-  }, [user, completeOnboarding, claimOnboardingImages]);
+  }, [user, getOrCreateUser, completeOnboarding, claimOnboardingImages]);
 
   return {
     user,

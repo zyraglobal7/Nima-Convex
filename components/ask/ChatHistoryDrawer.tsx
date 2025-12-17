@@ -3,6 +3,8 @@
 import { motion } from 'framer-motion';
 import { MessageCircle, Plus, Clock, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import {
   Sheet,
   SheetContent,
@@ -10,7 +12,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
-import { mockConversations, formatRelativeTime, type ChatConversation } from '@/lib/mock-chat-data';
 
 interface ChatHistoryDrawerProps {
   currentChatId?: string;
@@ -18,18 +19,40 @@ interface ChatHistoryDrawerProps {
   trigger?: React.ReactNode;
 }
 
+// Format relative time helper
+function formatRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diffMs = now - timestamp;
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return new Date(timestamp).toLocaleDateString();
+}
+
 export function ChatHistoryDrawer({
   currentChatId,
   onNewChat,
   trigger,
 }: ChatHistoryDrawerProps) {
-  // Get first user message as preview
-  const getPreview = (conversation: ChatConversation): string => {
-    const userMessage = conversation.messages.find((m) => m.role === 'user');
-    if (userMessage) {
-      return userMessage.content.slice(0, 60) + (userMessage.content.length > 60 ? '...' : '');
-    }
-    return 'New conversation';
+  // Use real thread data from Convex
+  const threadsData = useQuery(api.threads.queries.listThreadsWithPreview, {
+    includeArchived: false,
+    limit: 20,
+  });
+
+  const threads = threadsData || [];
+
+  // Get preview from last message
+  const getPreview = (lastMessage: { content: string; role: 'user' | 'assistant' } | null): string => {
+    if (!lastMessage) return 'New conversation';
+    const content = lastMessage.content.replace('[SEARCH_READY]', '').trim();
+    return content.slice(0, 60) + (content.length > 60 ? '...' : '');
   };
 
   return (
@@ -60,7 +83,7 @@ export function ChatHistoryDrawer({
 
           {/* Conversations list */}
           <div className="flex-1 overflow-y-auto">
-            {mockConversations.length === 0 ? (
+            {threads.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full px-6 text-center">
                 <div className="w-16 h-16 rounded-full bg-surface flex items-center justify-center mb-4">
                   <MessageCircle className="w-8 h-8 text-muted-foreground" />
@@ -72,18 +95,18 @@ export function ChatHistoryDrawer({
               </div>
             ) : (
               <div className="divide-y divide-border/30">
-                {mockConversations.map((conversation, index) => (
+                {threads.map(({ thread, lastMessage }, index) => (
                   <motion.div
-                    key={conversation.id}
+                    key={thread._id}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.3, delay: index * 0.05 }}
                   >
                     <Link
-                      href={`/ask/${conversation.id}`}
+                      href={`/ask/${thread._id}`}
                       className={`
                         flex items-center gap-4 p-4 hover:bg-surface/50 transition-colors
-                        ${currentChatId === conversation.id ? 'bg-surface/70' : ''}
+                        ${currentChatId === thread._id ? 'bg-surface/70' : ''}
                       `}
                     >
                       {/* Icon */}
@@ -95,18 +118,18 @@ export function ChatHistoryDrawer({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <h3 className="font-medium text-foreground truncate">
-                            {conversation.title}
+                            {thread.title || 'New conversation'}
                           </h3>
                           <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {formatRelativeTime(conversation.updatedAt)}
+                            {formatRelativeTime(thread.lastMessageAt)}
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground truncate">
-                          {getPreview(conversation)}
+                          {getPreview(lastMessage)}
                         </p>
-                        {conversation.searchSessions.length > 0 && (
+                        {thread.messageCount > 0 && (
                           <p className="text-xs text-secondary mt-1">
-                            {conversation.searchSessions.length} fitting room{conversation.searchSessions.length > 1 ? 's' : ''}
+                            {thread.messageCount} message{thread.messageCount > 1 ? 's' : ''}
                           </p>
                         )}
                       </div>
@@ -123,7 +146,7 @@ export function ChatHistoryDrawer({
           {/* Footer */}
           <div className="p-4 border-t border-border/50 bg-surface/30">
             <p className="text-xs text-center text-muted-foreground">
-              Chat history is stored locally
+              Your chat history is securely stored
             </p>
           </div>
         </div>
@@ -152,4 +175,3 @@ export function ChatHistoryButton({
     />
   );
 }
-
