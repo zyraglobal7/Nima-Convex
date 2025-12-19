@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Heart, ThumbsDown, Bookmark } from 'lucide-react';
+import { Heart, ThumbsDown, Bookmark, Sparkles, AlertCircle } from 'lucide-react';
 import {
   Carousel,
   CarouselContent,
@@ -15,11 +15,13 @@ import {
 // Generic look type that works with real data
 export interface LookData {
   id: string;
-  imageUrl: string; // User try-on image URL
+  imageUrl: string; // User try-on image URL (can be empty if generating)
   styleTags: string[];
   occasion?: string;
   isLiked?: boolean;
   isSaved?: boolean;
+  isGenerating?: boolean;
+  generationFailed?: boolean;
 }
 
 interface LookCarouselProps {
@@ -74,84 +76,120 @@ export function LookCarousel({
         }}
       >
         <CarouselContent className="-ml-2 md:-ml-4">
-          {looks.map((look, index) => (
-            <CarouselItem key={look.id} className="pl-2 md:pl-4 basis-full">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.3, delay: index * 0.1 }}
-                className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-surface"
-              >
-                {/* Try-on image */}
-                <img
-                  src={look.imageUrl}
-                  alt={`Look ${index + 1}`}
-                  className="w-full h-full object-cover"
-                />
+          {looks.map((look, index) => {
+            const hasImage = look.imageUrl && look.imageUrl.length > 0;
+            const isGenerating = look.isGenerating || (!hasImage && !look.generationFailed);
+            const generationFailed = look.generationFailed;
 
-                {/* Gradient overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+            return (
+              <CarouselItem key={look.id} className="pl-2 md:pl-4 basis-full">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: index * 0.1 }}
+                  className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-surface"
+                >
+                  {hasImage ? (
+                    <>
+                      {/* Try-on image */}
+                      <img
+                        src={look.imageUrl}
+                        alt={`Look ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      {/* Gradient overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                    </>
+                  ) : isGenerating ? (
+                    /* Generating State UI */
+                    <div className="w-full h-full bg-gradient-to-br from-surface-alt to-surface flex flex-col items-center justify-center">
+                      <div className="relative">
+                        <motion.div
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                          className="w-16 h-16 rounded-full border-2 border-primary/30 border-t-primary"
+                        />
+                        <Sparkles className="absolute inset-0 m-auto w-7 h-7 text-primary" />
+                      </div>
+                      <p className="mt-4 text-sm text-muted-foreground">Creating your look...</p>
+                      <p className="mt-1 text-xs text-muted-foreground/70">This may take a moment</p>
+                    </div>
+                  ) : generationFailed ? (
+                    /* Failed State UI */
+                    <div className="w-full h-full bg-gradient-to-br from-surface-alt to-surface flex flex-col items-center justify-center">
+                      <AlertCircle className="w-12 h-12 text-muted-foreground mb-3" />
+                      <p className="text-sm text-muted-foreground">Generation failed</p>
+                      <p className="text-xs text-muted-foreground/70 mt-1">Please try again</p>
+                    </div>
+                  ) : null}
 
-                {/* Style tags */}
-                <div className="absolute bottom-4 left-4 right-4">
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {look.styleTags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="px-3 py-1 text-xs font-medium bg-white/90 backdrop-blur-sm rounded-full text-foreground"
-                      >
-                        {tag}
-                      </span>
-                    ))}
+                  {/* Style tags - show regardless of image state */}
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {look.styleTags.map((tag) => (
+                        <span
+                          key={tag}
+                          className={`px-3 py-1 text-xs font-medium rounded-full ${
+                            hasImage 
+                              ? 'bg-white/90 backdrop-blur-sm text-foreground' 
+                              : 'bg-primary/10 text-primary border border-primary/20'
+                          }`}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    {look.occasion && (
+                      <p className={`text-xs ${hasImage ? 'text-white/80' : 'text-muted-foreground'}`}>
+                        Perfect for {look.occasion}
+                      </p>
+                    )}
                   </div>
-                  {look.occasion && (
-                    <p className="text-xs text-white/80">
-                      Perfect for {look.occasion}
-                    </p>
+
+                  {/* Like/Save overlay actions - only when image is ready */}
+                  {hasImage && (
+                    <div className="absolute top-4 right-4 flex flex-col gap-2">
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => onLikeLook(look.id)}
+                        className={`
+                          w-10 h-10 rounded-full flex items-center justify-center
+                          backdrop-blur-md transition-colors
+                          ${look.isLiked
+                            ? 'bg-red-500 text-white'
+                            : 'bg-white/20 text-white hover:bg-white/30'
+                          }
+                        `}
+                      >
+                        <Heart
+                          className={`w-5 h-5 ${look.isLiked ? 'fill-current' : ''}`}
+                        />
+                      </motion.button>
+
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => onSaveLook(look.id)}
+                        className={`
+                          w-10 h-10 rounded-full flex items-center justify-center
+                          backdrop-blur-md transition-colors
+                          ${look.isSaved
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-white/20 text-white hover:bg-white/30'
+                          }
+                        `}
+                      >
+                        <Bookmark
+                          className={`w-5 h-5 ${look.isSaved ? 'fill-current' : ''}`}
+                        />
+                      </motion.button>
+                    </div>
                   )}
-                </div>
-
-                {/* Like/Save overlay actions */}
-                <div className="absolute top-4 right-4 flex flex-col gap-2">
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => onLikeLook(look.id)}
-                    className={`
-                      w-10 h-10 rounded-full flex items-center justify-center
-                      backdrop-blur-md transition-colors
-                      ${look.isLiked
-                        ? 'bg-red-500 text-white'
-                        : 'bg-white/20 text-white hover:bg-white/30'
-                      }
-                    `}
-                  >
-                    <Heart
-                      className={`w-5 h-5 ${look.isLiked ? 'fill-current' : ''}`}
-                    />
-                  </motion.button>
-
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => onSaveLook(look.id)}
-                    className={`
-                      w-10 h-10 rounded-full flex items-center justify-center
-                      backdrop-blur-md transition-colors
-                      ${look.isSaved
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-white/20 text-white hover:bg-white/30'
-                      }
-                    `}
-                  >
-                    <Bookmark
-                      className={`w-5 h-5 ${look.isSaved ? 'fill-current' : ''}`}
-                    />
-                  </motion.button>
-                </div>
-              </motion.div>
-            </CarouselItem>
-          ))}
+                </motion.div>
+              </CarouselItem>
+            );
+          })}
         </CarouselContent>
 
         {/* Navigation buttons - hidden on mobile, visible on desktop */}

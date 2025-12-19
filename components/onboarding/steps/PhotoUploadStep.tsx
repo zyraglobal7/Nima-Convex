@@ -6,6 +6,7 @@ import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
 import { StepProps, UploadedImage } from '../types';
 import { ArrowLeft, Upload, X, Camera, Shield, Loader2, AlertCircle } from 'lucide-react';
+import type { Id } from '@/convex/_generated/dataModel';
 
 // Constants for validation
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -187,8 +188,9 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
     try {
       await deleteImage({
         onboardingToken: formData.onboardingToken,
-        imageId: imageId as any, // Cast to Convex ID type
+        imageId: imageId as Id<'user_images'>,
       });
+      ;
 
       // Find and revoke the preview URL
       const image = formData.uploadedImages.find((img) => img.imageId === imageId);

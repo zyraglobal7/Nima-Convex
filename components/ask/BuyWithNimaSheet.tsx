@@ -185,7 +185,7 @@ export function BuyWithNimaSheet({
                     <div>
                       <p className="text-sm font-medium text-foreground">Nima Concierge Service</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Skip the hassle of buying from multiple stores. We'll purchase everything for you and deliver it straight to your door. A small concierge fee applies.
+                        Skip the hassle of buying from multiple stores. We&apos;ll purchase everything for you and deliver it straight to your door. A small concierge fee applies.
                       </p>
                     </div>
                   </div>

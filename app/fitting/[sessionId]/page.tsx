@@ -1,101 +1,158 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Share2, Sparkles, ShoppingBag, X, Info, Bookmark } from 'lucide-react';
+import { ArrowLeft, Share2, Sparkles, ShoppingBag, X, Info } from 'lucide-react';
 import Link from 'next/link';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import { Id } from '@/convex/_generated/dataModel';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LookCarousel, ProductItem, ProductSwapperModal, BuyWithNimaSheet } from '@/components/ask';
 import { NimaChatBubble } from '@/components/discover';
-import {
-  getSearchSessionById,
-  getAllProductsInSession,
-  type SearchSession,
-  type FittingLook,
-} from '@/lib/mock-chat-data';
-import { formatPrice, mockLookbooks, type Product, type Lookbook } from '@/lib/mock-data';
+import { formatPrice } from '@/lib/utils/format';
+import type { Product } from '@/lib/mock-data';
+
+// Transform Convex look data to the format expected by components
+interface FittingLook {
+  id: string;
+  imageUrl: string;
+  userTryOnImageUrl: string;
+  products: Product[];
+  totalPrice: number;
+  currency: string;
+  styleTags: string[];
+  occasion: string;
+  nimaNote: string;
+  createdAt: Date;
+  height: 'short' | 'medium' | 'tall' | 'extra-tall';
+  isLiked: boolean;
+  isSaved: boolean;
+}
+
+interface FittingSession {
+  id: string;
+  chatId: string;
+  query: string;
+  looks: FittingLook[];
+  createdAt: Date;
+}
 
 export default function FittingRoomPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.sessionId as string;
 
-  const [session, setSession] = useState<SearchSession | null>(null);
   const [currentLookIndex, setCurrentLookIndex] = useState(0);
   const [likedProducts, setLikedProducts] = useState<Set<string>>(new Set());
   const [savedProducts, setSavedProducts] = useState<Set<string>>(new Set());
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swappingProduct, setSwappingProduct] = useState<Product | null>(null);
-  const [showLookbookModal, setShowLookbookModal] = useState(false);
-  const [savedToLookbooks, setSavedToLookbooks] = useState<string[]>([]);
-  const [newLookbookName, setNewLookbookName] = useState('');
   const [showBuySheet, setShowBuySheet] = useState(false);
+  const [likedLooks, setLikedLooks] = useState<Set<string>>(new Set());
+  const [savedLooks, setSavedLooks] = useState<Set<string>>(new Set());
 
-  // Load session from sessionStorage or mock data
-  useEffect(() => {
-    // Try sessionStorage first (for newly generated sessions)
-    const storedSession = sessionStorage.getItem(`nima-session-${sessionId}`);
-    if (storedSession) {
-      try {
-        const parsed = JSON.parse(storedSession);
-        // Convert date strings back to Date objects
-        parsed.createdAt = new Date(parsed.createdAt);
-        parsed.looks = parsed.looks.map((look: FittingLook) => ({
-          ...look,
-          createdAt: new Date(look.createdAt),
-        }));
-        setSession(parsed);
-        return;
-      } catch {
-        // Fall through to mock data
-      }
-    }
+  // Fetch the specific look for this session (sessionId is actually the lookId)
+  const lookData = useQuery(
+    api.looks.queries.getLookWithFullDetails,
+    { lookId: sessionId as Id<'looks'> }
+  );
 
-    // Fall back to mock data
-    const mockSession = getSearchSessionById(sessionId);
-    if (mockSession) {
-      setSession(mockSession);
-    }
-  }, [sessionId]);
+  // Track if the look image is still generating
+  const isGenerating = lookData?.lookImage?.status === 'pending' || lookData?.lookImage?.status === 'processing';
+  const generationFailed = lookData?.lookImage?.status === 'failed';
+
+  // Transform Convex data to the format expected by components
+  const session = useMemo<FittingSession | null>(() => {
+    if (!lookData) return null;
+
+    // Transform items to products
+    const products: Product[] = lookData.items.map((itemData) => ({
+      id: itemData.item._id,
+      name: itemData.item.name,
+      brand: itemData.item.brand || 'Unknown',
+      category: itemData.item.category as Product['category'],
+      price: itemData.item.price,
+      currency: itemData.item.currency,
+      imageUrl: itemData.primaryImageUrl || '', // No placeholder - will show generating state
+      storeUrl: itemData.item.sourceUrl || '#',
+      storeName: itemData.item.sourceStore || itemData.item.brand || 'Store',
+      color: itemData.item.colors[0] || 'Mixed',
+    }));
+
+    // Use the generated look image, or null if not ready (no placeholder)
+    const imageUrl = lookData.lookImage?.imageUrl || null;
+
+    const look: FittingLook = {
+      id: lookData.look._id,
+      imageUrl: imageUrl || '', // Will check isGenerating for UI state
+      userTryOnImageUrl: imageUrl || '',
+      products,
+      totalPrice: lookData.look.totalPrice,
+      currency: lookData.look.currency,
+      styleTags: lookData.look.styleTags,
+      occasion: lookData.look.occasion || 'Everyday',
+      nimaNote: lookData.look.nimaComment || "I curated this look just for you! The pieces work beautifully together.",
+      createdAt: new Date(lookData.look._creationTime),
+      height: 'tall',
+      isLiked: likedLooks.has(lookData.look._id),
+      isSaved: savedLooks.has(lookData.look._id),
+    };
+
+    return {
+      id: sessionId,
+      chatId: sessionId,
+      query: 'Your personalized look',
+      looks: [look],
+      createdAt: new Date(lookData.look._creationTime),
+    };
+  }, [lookData, sessionId, likedLooks, savedLooks]);
 
   const currentLook = session?.looks[currentLookIndex];
 
+  // Safe navigation helper
+  const safeGoBack = useCallback(() => {
+    requestAnimationFrame(() => {
+      try {
+        router.back();
+      } catch (error) {
+        console.warn('Router navigation failed, using fallback:', error);
+        window.history.back();
+      }
+    });
+  }, [router]);
+
   // Handlers
   const handleLikeLook = (lookId: string) => {
-    setSession((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        looks: prev.looks.map((look) =>
-          look.id === lookId ? { ...look, isLiked: !look.isLiked } : look
-        ),
-      };
+    setLikedLooks((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(lookId)) {
+        newSet.delete(lookId);
+      } else {
+        newSet.add(lookId);
+      }
+      return newSet;
     });
   };
 
   const handleDislikeLook = (lookId: string) => {
-    // Could remove from list or mark as disliked
-    setSession((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        looks: prev.looks.map((look) =>
-          look.id === lookId ? { ...look, isLiked: false } : look
-        ),
-      };
+    setLikedLooks((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(lookId);
+      return newSet;
     });
   };
 
   const handleSaveLook = (lookId: string) => {
-    setSession((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        looks: prev.looks.map((look) =>
-          look.id === lookId ? { ...look, isSaved: !look.isSaved } : look
-        ),
-      };
+    setSavedLooks((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(lookId)) {
+        newSet.delete(lookId);
+      } else {
+        newSet.add(lookId);
+      }
+      return newSet;
     });
   };
 
@@ -132,89 +189,66 @@ export default function FittingRoomPage() {
   };
 
   const handleRemoveProduct = (productId: string) => {
-    setSession((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        looks: prev.looks.map((look, index) => {
-          if (index === currentLookIndex) {
-            return {
-              ...look,
-              products: look.products.filter((p) => p.id !== productId),
-              totalPrice: look.products
-                .filter((p) => p.id !== productId)
-                .reduce((sum, p) => sum + p.price, 0),
-            };
+    // For now, just log - would need mutation to update look
+    console.log('Remove product:', productId);
+  };
+
+  // Get swappable products (same category, from other looks)
+  const getSwappableProducts = (): Product[] => {
+    if (!session || !swappingProduct) return [];
+    const currentProductIds = new Set(currentLook?.products.map((p) => p.id) || []);
+    const allProducts: Product[] = [];
+    
+    session.looks.forEach((look) => {
+      look.products.forEach((p) => {
+        if (!currentProductIds.has(p.id) && p.category === swappingProduct.category) {
+          if (!allProducts.some((ap) => ap.id === p.id)) {
+            allProducts.push(p);
           }
-          return look;
-        }),
-      };
+        }
+      });
     });
+    
+    return allProducts;
   };
 
   const handleSwapConfirm = (newProductId: string) => {
-    if (!swappingProduct || !session) return;
-
-    const allProducts = getAllProductsInSession(session);
-    const newProduct = allProducts.find((p) => p.id === newProductId);
-    if (!newProduct) return;
-
-    setSession((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        looks: prev.looks.map((look, index) => {
-          if (index === currentLookIndex) {
-            const newProducts = look.products.map((p) =>
-              p.id === swappingProduct.id ? newProduct : p
-            );
-            return {
-              ...look,
-              products: newProducts,
-              totalPrice: newProducts.reduce((sum, p) => sum + p.price, 0),
-            };
-          }
-          return look;
-        }),
-      };
-    });
-
+    // For now, just log - would need mutation to update look
+    console.log('Swap product to:', newProductId);
     setSwappingProduct(null);
     setShowSwapModal(false);
   };
 
-  const handleSaveToLookbook = (lookbookId: string) => {
-    if (savedToLookbooks.includes(lookbookId)) {
-      setSavedToLookbooks(savedToLookbooks.filter((id) => id !== lookbookId));
-    } else {
-      setSavedToLookbooks([...savedToLookbooks, lookbookId]);
-    }
-  };
-
-  const handleCreateLookbook = () => {
-    if (newLookbookName.trim()) {
-      const newId = `lookbook-new-${Date.now()}`;
-      setSavedToLookbooks([...savedToLookbooks, newId]);
-      setNewLookbookName('');
-    }
-  };
-
-  // Get swappable products (same category, not in current look)
-  const getSwappableProducts = (): Product[] => {
-    if (!session || !swappingProduct) return [];
-    const allProducts = getAllProductsInSession(session);
-    const currentProductIds = new Set(currentLook?.products.map((p) => p.id) || []);
-    return allProducts.filter(
-      (p) => !currentProductIds.has(p.id) && p.category === swappingProduct.category
-    );
-  };
-
-  if (!session) {
+  // Loading state
+  if (lookData === undefined) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading your looks...</p>
+          <p className="text-muted-foreground">Loading your look...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Look not found state
+  if (lookData === null || !session || session.looks.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center max-w-md px-4">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-alt flex items-center justify-center">
+            <Sparkles className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <h2 className="text-xl font-medium text-foreground mb-2">Look not found</h2>
+          <p className="text-muted-foreground mb-6">
+            This look may have been removed or is no longer available.
+          </p>
+          <Link
+            href="/ask"
+            className="inline-flex px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
+          >
+            Ask Nima for a new look
+          </Link>
         </div>
       </div>
     );
@@ -228,7 +262,7 @@ export default function FittingRoomPage() {
           <div className="flex items-center justify-between">
             {/* Back button */}
             <button
-              onClick={() => router.back()}
+              onClick={safeGoBack}
               className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-foreground" />
@@ -270,7 +304,16 @@ export default function FittingRoomPage() {
 
         {/* Look carousel */}
         <LookCarousel
-          looks={session.looks}
+          looks={session.looks.map((look) => ({
+            id: look.id,
+            imageUrl: look.userTryOnImageUrl,
+            styleTags: look.styleTags,
+            occasion: look.occasion,
+            isLiked: look.isLiked,
+            isSaved: look.isSaved,
+            isGenerating,
+            generationFailed,
+          }))}
           currentIndex={currentLookIndex}
           onIndexChange={setCurrentLookIndex}
           onLikeLook={handleLikeLook}
@@ -374,128 +417,33 @@ export default function FittingRoomPage() {
         onSwap={handleSwapConfirm}
       />
 
-      {/* Lookbook Modal */}
-      <AnimatePresence>
-        {showLookbookModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center"
-          >
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setShowLookbookModal(false)}
-            />
-
-            {/* Modal */}
-            <motion.div
-              initial={{ y: '100%', opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: '100%', opacity: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="relative w-full sm:max-w-md bg-background rounded-t-3xl sm:rounded-2xl p-6 max-h-[80vh] overflow-y-auto"
-            >
-              {/* Close button */}
-              <button
-                onClick={() => setShowLookbookModal(false)}
-                className="absolute top-4 right-4 p-2 rounded-full hover:bg-surface transition-colors"
-              >
-                <X className="w-5 h-5 text-muted-foreground" />
-              </button>
-
-              {/* Modal content */}
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-serif font-semibold text-foreground">Save to Lookbook</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Organize your favorite looks into collections
-                  </p>
-                </div>
-
-                {/* Existing lookbooks */}
-                <div className="space-y-3">
-                  {mockLookbooks.map((lookbook) => (
-                    <button
-                      key={lookbook.id}
-                      onClick={() => handleSaveToLookbook(lookbook.id)}
-                      className={`
-                        w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200
-                        ${savedToLookbooks.includes(lookbook.id)
-                          ? 'bg-primary/10 border-2 border-primary'
-                          : 'bg-surface border-2 border-border/50 hover:border-primary/30'
-                        }
-                      `}
-                    >
-                      {/* Cover image */}
-                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-surface-alt flex-shrink-0">
-                        {lookbook.coverImageUrl && (
-                          <img
-                            src={lookbook.coverImageUrl}
-                            alt={lookbook.name}
-                            className="w-full h-full object-cover"
-                          />
-                        )}
-                      </div>
-                      
-                      {/* Info */}
-                      <div className="flex-1 text-left">
-                        <p className="font-medium text-foreground">{lookbook.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {lookbook.lookIds.length} looks
-                        </p>
-                      </div>
-
-                      {/* Check indicator */}
-                      {savedToLookbooks.includes(lookbook.id) && (
-                        <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                          <svg className="w-4 h-4 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Create new lookbook */}
-                <div className="pt-4 border-t border-border/50">
-                  <p className="text-sm font-medium text-foreground mb-3">Create new Lookbook</p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newLookbookName}
-                      onChange={(e) => setNewLookbookName(e.target.value)}
-                      placeholder="e.g., Summer Vacation"
-                      className="flex-1 h-12 px-4 rounded-xl bg-surface border border-border/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-foreground placeholder:text-muted-foreground"
-                    />
-                    <button
-                      onClick={handleCreateLookbook}
-                      disabled={!newLookbookName.trim()}
-                      className="h-12 px-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-                    >
-                      Create
-                    </button>
-                  </div>
-                </div>
-
-                {/* Done button */}
-                <button
-                  onClick={() => setShowLookbookModal(false)}
-                  className="w-full h-12 bg-surface hover:bg-surface-alt border border-border/50 rounded-full font-medium transition-colors"
-                >
-                  Done
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Bottom navigation (mobile) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/50 py-2 px-4 z-30">
+        <div className="flex items-center justify-around">
+          <Link href="/discover" className="flex flex-col items-center gap-1 p-2">
+            <Sparkles className="w-5 h-5 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Discover</span>
+          </Link>
+          <Link href="/ask" className="flex flex-col items-center gap-1 p-2">
+            <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <span className="text-xs text-muted-foreground">Ask Nima</span>
+          </Link>
+          <Link href="/lookbooks" className="flex flex-col items-center gap-1 p-2">
+            <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            <span className="text-xs text-muted-foreground">Lookbooks</span>
+          </Link>
+          <Link href="/profile" className="flex flex-col items-center gap-1 p-2">
+            <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span className="text-xs text-muted-foreground">Profile</span>
+          </Link>
+        </div>
+      </nav>
     </div>
   );
 }
-

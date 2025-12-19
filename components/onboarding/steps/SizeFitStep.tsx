@@ -230,9 +230,10 @@ export function SizeFitStep({ formData, updateFormData, onNext, onBack }: StepPr
                 className="cursor-pointer"
               />
               <div className="flex justify-between mt-2">
-                <span className="text-xs text-muted-foreground">24"</span>
-                <span className="text-xs text-muted-foreground">44"</span>
+                 <span className="text-xs text-muted-foreground">24&quot;</span>
+                 <span className="text-xs text-muted-foreground">44&quot;</span>
               </div>
+
             </div>
           </motion.div>
 

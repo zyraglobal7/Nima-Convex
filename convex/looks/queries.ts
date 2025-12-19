@@ -636,12 +636,15 @@ export const getUserGeneratedLooks = query({
 
     const limit = Math.min(args.limit ?? 10, MAX_PAGE_SIZE);
 
-    // Get completed looks for this user
+    // Get looks for this user (including pending ones so they appear immediately after creation)
+    // We query by creator only and filter out failed ones
     const userLooks = await ctx.db
       .query('looks')
       .withIndex('by_creator_and_status', (q) =>
-        q.eq('creatorUserId', user._id).eq('generationStatus', 'completed')
+        q.eq('creatorUserId', user._id)
       )
+      .filter((q) => q.neq(q.field('generationStatus'), 'failed'))
+      .order('desc')
       .take(limit);
 
     // Fetch look images and items for each look
@@ -706,6 +709,145 @@ export const getUserGeneratedLooks = query({
     );
 
     return looksWithDetails;
+  },
+});
+
+/**
+ * Get public looks from all users for the /explore page
+ * Returns looks that users have chosen to share publicly
+ */
+export const getPublicLooks = query({
+  args: {
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+  },
+  returns: v.object({
+    looks: v.array(
+      v.object({
+        look: lookValidator,
+        lookImage: v.union(
+          v.object({
+            _id: v.id('look_images'),
+            storageId: v.optional(v.id('_storage')),
+            imageUrl: v.union(v.string(), v.null()),
+            status: v.union(
+              v.literal('pending'),
+              v.literal('processing'),
+              v.literal('completed'),
+              v.literal('failed')
+            ),
+          }),
+          v.null()
+        ),
+        creator: v.union(
+          v.object({
+            _id: v.id('users'),
+            firstName: v.optional(v.string()),
+            username: v.optional(v.string()),
+            profileImageUrl: v.optional(v.string()),
+          }),
+          v.null()
+        ),
+        itemCount: v.number(),
+      })
+    ),
+    nextCursor: v.union(v.string(), v.null()),
+    hasMore: v.boolean(),
+  }),
+  handler: async (
+    ctx: QueryCtx,
+    args: {
+      limit?: number;
+      cursor?: string;
+    }
+  ): Promise<{
+    looks: Array<{
+      look: Doc<'looks'>;
+      lookImage: {
+        _id: Id<'look_images'>;
+        storageId?: Id<'_storage'>;
+        imageUrl: string | null;
+        status: 'pending' | 'processing' | 'completed' | 'failed';
+      } | null;
+      creator: {
+        _id: Id<'users'>;
+        firstName?: string;
+        username?: string;
+        profileImageUrl?: string;
+      } | null;
+      itemCount: number;
+    }>;
+    nextCursor: string | null;
+    hasMore: boolean;
+  }> => {
+    const limit = Math.min(args.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
+    // Get public, active looks
+    const results = await ctx.db
+      .query('looks')
+      .withIndex('by_public_and_active', (q) => q.eq('isPublic', true).eq('isActive', true))
+      .order('desc')
+      .take(limit + 1);
+
+    const hasMore = results.length > limit;
+    const looks = results.slice(0, limit);
+
+    // Fetch look images and creator info for each look
+    const looksWithDetails = await Promise.all(
+      looks.map(async (look) => {
+        // Get the first look image (any user's try-on for this look)
+        const lookImage = await ctx.db
+          .query('look_images')
+          .withIndex('by_look', (q) => q.eq('lookId', look._id))
+          .first();
+
+        let imageUrl: string | null = null;
+        if (lookImage?.storageId) {
+          imageUrl = await ctx.storage.getUrl(lookImage.storageId);
+        }
+
+        // Get creator info
+        let creator = null;
+        if (look.creatorUserId) {
+          const user = await ctx.db.get(look.creatorUserId);
+          if (user) {
+            let profileImageUrl: string | undefined = undefined;
+            if (user.profileImageId) {
+              profileImageUrl = (await ctx.storage.getUrl(user.profileImageId)) || undefined;
+            } else if (user.profileImageUrl) {
+              profileImageUrl = user.profileImageUrl;
+            }
+
+            creator = {
+              _id: user._id,
+              firstName: user.firstName,
+              username: user.username,
+              profileImageUrl,
+            };
+          }
+        }
+
+        return {
+          look,
+          lookImage: lookImage
+            ? {
+                _id: lookImage._id,
+                storageId: lookImage.storageId,
+                imageUrl,
+                status: lookImage.status,
+              }
+            : null,
+          creator,
+          itemCount: look.itemIds.length,
+        };
+      })
+    );
+
+    return {
+      looks: looksWithDetails,
+      nextCursor: hasMore && looks.length > 0 ? looks[looks.length - 1]._id : null,
+      hasMore,
+    };
   },
 });
 

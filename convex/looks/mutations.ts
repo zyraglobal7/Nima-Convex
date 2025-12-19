@@ -1,4 +1,4 @@
-import { internalMutation, MutationCtx } from '../_generated/server';
+import { internalMutation, mutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id } from '../_generated/dataModel';
 import { generatePublicId } from '../types';
@@ -236,6 +236,86 @@ export const deleteLook = internalMutation({
     });
 
     return true;
+  },
+});
+
+/**
+ * Toggle public visibility of a look
+ * Users can share their looks on the /explore page
+ */
+export const toggleLookPublic = mutation({
+  args: {
+    lookId: v.id('looks'),
+    isPublic: v.boolean(),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    isPublic: v.boolean(),
+    message: v.string(),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { lookId: Id<'looks'>; isPublic: boolean }
+  ): Promise<{
+    success: boolean;
+    isPublic: boolean;
+    message: string;
+  }> => {
+    // Get current user
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        isPublic: false,
+        message: 'Please sign in to share looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        isPublic: false,
+        message: 'User not found.',
+      };
+    }
+
+    // Get the look
+    const look = await ctx.db.get(args.lookId);
+    if (!look) {
+      return {
+        success: false,
+        isPublic: false,
+        message: 'Look not found.',
+      };
+    }
+
+    // Check ownership - only the creator can toggle public status
+    if (look.creatorUserId !== user._id) {
+      return {
+        success: false,
+        isPublic: look.isPublic ?? false,
+        message: 'You can only share looks you created.',
+      };
+    }
+
+    // Update the look
+    await ctx.db.patch(args.lookId, {
+      isPublic: args.isPublic,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+      isPublic: args.isPublic,
+      message: args.isPublic
+        ? 'Your look is now visible on the Explore page!'
+        : 'Your look is now private.',
+    };
   },
 });
 

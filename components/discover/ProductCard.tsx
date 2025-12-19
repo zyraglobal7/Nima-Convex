@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { ExternalLink } from 'lucide-react';
 import type { Product } from '@/lib/mock-data';
-import { formatPrice } from '@/lib/mock-data';
+import { formatPrice } from '@/lib/utils/format';
 
 interface ProductCardProps {
   product: Product;
