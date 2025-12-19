@@ -90,13 +90,14 @@ export function LookCarousel({
                   transition={{ duration: 0.3, delay: index * 0.1 }}
                   className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-surface"
                 >
-                  {hasImage ? (
+                    {hasImage ? (
                     <>
                       {/* Try-on image */}
                       <Image
                         src={look.imageUrl}
                         alt={`Look ${index + 1}`}
                         fill
+                        unoptimized={look.imageUrl.includes('convex.cloud') || look.imageUrl.includes('convex.site')}
                         className="object-cover"
                       />
                       {/* Gradient overlay */}

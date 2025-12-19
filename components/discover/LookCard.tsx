@@ -51,6 +51,7 @@ export function LookCard({ look, index }: LookCardProps) {
                   src={look.imageUrl}
                   alt={`Look featuring ${look.styleTags.join(', ')}`}
                   fill
+                  unoptimized={look.imageUrl.includes('convex.cloud') || look.imageUrl.includes('convex.site')}
                   className="object-cover transition-transform duration-500 group-hover:scale-105"
                 />
                 
@@ -91,6 +92,7 @@ export function LookCard({ look, index }: LookCardProps) {
                           src={product.imageUrl}
                           alt={product.name}
                           fill
+                          unoptimized={product.imageUrl.includes('convex.cloud') || product.imageUrl.includes('convex.site')}
                           className="object-cover"
                         />
                       ) : (

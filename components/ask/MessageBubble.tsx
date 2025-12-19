@@ -6,6 +6,16 @@ import type { ChatMessage } from '@/lib/mock-chat-data';
 import { SearchingCard } from './SearchingCard';
 import { FittingRoomCard } from './FittingRoomCard';
 
+// Helper function to format timestamp
+function formatTime(date: Date | string | number): string {
+  const d = typeof date === 'object' ? date : new Date(date);
+  return d.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true 
+  });
+}
+
 interface MessageBubbleProps {
   message: ChatMessage;
   animate?: boolean;
@@ -63,6 +73,12 @@ export function MessageBubble({
           <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
             {message.content}
           </p>
+          {/* Timestamp */}
+          {message.timestamp && (
+            <p className={`text-[10px] mt-1.5 ${isUser ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
+              {formatTime(message.timestamp)}
+            </p>
+          )}
         </div>
       </div>
     </motion.div>

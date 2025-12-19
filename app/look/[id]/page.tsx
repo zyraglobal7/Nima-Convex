@@ -82,6 +82,7 @@ function LookbookOption({
             src={lookbookWithCover.coverImageUrl}
             alt={lookbook.name}
             fill
+            unoptimized={lookbookWithCover.coverImageUrl.includes('convex.cloud') || lookbookWithCover.coverImageUrl.includes('convex.site')}
             className="object-cover"
           />
         ) : (
@@ -382,6 +383,7 @@ export default function LookDetailPage() {
           className="relative rounded-2xl overflow-hidden mb-6 bg-surface"
         >
           <div className="relative w-full aspect-[3/4]">
+
             {isGenerating ? (
               <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
                 <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
@@ -397,6 +399,7 @@ export default function LookDetailPage() {
                 className="object-cover"
               />
             )}
+
           </div>
           
           {/* Style tags overlay - only show if not generating */}

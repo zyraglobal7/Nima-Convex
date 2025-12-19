@@ -221,6 +221,7 @@ export default function ProfilePage() {
                   src={currentUser.profileImageUrl}
                   alt="Profile"
                   fill
+                  unoptimized={currentUser.profileImageUrl.includes('convex.cloud') || currentUser.profileImageUrl.includes('convex.site')}
                   className="object-cover"
                 />
               ) : (

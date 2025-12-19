@@ -9,6 +9,7 @@ import {
   Users,
   ShoppingCart,
   Settings,
+  Gift,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -52,6 +53,11 @@ const navItems = [
     href: '/admin/orders',
     icon: ShoppingCart,
     disabled: true,
+  },
+  {
+    title: 'Wrapped',
+    href: '/admin/wrapped',
+    icon: Gift,
   },
 ];
 

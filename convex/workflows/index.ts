@@ -207,6 +207,156 @@ export const startOnboardingWorkflow = mutation({
 });
 
 /**
+ * Start generating more looks for the current user
+ * Generates 3 additional looks using items not in existing looks
+ */
+export const startGenerateMoreLooks = mutation({
+  args: {},
+  returns: v.object({
+    success: v.boolean(),
+    workflowId: v.optional(v.string()),
+    error: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    _args: Record<string, never>
+  ): Promise<{
+    success: boolean;
+    workflowId?: string;
+    error?: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        error: 'Not authenticated',
+      };
+    }
+
+    // Get user
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found',
+      };
+    }
+
+    // Check if user has uploaded photos
+    const userImage = await ctx.db
+      .query('user_images')
+      .withIndex('by_user', (q) => q.eq('userId', user._id))
+      .first();
+
+    if (!userImage) {
+      return {
+        success: false,
+        error: 'Please upload at least one photo first',
+      };
+    }
+
+    // Check if there's already a workflow in progress (pending or processing looks)
+    const existingLooks = await ctx.db
+      .query('looks')
+      .withIndex('by_creator_and_status', (q) => q.eq('creatorUserId', user._id))
+      .collect();
+
+    const pendingOrProcessing = existingLooks.filter(
+      (l) => l.generationStatus === 'pending' || l.generationStatus === 'processing'
+    );
+
+    if (pendingOrProcessing.length > 0) {
+      return {
+        success: false,
+        error: 'Looks are already being generated. Please wait for them to complete.',
+      };
+    }
+
+    // Get existing item IDs to exclude from new looks
+    const existingItemIds = new Set<string>();
+    for (const look of existingLooks) {
+      for (const itemId of look.itemIds) {
+        existingItemIds.add(itemId);
+      }
+    }
+
+    console.log(`[WORKFLOW:GENERATE_MORE] Starting workflow for user ${user._id}`);
+    console.log(`[WORKFLOW:GENERATE_MORE] Excluding ${existingItemIds.size} items from previous looks`);
+
+    // Check if there are any items available after exclusions
+    const userGender = user.gender === 'male' ? 'male' 
+      : user.gender === 'female' ? 'female' 
+      : undefined;
+    
+    // Count available items (simple check - not full AI selection logic)
+    let availableItemsCount = 0;
+    if (userGender) {
+      const genderItems = await ctx.db
+        .query('items')
+        .withIndex('by_active_and_gender', (q) =>
+          q.eq('isActive', true).eq('gender', userGender)
+        )
+        .collect();
+      const unisexItems = await ctx.db
+        .query('items')
+        .withIndex('by_active_and_gender', (q) =>
+          q.eq('isActive', true).eq('gender', 'unisex')
+        )
+        .collect();
+      const allItems = [...genderItems, ...unisexItems];
+      availableItemsCount = allItems.filter((item) => !existingItemIds.has(item._id)).length;
+    } else {
+      const allItems = await ctx.db
+        .query('items')
+        .filter((q) => q.eq(q.field('isActive'), true))
+        .collect();
+      availableItemsCount = allItems.filter((item) => !existingItemIds.has(item._id)).length;
+    }
+
+    if (availableItemsCount === 0) {
+      console.log(`[WORKFLOW:GENERATE_MORE] No items available after exclusions`);
+      return {
+        success: false,
+        error: "You've seen all our current styles! Check back soon for new arrivals.",
+      };
+    }
+
+    // Need at least 4 items to create a proper look (e.g., top, bottom, shoes, accessory/outerwear)
+    const MIN_ITEMS_FOR_WORKFLOW = 4;
+    if (availableItemsCount < MIN_ITEMS_FOR_WORKFLOW) {
+      console.log(`[WORKFLOW:GENERATE_MORE] Only ${availableItemsCount} items available, need at least ${MIN_ITEMS_FOR_WORKFLOW}`);
+      return {
+        success: false,
+        error: `We need more items in your size/style to create new looks. Only ${availableItemsCount} items available. Check back soon for new arrivals!`,
+      };
+    }
+
+    console.log(`[WORKFLOW:GENERATE_MORE] ${availableItemsCount} items available after exclusions`);
+
+    // Start the workflow with exclusion list
+    const workflowId = await workflow.start(
+      ctx,
+      internal.workflows.onboarding.generateMoreLooksWorkflow,
+      { 
+        userId: user._id,
+        excludeItemIds: Array.from(existingItemIds),
+      }
+    );
+
+    console.log(`[WORKFLOW:GENERATE_MORE] Workflow started with ID: ${workflowId}`);
+
+    return {
+      success: true,
+      workflowId: workflowId as string,
+    };
+  },
+});
+
+/**
  * Get workflow status for the current user
  */
 export const getOnboardingWorkflowStatus = query({

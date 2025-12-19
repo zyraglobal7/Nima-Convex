@@ -220,6 +220,7 @@ export function BuyWithNimaSheet({
                                 src={product.imageUrl}
                                 alt={product.name}
                                 fill
+                                unoptimized={product.imageUrl.includes('convex.cloud') || product.imageUrl.includes('convex.site')}
                                 className="object-cover"
                               />
                             </div>

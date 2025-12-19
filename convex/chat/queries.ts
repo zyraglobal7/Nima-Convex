@@ -33,6 +33,7 @@ export const searchItemsForChat = query({
         v.literal('top'),
         v.literal('bottom'),
         v.literal('dress'),
+        v.literal('outfit'),
         v.literal('outerwear'),
         v.literal('shoes'),
         v.literal('accessory'),
@@ -51,7 +52,7 @@ export const searchItemsForChat = query({
     args: {
       searchQuery?: string;
       gender?: 'male' | 'female' | 'unisex';
-      category?: 'top' | 'bottom' | 'dress' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+      category?: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
       stylePreferences?: string[];
       occasion?: string;
       budgetRange?: 'low' | 'mid' | 'premium';

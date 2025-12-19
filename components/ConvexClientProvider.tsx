@@ -3,6 +3,7 @@
 import { ReactNode, useCallback, useState, useEffect } from 'react';
 import { ConvexReactClient, ConvexProviderWithAuth } from 'convex/react';
 import { AuthKitProvider, useAuth, useAccessToken } from '@workos-inc/authkit-nextjs/components';
+import { WrappedChecker } from '@/components/wrapped/WrappedChecker';
 
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
   const [convex] = useState(() => {
@@ -31,6 +32,7 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
   return (
     <AuthKitProvider>
       <ConvexProviderWithAuth client={convex} useAuth={useAuthFromAuthKit}>
+        <WrappedChecker />
         {children}
       </ConvexProviderWithAuth>
     </AuthKitProvider>

@@ -15,13 +15,14 @@ import { Button } from '@/components/ui/button';
 import { X, Plus } from 'lucide-react';
 import { useState } from 'react';
 
-type Category = 'top' | 'bottom' | 'dress' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+type Category = 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
 type Gender = 'male' | 'female' | 'unisex';
 
 const categories: { value: Category; label: string }[] = [
   { value: 'top', label: 'Top' },
   { value: 'bottom', label: 'Bottom' },
   { value: 'dress', label: 'Dress' },
+  { value: 'outfit', label: 'Outfit / Set' },
   { value: 'outerwear', label: 'Outerwear' },
   { value: 'shoes', label: 'Shoes' },
   { value: 'accessory', label: 'Accessory' },
