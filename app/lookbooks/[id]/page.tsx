@@ -228,7 +228,7 @@ export default function LookbookDetailPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Lookbook?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete "{lookbook.name}" and all its items. This action cannot be undone.
+               This will permanently delete &quot;{lookbook.name}&quot; and all its items. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
