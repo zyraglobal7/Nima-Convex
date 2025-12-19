@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { NimaChatBubble, LookGrid } from '@/components/discover';
 import { discoverWelcomeMessage } from '@/lib/mock-data';
-import { User, Settings, Sparkles } from 'lucide-react';
+import { Settings, Sparkles, User } from 'lucide-react';
+import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import Link from 'next/link';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -73,6 +74,7 @@ function transformConvexLook(
   const isGenerating = lookData.lookImage?.status === 'pending' || lookData.lookImage?.status === 'processing';
   const generationFailed = lookData.lookImage?.status === 'failed';
 
+
   return {
     id: lookData.look._id,
     imageUrl,
@@ -91,18 +93,36 @@ function transformConvexLook(
   };
 }
 
+type FilterType = 'my_looks' | 'explore' | 'friends';
+
 export default function DiscoverPage() {
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [showWelcome, setShowWelcome] = useState(true);
   const [workflowStarted, setWorkflowStarted] = useState(false);
   const [looks, setLooks] = useState<LookWithStatus[]>([]);
+
   const [isGeneratingMore, setIsGeneratingMore] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<FilterType>('my_looks');
+
 
   // Convex queries and mutations
   const shouldStartWorkflow = useQuery(api.workflows.index.shouldStartOnboardingWorkflow);
   const workflowStatus = useQuery(api.workflows.index.getOnboardingWorkflowStatus);
-  const userGeneratedLooks = useQuery(api.looks.queries.getUserGeneratedLooks, { limit: 20 });
+
+  const userGeneratedLooks = useQuery(
+    api.looks.queries.getUserGeneratedLooks,
+    activeFilter === 'my_looks' ? { limit: 50 } : 'skip'
+  );
+  const publicLooks = useQuery(
+    api.looks.queries.getPublicLooks,
+    activeFilter === 'explore' ? { limit: 50 } : 'skip'
+  );
+  const friendsLooks = useQuery(
+    api.looks.queries.getFriendsLooks,
+    activeFilter === 'friends' ? { limit: 50 } : 'skip'
+  );
+
   const startWorkflow = useMutation(api.workflows.index.startOnboardingWorkflow);
   const generateMoreLooks = useMutation(api.workflows.index.startGenerateMoreLooks);
 
@@ -170,15 +190,56 @@ export default function DiscoverPage() {
     }
   }, [workflowStatus]);
 
-  // Transform looks data when available
+  // Transform looks data when available based on active filter
   useEffect(() => {
-    if (userGeneratedLooks && userGeneratedLooks.length > 0) {
-      const transformedLooks = userGeneratedLooks.map((lookData, index) => 
-        transformConvexLook(lookData as Parameters<typeof transformConvexLook>[0], index)
+    let looksData: Parameters<typeof transformConvexLook>[0][] = [];
+
+    if (activeFilter === 'my_looks' && userGeneratedLooks) {
+      looksData = userGeneratedLooks as Parameters<typeof transformConvexLook>[0][];
+    } else if (activeFilter === 'explore' && publicLooks) {
+      looksData = publicLooks.looks.map((look) => ({
+        look: look.look,
+        lookImage: look.lookImage
+          ? {
+              _id: look.lookImage._id,
+              storageId: look.lookImage.storageId,
+              imageUrl: look.lookImage.imageUrl,
+              status: look.lookImage.status,
+            }
+          : null,
+        items: look.items.map((item) => ({
+          item: item.item,
+          primaryImageUrl: item.primaryImageUrl,
+        })),
+      })) as Parameters<typeof transformConvexLook>[0][];
+    } else if (activeFilter === 'friends' && friendsLooks) {
+      looksData = friendsLooks.map((look) => ({
+        look: look.look,
+        lookImage: look.lookImage
+          ? {
+              _id: look.lookImage._id,
+              storageId: look.lookImage.storageId,
+              imageUrl: look.lookImage.imageUrl,
+              status: look.lookImage.status,
+            }
+          : null,
+        items: look.items.map((item) => ({
+          item: item.item,
+          primaryImageUrl: item.primaryImageUrl,
+        })),
+      })) as Parameters<typeof transformConvexLook>[0][];
+    }
+
+    if (looksData.length > 0) {
+      const transformedLooks = looksData.map((lookData, index) => 
+        transformConvexLook(lookData, index)
       );
       setLooks(transformedLooks);
+    } else {
+      // Clear looks if no data
+      setLooks([]);
     }
-  }, [userGeneratedLooks]);
+  }, [userGeneratedLooks, publicLooks, friendsLooks, activeFilter]);
 
   // Handle loading completion for users who don't need workflow
   useEffect(() => {
@@ -238,9 +299,7 @@ export default function DiscoverPage() {
               <button className="p-2 rounded-full hover:bg-surface transition-colors">
                 <Settings className="w-5 h-5 text-muted-foreground" />
               </button>
-              <button className="p-2 rounded-full hover:bg-surface transition-colors">
-                <User className="w-5 h-5 text-muted-foreground" />
-              </button>
+              <MessagesIcon />
             </div>
           </div>
         </div>
@@ -285,26 +344,31 @@ export default function DiscoverPage() {
           </p>
         </motion.div>
 
-        {/* Style tags filter */}
+        {/* Filter tabs */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.4 }}
           className="mb-8 flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
         >
-          {['All', 'Casual', 'Elegant', 'Work', 'Weekend', 'Date Night'].map((tag, index) => (
+          {[
+            { id: 'my_looks' as FilterType, label: 'My Looks' },
+            { id: 'explore' as FilterType, label: 'Explore Looks' },
+            { id: 'friends' as FilterType, label: 'Friends' },
+          ].map((filter) => (
             <button
-              key={tag}
+              key={filter.id}
+              onClick={() => setActiveFilter(filter.id)}
               className={`
                 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
                 transition-all duration-200
-                ${index === 0 
+                ${activeFilter === filter.id
                   ? 'bg-primary text-primary-foreground' 
                   : 'bg-surface hover:bg-surface-alt text-foreground border border-border/50 hover:border-primary/30'
                 }
               `}
             >
-              {tag}
+              {filter.label}
             </button>
           ))}
         </motion.div>
@@ -322,16 +386,30 @@ export default function DiscoverPage() {
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-alt flex items-center justify-center">
                 <Sparkles className="w-8 h-8 text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-medium text-foreground mb-2">No looks yet</h3>
+              <h3 className="text-lg font-medium text-foreground mb-2">
+                {activeFilter === 'my_looks' 
+                  ? 'No looks yet'
+                  : activeFilter === 'explore'
+                  ? 'No public looks yet'
+                  : 'No friends\' looks yet'
+                }
+              </h3>
               <p className="text-muted-foreground max-w-md mx-auto">
-                Complete your onboarding and upload photos to get personalized looks curated by Nima.
+                {activeFilter === 'my_looks' 
+                  ? 'Complete your onboarding and upload photos to get personalized looks curated by Nima.'
+                  : activeFilter === 'explore'
+                  ? 'Looks shared publicly by other users will appear here. Share your own looks to help others discover new styles!'
+                  : 'Looks shared by your friends will appear here. Add friends to see their shared looks!'
+                }
               </p>
-              <Link 
-                href="/onboarding" 
-                className="inline-flex mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
-              >
-                Complete Onboarding
-              </Link>
+              {activeFilter === 'my_looks' && (
+                <Link 
+                  href="/onboarding" 
+                  className="inline-flex mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
+                >
+                  Complete Onboarding
+                </Link>
+              )}
             </div>
           )}
         </motion.div>

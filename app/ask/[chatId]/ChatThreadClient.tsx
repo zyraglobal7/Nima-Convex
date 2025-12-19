@@ -10,6 +10,7 @@ import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import {
   ChatInput,
   MessageBubble,
@@ -628,6 +629,7 @@ We're always adding new items, so check back soon! ✨`,
             {/* Right actions */}
             <div className="flex items-center gap-1">
               <ThemeToggle />
+              <MessagesIcon />
               <ChatHistoryButton currentChatId={chatId} onNewChat={handleNewChat} />
             </div>
           </div>

@@ -304,8 +304,9 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
                   <Image
                     src={image.previewUrl}
                     alt={image.filename}
+                    priority={true}
                     fill
-                    unoptimized
+                   
                     className="object-cover"
                   />
                   <button
@@ -332,7 +333,7 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
                     src={file.previewUrl}
                     alt={file.file.name}
                     fill
-                    unoptimized
+                  
                     className={`object-cover ${file.status === 'uploading' ? 'opacity-50' : ''}`}
                   />
                   

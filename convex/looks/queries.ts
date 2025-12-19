@@ -31,6 +31,8 @@ const lookValidator = v.object({
   targetBudgetRange: v.optional(budgetValidator),
   isActive: v.boolean(),
   isFeatured: v.optional(v.boolean()),
+  isPublic: v.optional(v.boolean()), // For user-shareable looks on /explore
+  sharedWithFriends: v.optional(v.boolean()), // Share with friends (can be true even if isPublic is false)
   viewCount: v.optional(v.number()),
   saveCount: v.optional(v.number()),
   generationStatus: v.optional(generationStatusValidator),
@@ -53,7 +55,6 @@ const itemValidator = v.object({
     v.literal('top'),
     v.literal('bottom'),
     v.literal('dress'),
-    v.literal('outfit'),
     v.literal('outerwear'),
     v.literal('shoes'),
     v.literal('accessory'),
@@ -417,22 +418,6 @@ export const getFeaturedLooks = query({
 });
 
 /**
- * Increment view count for a look
- */
-export const incrementViewCount = query({
-  args: {
-    lookId: v.id('looks'),
-  },
-  returns: v.null(),
-  handler: async (ctx: QueryCtx, args: { lookId: Id<'looks'> }): Promise<null> => {
-    // Note: This should ideally be a mutation, but for simplicity
-    // we're just reading here. A proper implementation would use
-    // a mutation with rate limiting.
-    return null;
-  },
-});
-
-/**
  * Get a look by ID with full details including items and look image
  * Used on the look detail page
  */
@@ -483,6 +468,147 @@ export const getLookWithFullDetails = query({
     }>;
   } | null> => {
     const look = await ctx.db.get(args.lookId);
+    if (!look || !look.isActive) {
+    return null;
+    }
+
+    const identity = await ctx.auth.getUserIdentity();
+    let userId: Id<'users'> | null = null;
+
+    if (identity) {
+      const user = await ctx.db
+        .query('users')
+        .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+        .unique();
+      if (user) {
+        userId = user._id;
+      }
+    }
+
+    // Get look image for this user (if authenticated) or the first one
+    let lookImage = null;
+    if (userId) {
+      lookImage = await ctx.db
+        .query('look_images')
+        .withIndex('by_look_and_user', (q) => q.eq('lookId', look._id).eq('userId', userId!))
+        .first();
+    }
+
+    // If no user-specific image, get any image for this look
+    if (!lookImage) {
+      lookImage = await ctx.db
+        .query('look_images')
+        .withIndex('by_look', (q) => q.eq('lookId', look._id))
+        .first();
+    }
+
+    let imageUrl: string | null = null;
+    if (lookImage?.storageId) {
+      imageUrl = await ctx.storage.getUrl(lookImage.storageId);
+    }
+
+    // Get items with their images
+    const items = await Promise.all(
+      look.itemIds.map(async (itemId) => {
+        const item = await ctx.db.get(itemId);
+        if (!item || !item.isActive) {
+          return null;
+        }
+
+        // Get primary image
+        const primaryImage = await ctx.db
+          .query('item_images')
+          .withIndex('by_item_and_primary', (q) => q.eq('itemId', itemId).eq('isPrimary', true))
+          .unique();
+
+        let primaryImageUrl: string | null = null;
+        if (primaryImage) {
+          if (primaryImage.storageId) {
+            primaryImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+          } else if (primaryImage.externalUrl) {
+            primaryImageUrl = primaryImage.externalUrl;
+          }
+        }
+
+        return { item, primaryImageUrl };
+      })
+    );
+
+    // Filter out null items
+    const validItems = items.filter(
+      (i): i is { item: Doc<'items'>; primaryImageUrl: string | null } => i !== null
+    );
+
+    return {
+      look,
+      lookImage: lookImage
+        ? {
+            _id: lookImage._id,
+            storageId: lookImage.storageId,
+            imageUrl,
+            status: lookImage.status,
+          }
+        : null,
+      items: validItems,
+    };
+  },
+});
+
+/**
+ * Get a look with full details by public ID
+ * Used on the look detail page when accessed via publicId URL
+ */
+export const getLookWithFullDetailsByPublicId = query({
+  args: {
+    publicId: v.string(),
+  },
+  returns: v.union(
+    v.object({
+      look: lookValidator,
+      lookImage: v.union(
+        v.object({
+          _id: v.id('look_images'),
+          storageId: v.optional(v.id('_storage')),
+          imageUrl: v.union(v.string(), v.null()),
+          status: v.union(
+            v.literal('pending'),
+            v.literal('processing'),
+            v.literal('completed'),
+            v.literal('failed')
+          ),
+        }),
+        v.null()
+      ),
+      items: v.array(
+        v.object({
+          item: itemValidator,
+          primaryImageUrl: v.union(v.string(), v.null()),
+        })
+      ),
+    }),
+    v.null()
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { publicId: string }
+  ): Promise<{
+    look: Doc<'looks'>;
+    lookImage: {
+      _id: Id<'look_images'>;
+      storageId?: Id<'_storage'>;
+      imageUrl: string | null;
+      status: 'pending' | 'processing' | 'completed' | 'failed';
+    } | null;
+    items: Array<{
+      item: Doc<'items'>;
+      primaryImageUrl: string | null;
+    }>;
+  } | null> => {
+    const look = await ctx.db
+      .query('looks')
+      .withIndex('by_public_id', (q) => q.eq('publicId', args.publicId))
+      .unique();
+
     if (!look || !look.isActive) {
       return null;
     }
@@ -749,6 +875,12 @@ export const getPublicLooks = query({
           }),
           v.null()
         ),
+        items: v.array(
+          v.object({
+            item: itemValidator,
+            primaryImageUrl: v.union(v.string(), v.null()),
+          })
+        ),
         itemCount: v.number(),
       })
     ),
@@ -776,6 +908,10 @@ export const getPublicLooks = query({
         username?: string;
         profileImageUrl?: string;
       } | null;
+      items: Array<{
+        item: Doc<'items'>;
+        primaryImageUrl: string | null;
+      }>;
       itemCount: number;
     }>;
     nextCursor: string | null;
@@ -783,12 +919,32 @@ export const getPublicLooks = query({
   }> => {
     const limit = Math.min(args.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
 
-    // Get public, active looks
-    const results = await ctx.db
+    // Get current user to exclude their own looks
+    const identity = await ctx.auth.getUserIdentity();
+    let currentUserId: Id<'users'> | null = null;
+    if (identity) {
+      const user = await ctx.db
+        .query('users')
+        .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+        .unique();
+      if (user) {
+        currentUserId = user._id;
+      }
+    }
+
+    // Get public, active looks, excluding current user's own looks
+    const allResults = await ctx.db
       .query('looks')
       .withIndex('by_public_and_active', (q) => q.eq('isPublic', true).eq('isActive', true))
       .order('desc')
-      .take(limit + 1);
+      .collect();
+
+    // Filter out current user's looks
+    const filteredResults = currentUserId
+      ? allResults.filter((look) => look.creatorUserId !== currentUserId)
+      : allResults;
+
+    const results = filteredResults.slice(0, limit + 1);
 
     const hasMore = results.length > limit;
     const looks = results.slice(0, limit);
@@ -828,6 +984,38 @@ export const getPublicLooks = query({
           }
         }
 
+        // Get items with their images
+        const items = await Promise.all(
+          look.itemIds.map(async (itemId) => {
+            const item = await ctx.db.get(itemId);
+            if (!item || !item.isActive) {
+              return null;
+            }
+
+            // Get primary image
+            const primaryImage = await ctx.db
+              .query('item_images')
+              .withIndex('by_item_and_primary', (q) => q.eq('itemId', itemId).eq('isPrimary', true))
+              .unique();
+
+            let primaryImageUrl: string | null = null;
+            if (primaryImage) {
+              if (primaryImage.storageId) {
+                primaryImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+              } else if (primaryImage.externalUrl) {
+                primaryImageUrl = primaryImage.externalUrl;
+              }
+            }
+
+            return { item, primaryImageUrl };
+          })
+        );
+
+        // Filter out null items
+        const validItems = items.filter(
+          (i): i is { item: Doc<'items'>; primaryImageUrl: string | null } => i !== null
+        );
+
         return {
           look,
           lookImage: lookImage
@@ -839,7 +1027,8 @@ export const getPublicLooks = query({
               }
             : null,
           creator,
-          itemCount: look.itemIds.length,
+          items: validItems,
+          itemCount: validItems.length,
         };
       })
     );
@@ -848,6 +1037,455 @@ export const getPublicLooks = query({
       looks: looksWithDetails,
       nextCursor: hasMore && looks.length > 0 ? looks[looks.length - 1]._id : null,
       hasMore,
+    };
+  },
+});
+
+/**
+ * Get looks from friends
+ * Returns looks where:
+ * - creatorUserId is in user's friends list
+ * - AND (isPublic: true OR sharedWithFriends: true)
+ */
+export const getFriendsLooks = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(
+    v.object({
+      look: lookValidator,
+      lookImage: v.union(
+        v.object({
+          _id: v.id('look_images'),
+          storageId: v.optional(v.id('_storage')),
+          imageUrl: v.union(v.string(), v.null()),
+          status: v.union(
+            v.literal('pending'),
+            v.literal('processing'),
+            v.literal('completed'),
+            v.literal('failed')
+          ),
+        }),
+        v.null()
+      ),
+        creator: v.union(
+          v.object({
+            _id: v.id('users'),
+            firstName: v.optional(v.string()),
+            username: v.optional(v.string()),
+            profileImageUrl: v.optional(v.string()),
+          }),
+          v.null()
+        ),
+        items: v.array(
+          v.object({
+            item: itemValidator,
+            primaryImageUrl: v.union(v.string(), v.null()),
+          })
+        ),
+    })
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { limit?: number }
+  ): Promise<
+    Array<{
+      look: Doc<'looks'>;
+      lookImage: {
+        _id: Id<'look_images'>;
+        storageId?: Id<'_storage'>;
+        imageUrl: string | null;
+        status: 'pending' | 'processing' | 'completed' | 'failed';
+      } | null;
+      creator: {
+        _id: Id<'users'>;
+        firstName?: string;
+        username?: string;
+        profileImageUrl?: string;
+      } | null;
+      items: Array<{
+        item: Doc<'items'>;
+        primaryImageUrl: string | null;
+      }>;
+    }>
+  > => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return [];
+    }
+
+    const limit = Math.min(args.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
+    // Get all friends (accepted status)
+    const asRequester = await ctx.db
+      .query('friendships')
+      .withIndex('by_requester', (q) => q.eq('requesterId', user._id))
+      .filter((q) => q.eq(q.field('status'), 'accepted'))
+      .collect();
+
+    const asAddressee = await ctx.db
+      .query('friendships')
+      .withIndex('by_addressee', (q) => q.eq('addresseeId', user._id))
+      .filter((q) => q.eq(q.field('status'), 'accepted'))
+      .collect();
+
+    // Collect all friend IDs
+    const friendIds = new Set<Id<'users'>>();
+    asRequester.forEach((f) => friendIds.add(f.addresseeId));
+    asAddressee.forEach((f) => friendIds.add(f.requesterId));
+
+    if (friendIds.size === 0) {
+      return [];
+    }
+
+    // Get looks from friends that are either public or shared with friends
+    const allFriendLooks: Doc<'looks'>[] = [];
+    for (const friendId of friendIds) {
+      const friendLooks = await ctx.db
+        .query('looks')
+        .withIndex('by_creator_and_status', (q) => q.eq('creatorUserId', friendId))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field('isActive'), true),
+            q.or(
+              q.eq(q.field('isPublic'), true),
+              q.eq(q.field('sharedWithFriends'), true)
+            )
+          )
+        )
+        .collect();
+
+      allFriendLooks.push(...friendLooks);
+    }
+
+    // Sort by creation time (newest first) and limit
+    allFriendLooks.sort((a, b) => b.createdAt - a.createdAt);
+    const looks = allFriendLooks.slice(0, limit);
+
+    // Fetch look images and creator info for each look
+    const looksWithDetails = await Promise.all(
+      looks.map(async (look) => {
+        // Get the first look image (any user's try-on for this look)
+        const lookImage = await ctx.db
+          .query('look_images')
+          .withIndex('by_look', (q) => q.eq('lookId', look._id))
+          .first();
+
+        let imageUrl: string | null = null;
+        if (lookImage?.storageId) {
+          imageUrl = await ctx.storage.getUrl(lookImage.storageId);
+        }
+
+        // Get creator info
+        let creator = null;
+        if (look.creatorUserId) {
+          const creatorUser = await ctx.db.get(look.creatorUserId);
+          if (creatorUser) {
+            let profileImageUrl: string | undefined = undefined;
+            if (creatorUser.profileImageId) {
+              profileImageUrl = (await ctx.storage.getUrl(creatorUser.profileImageId)) || undefined;
+            } else if (creatorUser.profileImageUrl) {
+              profileImageUrl = creatorUser.profileImageUrl;
+            }
+
+            creator = {
+              _id: creatorUser._id,
+              firstName: creatorUser.firstName,
+              username: creatorUser.username,
+              profileImageUrl,
+            };
+          }
+        }
+
+        // Get items with their images
+        const items = await Promise.all(
+          look.itemIds.map(async (itemId) => {
+            const item = await ctx.db.get(itemId);
+            if (!item || !item.isActive) {
+              return null;
+            }
+
+            // Get primary image
+            const primaryImage = await ctx.db
+              .query('item_images')
+              .withIndex('by_item_and_primary', (q) => q.eq('itemId', itemId).eq('isPrimary', true))
+              .unique();
+
+            let primaryImageUrl: string | null = null;
+            if (primaryImage) {
+              if (primaryImage.storageId) {
+                primaryImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+              } else if (primaryImage.externalUrl) {
+                primaryImageUrl = primaryImage.externalUrl;
+              }
+            }
+
+            return { item, primaryImageUrl };
+          })
+        );
+
+        // Filter out null items
+        const validItems = items.filter(
+          (i): i is { item: Doc<'items'>; primaryImageUrl: string | null } => i !== null
+        );
+
+        return {
+          look,
+          lookImage: lookImage
+            ? {
+                _id: lookImage._id,
+                storageId: lookImage.storageId,
+                imageUrl,
+                status: lookImage.status,
+              }
+            : null,
+          creator,
+          items: validItems,
+        };
+      })
+    );
+
+    return looksWithDetails;
+  },
+});
+
+/**
+ * Get look with share metadata by public ID (for popup when viewing shared look)
+ * Returns the look and information about who shared it
+ */
+export const getLookWithShareMetadataByPublicId = query({
+  args: {
+    publicId: v.string(),
+    sharedByUserId: v.optional(v.id('users')),
+  },
+  returns: v.union(
+    v.object({
+      look: lookValidator,
+      sharedBy: v.union(
+        v.object({
+          _id: v.id('users'),
+          firstName: v.optional(v.string()),
+          username: v.optional(v.string()),
+          profileImageUrl: v.optional(v.string()),
+        }),
+        v.null()
+      ),
+      areFriends: v.boolean(),
+    }),
+    v.null()
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { publicId: string; sharedByUserId?: Id<'users'> }
+  ): Promise<{
+    look: Doc<'looks'>;
+    sharedBy: {
+      _id: Id<'users'>;
+      firstName?: string;
+      username?: string;
+      profileImageUrl?: string;
+    } | null;
+    areFriends: boolean;
+  } | null> => {
+    const look = await ctx.db
+      .query('looks')
+      .withIndex('by_public_id', (q) => q.eq('publicId', args.publicId))
+      .unique();
+
+    if (!look || !look.isActive) {
+      return null;
+    }
+
+    // Get current user
+    const identity = await ctx.auth.getUserIdentity();
+    let currentUserId: Id<'users'> | null = null;
+
+    if (identity) {
+      const user = await ctx.db
+        .query('users')
+        .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+        .unique();
+      if (user) {
+        currentUserId = user._id;
+      }
+    }
+
+    // Get sharedBy user info if provided
+    let sharedBy = null;
+    let areFriends = false;
+
+    if (args.sharedByUserId) {
+      const sharedByUser = await ctx.db.get(args.sharedByUserId);
+      if (sharedByUser) {
+        let profileImageUrl: string | undefined = undefined;
+        if (sharedByUser.profileImageId) {
+          profileImageUrl = (await ctx.storage.getUrl(sharedByUser.profileImageId)) || undefined;
+        } else if (sharedByUser.profileImageUrl) {
+          profileImageUrl = sharedByUser.profileImageUrl;
+        }
+
+        sharedBy = {
+          _id: sharedByUser._id,
+          firstName: sharedByUser.firstName,
+          username: sharedByUser.username,
+          profileImageUrl,
+        };
+
+        // Check if they are friends
+        if (currentUserId) {
+          // Check both directions
+          const friendship1 = await ctx.db
+            .query('friendships')
+            .withIndex('by_users', (q) =>
+              q.eq('requesterId', currentUserId!).eq('addresseeId', args.sharedByUserId!)
+            )
+            .filter((q) => q.eq(q.field('status'), 'accepted'))
+            .first();
+
+          if (friendship1) {
+            areFriends = true;
+          } else {
+            const friendship2 = await ctx.db
+              .query('friendships')
+              .withIndex('by_users', (q) =>
+                q.eq('requesterId', args.sharedByUserId!).eq('addresseeId', currentUserId!)
+              )
+              .filter((q) => q.eq(q.field('status'), 'accepted'))
+              .first();
+
+            areFriends = !!friendship2;
+          }
+        }
+      }
+    }
+
+    return {
+      look,
+      sharedBy,
+      areFriends,
+    };
+  },
+});
+
+/**
+ * Get look with share metadata (for popup when viewing shared look)
+ * Returns the look and information about who shared it
+ */
+export const getLookWithShareMetadata = query({
+  args: {
+    lookId: v.id('looks'),
+    sharedByUserId: v.optional(v.id('users')),
+  },
+  returns: v.union(
+    v.object({
+      look: lookValidator,
+      sharedBy: v.union(
+        v.object({
+          _id: v.id('users'),
+          firstName: v.optional(v.string()),
+          username: v.optional(v.string()),
+          profileImageUrl: v.optional(v.string()),
+        }),
+        v.null()
+      ),
+      areFriends: v.boolean(),
+    }),
+    v.null()
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { lookId: Id<'looks'>; sharedByUserId?: Id<'users'> }
+  ): Promise<{
+    look: Doc<'looks'>;
+    sharedBy: {
+      _id: Id<'users'>;
+      firstName?: string;
+      username?: string;
+      profileImageUrl?: string;
+    } | null;
+    areFriends: boolean;
+  } | null> => {
+    const look = await ctx.db.get(args.lookId);
+    if (!look || !look.isActive) {
+      return null;
+    }
+
+    // Get current user
+    const identity = await ctx.auth.getUserIdentity();
+    let currentUserId: Id<'users'> | null = null;
+
+    if (identity) {
+      const user = await ctx.db
+        .query('users')
+        .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+        .unique();
+      if (user) {
+        currentUserId = user._id;
+      }
+    }
+
+    // Get sharedBy user info if provided
+    let sharedBy = null;
+    let areFriends = false;
+
+    if (args.sharedByUserId) {
+      const sharedByUser = await ctx.db.get(args.sharedByUserId);
+      if (sharedByUser) {
+        let profileImageUrl: string | undefined = undefined;
+        if (sharedByUser.profileImageId) {
+          profileImageUrl = (await ctx.storage.getUrl(sharedByUser.profileImageId)) || undefined;
+        } else if (sharedByUser.profileImageUrl) {
+          profileImageUrl = sharedByUser.profileImageUrl;
+        }
+
+        sharedBy = {
+          _id: sharedByUser._id,
+          firstName: sharedByUser.firstName,
+          username: sharedByUser.username,
+          profileImageUrl,
+        };
+
+        // Check if they are friends
+        if (currentUserId) {
+          // Check both directions
+          const friendship1 = await ctx.db
+            .query('friendships')
+            .withIndex('by_users', (q) =>
+              q.eq('requesterId', currentUserId!).eq('addresseeId', args.sharedByUserId!)
+            )
+            .filter((q) => q.eq(q.field('status'), 'accepted'))
+            .first();
+
+          if (friendship1) {
+            areFriends = true;
+          } else {
+            const friendship2 = await ctx.db
+              .query('friendships')
+              .withIndex('by_users', (q) =>
+                q.eq('requesterId', args.sharedByUserId!).eq('addresseeId', currentUserId!)
+              )
+              .filter((q) => q.eq(q.field('status'), 'accepted'))
+              .first();
+
+            areFriends = !!friendship2;
+          }
+        }
+      }
+    }
+
+    return {
+      look,
+      sharedBy,
+      areFriends,
     };
   },
 });
@@ -999,4 +1637,3 @@ export const getMultipleLooksWithDetails = query({
     return results;
   },
 });
-

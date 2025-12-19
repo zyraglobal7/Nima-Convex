@@ -2,6 +2,7 @@ import { internalMutation, mutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id } from '../_generated/dataModel';
 import { generatePublicId } from '../types';
+import { internal } from '../_generated/api';
 
 // Validators
 const genderValidator = v.union(v.literal('male'), v.literal('female'), v.literal('unisex'));
@@ -315,6 +316,381 @@ export const toggleLookPublic = mutation({
       message: args.isPublic
         ? 'Your look is now visible on the Explore page!'
         : 'Your look is now private.',
+    };
+  },
+});
+
+/**
+ * Share look with friends
+ * Sets sharedWithFriends to true so friends can see it
+ */
+export const shareLookWithFriends = mutation({
+  args: {
+    lookId: v.id('looks'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    message: v.string(),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { lookId: Id<'looks'> }
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        message: 'Please sign in to share looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'User not found.',
+      };
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look) {
+      return {
+        success: false,
+        message: 'Look not found.',
+      };
+    }
+
+    // Check ownership
+    if (look.creatorUserId !== user._id) {
+      return {
+        success: false,
+        message: 'You can only share looks you created.',
+      };
+    }
+
+    // Update the look
+    await ctx.db.patch(args.lookId, {
+      sharedWithFriends: true,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+      message: 'Your look is now shared with your friends!',
+    };
+  },
+});
+
+/**
+ * Share look publicly (sets isPublic to true)
+ */
+export const shareLookPublicly = mutation({
+  args: {
+    lookId: v.id('looks'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    message: v.string(),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { lookId: Id<'looks'> }
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        message: 'Please sign in to share looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'User not found.',
+      };
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look) {
+      return {
+        success: false,
+        message: 'Look not found.',
+      };
+    }
+
+    // Check ownership
+    if (look.creatorUserId !== user._id) {
+      return {
+        success: false,
+        message: 'You can only share looks you created.',
+      };
+    }
+
+    // Update the look
+    await ctx.db.patch(args.lookId, {
+      isPublic: true,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+      message: 'Your look is now visible on the Explore page!',
+    };
+  },
+});
+
+/**
+ * Unshare look publicly (sets isPublic to false)
+ */
+export const unshareLookPublicly = mutation({
+  args: {
+    lookId: v.id('looks'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    message: v.string(),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { lookId: Id<'looks'> }
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        message: 'Please sign in to unshare looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'User not found.',
+      };
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look) {
+      return {
+        success: false,
+        message: 'Look not found.',
+      };
+    }
+
+    // Check ownership
+    if (look.creatorUserId !== user._id) {
+      return {
+        success: false,
+        message: 'You can only unshare looks you created.',
+      };
+    }
+
+    // Update the look
+    await ctx.db.patch(args.lookId, {
+      isPublic: false,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+      message: 'Your look is no longer visible on the Explore page.',
+    };
+  },
+});
+
+/**
+ * Unshare look with friends (sets sharedWithFriends to false)
+ */
+export const unshareLookWithFriends = mutation({
+  args: {
+    lookId: v.id('looks'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    message: v.string(),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { lookId: Id<'looks'> }
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        message: 'Please sign in to unshare looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'User not found.',
+      };
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look) {
+      return {
+        success: false,
+        message: 'Look not found.',
+      };
+    }
+
+    // Check ownership
+    if (look.creatorUserId !== user._id) {
+      return {
+        success: false,
+        message: 'You can only unshare looks you created.',
+      };
+    }
+
+    // Update the look
+    await ctx.db.patch(args.lookId, {
+      sharedWithFriends: false,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+      message: 'Your look is no longer shared with friends.',
+    };
+  },
+});
+
+/**
+ * Recreate a look - creates a new look with the same items but for the current user
+ */
+export const recreateLook = mutation({
+  args: {
+    lookId: v.id('looks'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    lookId: v.optional(v.id('looks')),
+    publicId: v.optional(v.string()),
+    error: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { lookId: Id<'looks'> }
+  ): Promise<{
+    success: boolean;
+    lookId?: Id<'looks'>;
+    publicId?: string;
+    error?: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        error: 'Please sign in to recreate looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found.',
+      };
+    }
+
+    // Get the original look
+    const originalLook = await ctx.db.get(args.lookId);
+    if (!originalLook || !originalLook.isActive) {
+      return {
+        success: false,
+        error: 'Look not found.',
+      };
+    }
+
+    // Validate all items still exist and are active
+    for (const itemId of originalLook.itemIds) {
+      const item = await ctx.db.get(itemId);
+      if (!item || !item.isActive) {
+        return {
+          success: false,
+          error: 'Some items in this look are no longer available.',
+        };
+      }
+    }
+
+    // Create new look with same items
+    const now = Date.now();
+    const publicId = generatePublicId('look');
+
+    const newLookId = await ctx.db.insert('looks', {
+      publicId,
+      itemIds: originalLook.itemIds,
+      totalPrice: originalLook.totalPrice,
+      currency: originalLook.currency,
+      name: originalLook.name ? `${originalLook.name} (Recreated)` : undefined,
+      styleTags: originalLook.styleTags,
+      occasion: originalLook.occasion,
+      season: originalLook.season,
+      nimaComment: originalLook.nimaComment,
+      targetGender: originalLook.targetGender,
+      targetBudgetRange: originalLook.targetBudgetRange,
+      isActive: true,
+      isFeatured: false,
+      isPublic: false, // New look is private by default
+      sharedWithFriends: false,
+      viewCount: 0,
+      saveCount: 0,
+      generationStatus: 'pending', // Set to pending to trigger image generation
+      createdBy: 'user',
+      creatorUserId: user._id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Trigger image generation workflow
+    // Schedule the image generation action to run immediately
+    await ctx.scheduler.runAfter(0, internal.workflows.actions.generateLookImage, {
+      lookId: newLookId,
+      userId: user._id,
+    });
+
+    return {
+      success: true,
+      lookId: newLookId,
+      publicId,
     };
   },
 });

@@ -14,7 +14,14 @@ import type * as admin_queries from "../admin/queries.js";
 import type * as chat_actions from "../chat/actions.js";
 import type * as chat_mutations from "../chat/mutations.js";
 import type * as chat_queries from "../chat/queries.js";
+
 import type * as crons from "../crons.js";
+
+import type * as directMessages_mutations from "../directMessages/mutations.js";
+import type * as directMessages_queries from "../directMessages/queries.js";
+import type * as friends_mutations from "../friends/mutations.js";
+import type * as friends_queries from "../friends/queries.js";
+
 import type * as http from "../http.js";
 import type * as items_mutations from "../items/mutations.js";
 import type * as items_queries from "../items/queries.js";
@@ -57,6 +64,10 @@ declare const fullApi: ApiFromModules<{
   "chat/mutations": typeof chat_mutations;
   "chat/queries": typeof chat_queries;
   crons: typeof crons;
+  "directMessages/mutations": typeof directMessages_mutations;
+  "directMessages/queries": typeof directMessages_queries;
+  "friends/mutations": typeof friends_mutations;
+  "friends/queries": typeof friends_queries;
   http: typeof http;
   "items/mutations": typeof items_mutations;
   "items/queries": typeof items_queries;

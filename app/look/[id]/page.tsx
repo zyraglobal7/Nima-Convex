@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
@@ -17,7 +17,11 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import { NimaChatBubble, ProductCard } from '@/components/discover';
+import { ShareLookModal } from '@/components/looks/ShareLookModal';
+import { FriendRequestPopup } from '@/components/friends/FriendRequestPopup';
+import { RecreateLookButton } from '@/components/looks/RecreateLookButton';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id, Doc } from '@/convex/_generated/dataModel';
@@ -111,33 +115,55 @@ function LookbookOption({
 export default function LookDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const lookId = params.id as string;
+  const sharedByUserId = searchParams.get('sharedBy');
 
   const [isLiked, setIsLiked] = useState(false);
   const [isDisliked, setIsDisliked] = useState(false);
   const [showLookbookModal, setShowLookbookModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showFriendRequestPopup, setShowFriendRequestPopup] = useState(false);
   const [newLookbookName, setNewLookbookName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
   // Fetch user's lookbooks
   const userLookbooks = useQuery(api.lookbooks.queries.listUserLookbooks, { includeArchived: false });
-
+  const lookData = useQuery(
+    api.looks.queries.getLookWithFullDetails,
+    lookId ? { lookId: lookId as Id<'looks'> } : 'skip'
+  );
   // Check which lookbooks this look is saved to
   const savedStatus = useQuery(
     api.lookbooks.queries.isItemSaved,
-    lookId ? { itemType: 'look' as const, lookId: lookId as Id<'looks'> } : 'skip'
+    lookData?.look ? { itemType: 'look' as const, lookId: lookData.look._id } : 'skip'
   );
 
   // Mutations for lookbook operations
   const addToLookbookMutation = useMutation(api.lookbooks.mutations.addToLookbook);
   const createLookbookMutation = useMutation(api.lookbooks.mutations.createLookbook);
 
-  // Fetch look data from Convex
-  const lookData = useQuery(
-    api.looks.queries.getLookWithFullDetails,
-    lookId ? { lookId: lookId as Id<'looks'> } : 'skip'
+  // Fetch current user
+  const currentUser = useQuery(api.users.queries.getCurrentUser);
+
+  // Fetch share metadata if sharedBy param exists
+  const shareMetadata = useQuery(
+    api.looks.queries.getLookWithShareMetadataByPublicId,
+    lookId && sharedByUserId
+      ? {
+          publicId: lookId as string,
+          sharedByUserId: sharedByUserId as Id<'users'>,
+        }
+      : 'skip'
   );
+
+  // Show friend request popup if shared by non-friend
+  useEffect(() => {
+    if (shareMetadata && !shareMetadata.areFriends && sharedByUserId) {
+      setShowFriendRequestPopup(true);
+    }
+  }, [shareMetadata, sharedByUserId]);
 
   // Transform items to products format
   const products: TransformedProduct[] = useMemo(() => {
@@ -183,6 +209,10 @@ export default function LookDetailPage() {
     return 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&h=900&fit=crop';
   }, [lookData?.lookImage?.imageUrl, products]);
 
+  // Check if image is being generated
+  const isGenerating = lookData?.look?.generationStatus === 'pending' || 
+                     lookData?.look?.generationStatus === 'processing';
+
   // Safe navigation helper
   const safeGoBack = useCallback(() => {
     requestAnimationFrame(() => {
@@ -225,12 +255,17 @@ export default function LookDetailPage() {
       return;
     }
 
+    if (!lookData?.look) {
+      toast.error('Look data not available');
+      return;
+    }
+
     setIsSaving(true);
     try {
       await addToLookbookMutation({
         lookbookId,
         itemType: 'look',
-        lookId: lookId as Id<'looks'>,
+        lookId: lookData.look._id,
       });
       toast.success('Saved to lookbook!');
     } catch (error) {
@@ -252,11 +287,13 @@ export default function LookDetailPage() {
       });
       
       // Auto-add the current look to the new lookbook
+      if (lookData?.look) {
       await addToLookbookMutation({
         lookbookId: newLookbookId,
         itemType: 'look',
-        lookId: lookId as Id<'looks'>,
+          lookId: lookData.look._id,
       });
+      }
       
       toast.success(`Created "${newLookbookName}" and saved look!`);
       setNewLookbookName('');
@@ -324,7 +361,11 @@ export default function LookDetailPage() {
             {/* Actions */}
             <div className="flex items-center gap-1">
               <ThemeToggle />
-              <button className="p-2 rounded-full hover:bg-surface transition-colors">
+              <MessagesIcon />
+              <button
+                onClick={() => setShowShareModal(true)}
+                className="p-2 rounded-full hover:bg-surface transition-colors"
+              >
                 <Share2 className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
@@ -342,26 +383,38 @@ export default function LookDetailPage() {
           className="relative rounded-2xl overflow-hidden mb-6 bg-surface"
         >
           <div className="relative w-full aspect-[3/4]">
-            <Image
-              src={lookImageUrl}
-              alt={`Look featuring ${look.styleTags.join(', ')}`}
-              fill
-              unoptimized={lookImageUrl.includes('convex.cloud') || lookImageUrl.includes('convex.site')}
-              className="object-cover"
-            />
+
+            {isGenerating ? (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
+                <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
+                <p className="text-sm font-medium text-foreground">Generating your look...</p>
+                <p className="text-xs text-muted-foreground mt-1">This may take a few moments</p>
+              </div>
+            ) : (
+              <Image
+                src={lookImageUrl}
+                alt={`Look featuring ${look.styleTags.join(', ')}`}
+                fill
+                unoptimized={true}
+                className="object-cover"
+              />
+            )}
+
           </div>
           
-          {/* Style tags overlay */}
-          <div className="absolute bottom-4 left-4 right-4 flex flex-wrap gap-2">
-            {look.styleTags.map((tag) => (
-              <span
-                key={tag}
-                className="px-3 py-1 text-xs font-medium bg-background/90 backdrop-blur-sm rounded-full text-foreground"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
+          {/* Style tags overlay - only show if not generating */}
+          {!isGenerating && (
+            <div className="absolute bottom-4 left-4 right-4 flex flex-wrap gap-2">
+              {look.styleTags.map((tag) => (
+                <span
+                  key={tag}
+                  className="px-3 py-1 text-xs font-medium bg-background/90 backdrop-blur-sm rounded-full text-foreground"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
         </motion.div>
 
         {/* Action buttons */}
@@ -478,6 +531,22 @@ export default function LookDetailPage() {
             <ProductCard key={product.id} product={product} index={index} />
           ))}
         </motion.div>
+
+        {/* Recreate Look Button */}
+        {look.creatorUserId && currentUser && look.creatorUserId !== currentUser._id && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.6 }}
+            className="mt-8 flex justify-center"
+          >
+            <RecreateLookButton
+              lookId={look._id}
+              creatorUserId={look.creatorUserId}
+              currentUserId={currentUser._id}
+            />
+          </motion.div>
+        )}
       </main>
 
       {/* Fixed bottom CTA */}
@@ -609,6 +678,36 @@ export default function LookDetailPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Share Modal */}
+      {lookData && (
+        <ShareLookModal
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          lookId={lookData.look._id}
+          lookPublicId={lookData.look.publicId}
+          isPublic={lookData.look.isPublic ?? false}
+          sharedWithFriends={lookData.look.sharedWithFriends ?? false}
+          creatorUserId={lookData.look.creatorUserId}
+          currentUserId={currentUser?._id}
+        />
+      )}
+
+      {/* Friend Request Popup */}
+      {shareMetadata?.sharedBy && (
+        <FriendRequestPopup
+          isOpen={showFriendRequestPopup}
+          onClose={() => setShowFriendRequestPopup(false)}
+          onIgnore={() => {
+            // Remove sharedBy param from URL
+            const newSearchParams = new URLSearchParams(searchParams.toString());
+            newSearchParams.delete('sharedBy');
+            const newUrl = newSearchParams.toString() ? `?${newSearchParams.toString()}` : '';
+            router.replace(`/look/${lookId}${newUrl}`);
+          }}
+          sharedBy={shareMetadata.sharedBy}
+        />
+      )}
     </div>
   );
 }
