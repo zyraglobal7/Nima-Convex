@@ -156,10 +156,319 @@ export const createLookFromChat = mutation({
 });
 
 /**
+ * Create multiple looks from chat based on user preferences (3 looks)
+ * Matches items from the items table and creates pending looks for image generation
+ * 
+ * @returns lookIds if items were found and looks were created, error if no matching items
+ */
+export const createLooksFromChat = mutation({
+  args: {
+    occasion: v.optional(v.string()),
+    context: v.optional(v.string()), // Additional context from chat (e.g., "date night", "work meeting")
+  },
+  returns: v.union(
+    v.object({
+      success: v.literal(true),
+      lookIds: v.array(v.id('looks')),
+      message: v.string(),
+    }),
+    v.object({
+      success: v.literal(false),
+      message: v.string(),
+    })
+  ),
+  handler: async (
+    ctx: MutationCtx,
+    args: {
+      occasion?: string;
+      context?: string;
+    }
+  ): Promise<
+    | { success: true; lookIds: Id<'looks'>[]; message: string }
+    | { success: false; message: string }
+  > => {
+    // Get current user
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        message: 'Please sign in to create looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'User profile not found. Please complete onboarding.',
+      };
+    }
+
+    // Check if user has a primary image for try-on
+    const userImage = await ctx.db
+      .query('user_images')
+      .withIndex('by_user_and_primary', (q) => q.eq('userId', user._id).eq('isPrimary', true))
+      .unique();
+
+    if (!userImage) {
+      // Try to find any user image
+      const anyImage = await ctx.db
+        .query('user_images')
+        .withIndex('by_user', (q) => q.eq('userId', user._id))
+        .first();
+
+      if (!anyImage) {
+        return {
+          success: false,
+          message: 'no_photo',
+        };
+      }
+    }
+
+    // Get user preferences for matching
+    const userGender = user.gender === 'prefer-not-to-say' ? undefined : user.gender;
+    const userStyles = user.stylePreferences || [];
+    const userBudget = user.budgetRange;
+
+    // Create 3 looks with different strategies
+    const lookIds: Id<'looks'>[] = [];
+    const usedItemIds = new Set<string>();
+    const now = Date.now();
+
+    // Try to create 3 looks using different outfit strategies
+    for (let i = 0; i < 3; i++) {
+      const matchedItems = await matchItemsForLookWithExclusions(ctx, {
+        gender: userGender,
+        stylePreferences: userStyles,
+        budgetRange: userBudget,
+        occasion: args.occasion,
+        excludeItemIds: usedItemIds,
+        strategyIndex: i, // Use different strategies for variety
+      });
+
+      if (matchedItems.length < 2) {
+        // Not enough items for this look, skip
+        continue;
+      }
+
+      // Mark items as used
+      matchedItems.forEach((item) => usedItemIds.add(item._id));
+
+      // Calculate total price
+      let totalPrice = 0;
+      let currency = 'KES';
+      for (const item of matchedItems) {
+        totalPrice += item.price;
+        currency = item.currency;
+      }
+
+      const publicId = generatePublicId('look');
+      const styleTags = [...new Set(matchedItems.flatMap((item) => item.tags))].slice(0, 5);
+      const nimaComment = generateNimaComment(args.occasion, args.context, user.firstName);
+
+      // Vary the look names
+      const lookNames = [
+        args.occasion ? `${args.occasion} Look #1` : 'Option 1',
+        args.occasion ? `${args.occasion} Look #2` : 'Option 2',
+        args.occasion ? `${args.occasion} Look #3` : 'Option 3',
+      ];
+
+      const lookId = await ctx.db.insert('looks', {
+        publicId,
+        itemIds: matchedItems.map((item) => item._id),
+        totalPrice,
+        currency,
+        name: lookNames[i],
+        styleTags,
+        occasion: args.occasion,
+        nimaComment,
+        targetGender: userGender || 'unisex',
+        targetBudgetRange: userBudget,
+        isActive: true,
+        isFeatured: false,
+        viewCount: 0,
+        saveCount: 0,
+        generationStatus: 'pending',
+        createdBy: 'user',
+        creatorUserId: user._id,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      lookIds.push(lookId);
+    }
+
+    if (lookIds.length === 0) {
+      return {
+        success: false,
+        message: 'no_matches',
+      };
+    }
+
+    return {
+      success: true,
+      lookIds,
+      message: `I found ${lookIds.length} amazing looks for you! Step into the fitting room to see yourself in these outfits.`,
+    };
+  },
+});
+
+/**
+ * Match items for a look with exclusions (for creating multiple looks)
+ */
+async function matchItemsForLookWithExclusions(
+  ctx: MutationCtx,
+  preferences: {
+    gender?: 'male' | 'female';
+    stylePreferences: string[];
+    budgetRange?: 'low' | 'mid' | 'premium';
+    occasion?: string;
+    excludeItemIds: Set<string>;
+    strategyIndex: number;
+  }
+): Promise<Doc<'items'>[]> {
+  // Rotate through strategies based on index
+  const strategyOrder = [
+    outfitStrategies[preferences.strategyIndex % outfitStrategies.length],
+    ...outfitStrategies.filter((_, i) => i !== preferences.strategyIndex % outfitStrategies.length),
+  ];
+
+  // Reuse the existing matching logic with exclusions
+  const budgetRanges = {
+    low: { min: 0, max: 5000 },
+    mid: { min: 5000, max: 20000 },
+    premium: { min: 20000, max: Infinity },
+  };
+
+  async function getItemsByCategory(
+    category: ItemCategory,
+    limit: number = 50
+  ): Promise<Array<{ item: Doc<'items'>; score: number }>> {
+    let items: Doc<'items'>[] = [];
+    
+    if (preferences.gender) {
+      const genderQuery = ctx.db
+        .query('items')
+        .withIndex('by_gender_and_category', (q) =>
+          q.eq('gender', preferences.gender!).eq('category', category)
+        );
+      const genderItems = await genderQuery.take(limit);
+      
+      const unisexQuery = ctx.db
+        .query('items')
+        .withIndex('by_gender_and_category', (q) =>
+          q.eq('gender', 'unisex').eq('category', category)
+        );
+      const unisexItems = await unisexQuery.take(limit);
+      
+      items = [...genderItems, ...unisexItems];
+    } else {
+      const query = ctx.db
+        .query('items')
+        .withIndex('by_active_and_category', (q) =>
+          q.eq('isActive', true).eq('category', category)
+        );
+      items = await query.take(limit);
+    }
+
+    return items
+      .filter((item) => item.isActive)
+      .filter((item) => !preferences.excludeItemIds.has(item._id)) // Exclude already used items
+      .filter((item) => {
+        if (preferences.budgetRange) {
+          const range = budgetRanges[preferences.budgetRange];
+          return item.price >= range.min && item.price <= range.max;
+        }
+        return true;
+      })
+      .map((item) => {
+        let score = Math.random() * 5;
+
+        if (preferences.stylePreferences.length > 0) {
+          const styleSet = new Set(preferences.stylePreferences.map((s) => s.toLowerCase()));
+          const matchingTags = item.tags.filter((tag) => styleSet.has(tag.toLowerCase()));
+          score += matchingTags.length * 10;
+        }
+
+        if (preferences.occasion && item.occasion) {
+          const occasionLower = preferences.occasion.toLowerCase();
+          if (item.occasion.some((o) => o.toLowerCase().includes(occasionLower))) {
+            score += 20;
+          }
+        }
+
+        if (preferences.occasion) {
+          const occasionLower = preferences.occasion.toLowerCase();
+          if (item.tags.some((t) => t.toLowerCase().includes(occasionLower))) {
+            score += 15;
+          }
+        }
+
+        return { item, score };
+      })
+      .sort((a, b) => b.score - a.score);
+  }
+
+  // Try each strategy
+  for (const strategy of strategyOrder) {
+    const matchedItems: Doc<'items'>[] = [];
+    const usedItemIds = new Set<string>();
+
+    let baseComplete = true;
+    for (const category of strategy.base) {
+      const items = await getItemsByCategory(category);
+      const available = items.find((i) => !usedItemIds.has(i.item._id));
+      
+      if (available) {
+        matchedItems.push(available.item);
+        usedItemIds.add(available.item._id);
+      } else {
+        baseComplete = false;
+        break;
+      }
+    }
+
+    if (!baseComplete) {
+      continue;
+    }
+
+    const optionalSlots = Math.min(
+      strategy.maxItems - matchedItems.length,
+      Math.floor(Math.random() * (strategy.optional.length + 1))
+    );
+
+    const shuffledOptional = [...strategy.optional].sort(() => Math.random() - 0.5);
+
+    for (const category of shuffledOptional) {
+      if (matchedItems.length >= strategy.maxItems) break;
+      if (matchedItems.length >= strategy.base.length + optionalSlots) break;
+
+      const items = await getItemsByCategory(category);
+      const available = items.find((i) => !usedItemIds.has(i.item._id));
+      
+      if (available) {
+        matchedItems.push(available.item);
+        usedItemIds.add(available.item._id);
+      }
+    }
+
+    if (matchedItems.length >= strategy.minItems) {
+      return matchedItems;
+    }
+  }
+
+  return [];
+}
+
+/**
  * Outfit building strategies - defines different ways to compose an outfit
  * Each strategy has required base categories and optional additions
  */
-type ItemCategory = 'top' | 'bottom' | 'dress' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+type ItemCategory = 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
 
 interface OutfitStrategy {
   name: string;
@@ -174,6 +483,14 @@ const outfitStrategies: OutfitStrategy[] = [
   {
     name: 'dress_outfit',
     base: ['dress'],
+    optional: ['shoes', 'accessory', 'bag', 'jewelry'],
+    minItems: 1,
+    maxItems: 3,
+  },
+  // Pre-styled outfit/set - already a complete outfit (like matching sets, co-ords)
+  {
+    name: 'set_outfit',
+    base: ['outfit'],
     optional: ['shoes', 'accessory', 'bag', 'jewelry'],
     minItems: 1,
     maxItems: 3,
@@ -217,26 +534,40 @@ async function matchItemsForLook(
   };
 
   // Helper to get items by category with scoring
+  // Fetches both gender-specific items AND unisex items to ensure variety
   async function getItemsByCategory(
     category: ItemCategory,
     limit: number = 50
   ): Promise<Array<{ item: Doc<'items'>; score: number }>> {
-    let query;
+    let items: Doc<'items'>[] = [];
+    
     if (preferences.gender) {
-      query = ctx.db
+      // Get gender-specific items
+      const genderQuery = ctx.db
         .query('items')
         .withIndex('by_gender_and_category', (q) =>
           q.eq('gender', preferences.gender!).eq('category', category)
         );
+      const genderItems = await genderQuery.take(limit);
+      
+      // Also get unisex items for this category
+      const unisexQuery = ctx.db
+        .query('items')
+        .withIndex('by_gender_and_category', (q) =>
+          q.eq('gender', 'unisex').eq('category', category)
+        );
+      const unisexItems = await unisexQuery.take(limit);
+      
+      items = [...genderItems, ...unisexItems];
     } else {
-      query = ctx.db
+      // No gender preference - get all items in this category
+      const query = ctx.db
         .query('items')
         .withIndex('by_active_and_category', (q) =>
           q.eq('isActive', true).eq('category', category)
         );
+      items = await query.take(limit);
     }
-
-    const items = await query.take(limit);
 
     // Filter and score items
     return items

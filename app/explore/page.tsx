@@ -253,6 +253,7 @@ function PublicLookCard({ look, index }: PublicLookCardProps) {
             src={imageUrl}
             alt={look.look.occasion || 'Look'}
             fill
+            unoptimized={imageUrl.includes('convex.cloud') || imageUrl.includes('convex.site')}
             className="object-cover transition-transform duration-500 group-hover:scale-105"
             sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
           />
@@ -284,6 +285,7 @@ function PublicLookCard({ look, index }: PublicLookCardProps) {
                 alt={creatorName}
                 width={20}
                 height={20}
+                unoptimized={look.creator.profileImageUrl.includes('convex.cloud') || look.creator.profileImageUrl.includes('convex.site')}
                 className="rounded-full"
               />
             ) : (

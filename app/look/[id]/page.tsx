@@ -78,6 +78,7 @@ function LookbookOption({
             src={lookbookWithCover.coverImageUrl}
             alt={lookbook.name}
             fill
+            unoptimized={lookbookWithCover.coverImageUrl.includes('convex.cloud') || lookbookWithCover.coverImageUrl.includes('convex.site')}
             className="object-cover"
           />
         ) : (
@@ -345,6 +346,7 @@ export default function LookDetailPage() {
               src={lookImageUrl}
               alt={`Look featuring ${look.styleTags.join(', ')}`}
               fill
+              unoptimized={lookImageUrl.includes('convex.cloud') || lookImageUrl.includes('convex.site')}
               className="object-cover"
             />
           </div>

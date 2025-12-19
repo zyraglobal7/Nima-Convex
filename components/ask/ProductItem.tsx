@@ -61,6 +61,7 @@ export function ProductItem({
             src={product.imageUrl}
             alt={product.name}
             fill
+            unoptimized={product.imageUrl.includes('convex.cloud') || product.imageUrl.includes('convex.site')}
             className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         </div>
@@ -198,6 +199,7 @@ export function ProductItemCompact({
           src={product.imageUrl}
           alt={product.name}
           fill
+          unoptimized={product.imageUrl.includes('convex.cloud') || product.imageUrl.includes('convex.site')}
           className="object-cover"
         />
       </div>

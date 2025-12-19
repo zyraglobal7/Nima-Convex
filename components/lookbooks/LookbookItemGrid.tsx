@@ -70,6 +70,7 @@ export function LookbookItemGrid({ items, onRemove, canEdit = false }: LookbookI
                         src={lookImageUrl}
                         alt={`Look ${look.publicId}`}
                         fill
+                        unoptimized={lookImageUrl.includes('convex.cloud') || lookImageUrl.includes('convex.site')}
                         className="object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                     ) : (
@@ -134,6 +135,7 @@ export function LookbookItemGrid({ items, onRemove, canEdit = false }: LookbookI
                         src={itemImageUrl}
                         alt={item.name}
                         fill
+                        unoptimized={itemImageUrl.includes('convex.cloud') || itemImageUrl.includes('convex.site')}
                         className="object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                     ) : (

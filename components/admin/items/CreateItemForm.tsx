@@ -218,6 +218,7 @@ export function CreateItemForm({
                       alt={`Product image ${index + 1}`}
                       width={200}
                       height={200}
+                      unoptimized={img.url.includes('convex.cloud') || img.url.includes('convex.site')}
                       className="h-full w-full object-cover"
                     />
                   </div>

@@ -181,6 +181,7 @@ export const getLookWithItemImages = internalQuery({
             v.literal('top'),
             v.literal('bottom'),
             v.literal('dress'),
+            v.literal('outfit'),
             v.literal('outerwear'),
             v.literal('shoes'),
             v.literal('accessory'),
@@ -210,6 +211,7 @@ export const getLookWithItemImages = internalQuery({
         | 'top'
         | 'bottom'
         | 'dress'
+        | 'outfit'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -269,6 +271,7 @@ export const getLookWithItemImages = internalQuery({
         | 'top'
         | 'bottom'
         | 'dress'
+        | 'outfit'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -330,6 +333,7 @@ export const searchItemsForAI = internalQuery({
         v.literal('top'),
         v.literal('bottom'),
         v.literal('dress'),
+        v.literal('outfit'),
         v.literal('outerwear'),
         v.literal('shoes'),
         v.literal('accessory'),
@@ -359,6 +363,7 @@ export const searchItemsForAI = internalQuery({
         | 'top'
         | 'bottom'
         | 'dress'
+        | 'outfit'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -408,6 +413,7 @@ export const getAllItemsForAI = internalQuery({
         v.literal('top'),
         v.literal('bottom'),
         v.literal('dress'),
+        v.literal('outfit'),
         v.literal('outerwear'),
         v.literal('shoes'),
         v.literal('accessory'),
@@ -427,6 +433,7 @@ export const getAllItemsForAI = internalQuery({
         v.literal('top'),
         v.literal('bottom'),
         v.literal('dress'),
+        v.literal('outfit'),
         v.literal('outerwear'),
         v.literal('shoes'),
         v.literal('accessory'),
@@ -447,6 +454,7 @@ export const getAllItemsForAI = internalQuery({
         | 'top'
         | 'bottom'
         | 'dress'
+        | 'outfit'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -464,6 +472,7 @@ export const getAllItemsForAI = internalQuery({
         | 'top'
         | 'bottom'
         | 'dress'
+        | 'outfit'
         | 'outerwear'
         | 'shoes'
         | 'accessory'

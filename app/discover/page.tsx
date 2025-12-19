@@ -96,12 +96,37 @@ export default function DiscoverPage() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [workflowStarted, setWorkflowStarted] = useState(false);
   const [looks, setLooks] = useState<LookWithStatus[]>([]);
+  const [isGeneratingMore, setIsGeneratingMore] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
 
   // Convex queries and mutations
   const shouldStartWorkflow = useQuery(api.workflows.index.shouldStartOnboardingWorkflow);
   const workflowStatus = useQuery(api.workflows.index.getOnboardingWorkflowStatus);
-  const userGeneratedLooks = useQuery(api.looks.queries.getUserGeneratedLooks, { limit: 10 });
+  const userGeneratedLooks = useQuery(api.looks.queries.getUserGeneratedLooks, { limit: 20 });
   const startWorkflow = useMutation(api.workflows.index.startOnboardingWorkflow);
+  const generateMoreLooks = useMutation(api.workflows.index.startGenerateMoreLooks);
+
+  // Handle "Generate more looks" button click
+  const handleGenerateMore = async () => {
+    if (isGeneratingMore) return;
+    
+    setIsGeneratingMore(true);
+    setGenerationError(null);
+    try {
+      const result = await generateMoreLooks();
+      if (result.success) {
+        console.log('[DISCOVER] Generate more workflow started:', result.workflowId);
+      } else {
+        console.error('[DISCOVER] Failed to generate more looks:', result.error);
+        setGenerationError(result.error || 'Failed to generate more looks');
+      }
+    } catch (error) {
+      console.error('[DISCOVER] Error generating more looks:', error);
+      setGenerationError('Something went wrong. Please try again.');
+    } finally {
+      setIsGeneratingMore(false);
+    }
+  };
 
   // Start the workflow if needed
   useEffect(() => {
@@ -311,20 +336,83 @@ export default function DiscoverPage() {
           )}
         </motion.div>
 
-        {/* Load more placeholder */}
+        {/* Load more / Generate more looks */}
         {looks.length > 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, delay: 1 }}
-            className="py-12 text-center"
+            className="py-12"
           >
-            <p className="text-muted-foreground text-sm mb-4">
-              You&apos;ve seen all your looks for now
-            </p>
-            <button className="px-6 py-3 bg-surface hover:bg-surface-alt border border-border/50 hover:border-primary/30 rounded-full text-sm font-medium transition-all duration-200">
-              Generate more looks
-            </button>
+            {/* Show generating indicator when workflow is active */}
+            <AnimatePresence mode="wait">
+              {workflowStatus && (workflowStatus.pendingCount > 0 || workflowStatus.processingCount > 0) ? (
+                <GeneratingMoreIndicator 
+                  key="generating"
+                  workflowStatus={workflowStatus} 
+                />
+              ) : generationError ? (
+                <motion.div
+                  key="error"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="text-center max-w-md mx-auto"
+                >
+                  {/* Error message card */}
+                  <div className="bg-surface/80 backdrop-blur-md border border-border/50 rounded-2xl px-5 py-4 mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                        <Sparkles className="w-5 h-5 text-primary-foreground" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-xs text-muted-foreground mb-0.5">Nima</p>
+                        <p className="text-sm text-foreground">{generationError}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setGenerationError(null)}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="idle"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="text-center"
+                >
+                  <p className="text-muted-foreground text-sm mb-4">
+                    {isGeneratingMore 
+                      ? 'Starting generation...' 
+                      : "You've seen all your looks for now"}
+                  </p>
+                  <button 
+                    onClick={handleGenerateMore}
+                    disabled={isGeneratingMore}
+                    className={`
+                      px-6 py-3 rounded-full text-sm font-medium transition-all duration-200
+                      ${isGeneratingMore 
+                        ? 'bg-primary/50 text-primary-foreground cursor-not-allowed' 
+                        : 'bg-surface hover:bg-surface-alt border border-border/50 hover:border-primary/30'}
+                    `}
+                  >
+                    {isGeneratingMore ? (
+                      <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                        Starting...
+                      </span>
+                    ) : (
+                      'Generate more looks'
+                    )}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </main>
@@ -630,5 +718,148 @@ function GeneratingScreen({
         </div>
       </div>
     </div>
+  );
+}
+
+// Inline indicator for "Generate more looks" progress
+function GeneratingMoreIndicator({ 
+  workflowStatus,
+}: { 
+  workflowStatus: { 
+    pendingCount: number; 
+    processingCount: number; 
+    completedCount: number; 
+    totalCount: number;
+  };
+}) {
+  const [messageIndex, setMessageIndex] = useState(0);
+  const [key, setKey] = useState(0);
+
+  // Messages that cycle during generation
+  const loadingMessages = [
+    "Curating new looks for you...",
+    "Finding fresh outfit combinations...",
+    "Matching pieces to your style...",
+    "Generating try-on images...",
+    "Almost ready, gorgeous...",
+  ];
+
+  // Cycle through messages
+  useEffect(() => {
+    const messageInterval = setInterval(() => {
+      setMessageIndex((prev) => (prev + 1) % loadingMessages.length);
+      setKey((prev) => prev + 1);
+    }, 3500);
+
+    return () => clearInterval(messageInterval);
+  }, [loadingMessages.length]);
+
+  // Calculate how many new looks are being generated
+  const newLooksCount = workflowStatus.pendingCount + workflowStatus.processingCount;
+  const totalNewLooks = newLooksCount > 0 ? newLooksCount : 3; // Assume 3 if we don't know yet
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="py-8"
+    >
+      <div className="max-w-md mx-auto">
+        {/* Chat bubble with status */}
+        <div className="relative mb-6">
+          <div className="bg-surface/90 backdrop-blur-md border border-border/50 rounded-2xl px-5 py-4 shadow-lg">
+            <div className="flex items-center gap-4">
+              {/* Avatar with pulse animation */}
+              <div className="relative flex-shrink-0">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-primary-foreground" />
+                </div>
+                {/* Pulse ring */}
+                <span className="absolute inset-0 rounded-full animate-ping bg-primary/20" />
+              </div>
+              
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground mb-1">Nima</p>
+                <AnimatePresence mode="wait">
+                  <motion.p
+                    key={key}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.3 }}
+                    className="text-foreground font-medium text-sm"
+                  >
+                    {loadingMessages[messageIndex]}
+                  </motion.p>
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+          {/* Bubble tail */}
+          <div className="absolute -bottom-2 left-8 w-4 h-4 bg-surface/90 border-b border-r border-border/50 transform rotate-45" />
+        </div>
+
+        {/* Progress info */}
+        <div className="text-center mb-4">
+          <p className="text-sm text-muted-foreground">
+            {workflowStatus.processingCount > 0 
+              ? `Generating image ${workflowStatus.completedCount + 1} of ${workflowStatus.totalCount}...`
+              : workflowStatus.pendingCount > 0
+                ? `Preparing ${workflowStatus.pendingCount} new look${workflowStatus.pendingCount > 1 ? 's' : ''}...`
+                : 'Starting generation...'
+            }
+          </p>
+        </div>
+
+        {/* Mini look cards showing progress */}
+        <div className="flex justify-center gap-2">
+          {[...Array(totalNewLooks)].map((_, i) => {
+            // First card shows processing state, others show pending
+            const isProcessing = i === 0 && workflowStatus.processingCount > 0;
+            
+            return (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: i * 0.1 }}
+                className={`w-12 h-16 rounded-lg overflow-hidden border ${
+                  isProcessing 
+                    ? 'bg-secondary/20 border-secondary/50' 
+                    : 'bg-surface-alt border-border/50'
+                }`}
+              >
+                {isProcessing ? (
+                  <div className="w-full h-full animate-pulse bg-gradient-to-b from-secondary/30 to-secondary/10 flex items-center justify-center">
+                    <span className="w-3 h-3 border-2 border-secondary/30 border-t-secondary rounded-full animate-spin" />
+                  </div>
+                ) : (
+                  <div className="w-full h-full animate-shimmer" />
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* Subtle progress bar */}
+        <div className="mt-4 px-8">
+          <div className="h-1 bg-surface-alt rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-gradient-to-r from-primary to-secondary rounded-full"
+              initial={{ width: '5%' }}
+              animate={{ 
+                width: workflowStatus.processingCount > 0 
+                  ? '60%' 
+                  : workflowStatus.pendingCount > 0 
+                    ? '30%' 
+                    : '10%' 
+              }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+            />
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }

@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useChat } from '@ai-sdk/react';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -20,7 +20,7 @@ import { TypingIndicator } from '@/components/ask/MessageBubble';
 import { AuthExpiredModal } from '@/components/auth';
 import type { UIMessage } from 'ai';
 
-type ChatState = 'chatting' | 'typing' | 'searching' | 'ready' | 'no_matches';
+type ChatState = 'chatting' | 'typing' | 'curating' | 'generating' | 'ready' | 'no_matches' | 'searching';
 
 // Helper to extract text content from AI SDK v5 message parts
 function getMessageText(message: UIMessage): string {
@@ -176,22 +176,57 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
     threadId ? { threadId } : 'skip'
   );
 
-  // Mutations
+  // Mutations and Actions
   const startConversation = useMutation(api.messages.mutations.startConversation);
   const sendMessageMutation = useMutation(api.messages.mutations.sendMessage);
   const saveAssistantMessage = useMutation(api.messages.mutations.saveAssistantMessage);
-  const createLookFromChat = useMutation(api.chat.mutations.createLookFromChat);
+  const createLooksFromChat = useMutation(api.chat.mutations.createLooksFromChat);
+  const generateChatLookImages = useAction(api.chat.actions.generateChatLookImages);
   
   // Track created look IDs for fitting room navigation
-  const [, setCreatedLookIds] = useState<string[]>([]);
+  const [createdLookIds, setCreatedLookIds] = useState<Id<'looks'>[]>([]);
+  const [generationProgress, setGenerationProgress] = useState<string>('');
 
   // Set threadId from chatId prop if it's a valid ID
   useEffect(() => {
     if (chatId !== 'new') {
-      setThreadId(chatId as Id<'threads'>);
+      const threadIdValue = chatId as Id<'threads'>;
+      setThreadId(threadIdValue);
+      pendingThreadIdRef.current = threadIdValue; // Also set ref for callbacks
       setIsNewThread(false);
     }
   }, [chatId]);
+
+  // Persist searchSessions to sessionStorage when they change
+  // This prevents losing state when URL changes from /ask/new to /ask/{threadId}
+  useEffect(() => {
+    if (searchSessions.length > 0 && threadId) {
+      sessionStorage.setItem(`nima-sessions-${threadId}`, JSON.stringify(searchSessions));
+    }
+  }, [searchSessions, threadId]);
+
+  // Restore searchSessions from sessionStorage when threadId is set
+  useEffect(() => {
+    if (threadId) {
+      const saved = sessionStorage.getItem(`nima-sessions-${threadId}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            console.log('[Chat] Restoring searchSessions from sessionStorage:', parsed);
+            setSearchSessions(parsed);
+          }
+        } catch (e) {
+          console.error('[Chat] Failed to parse saved searchSessions:', e);
+        }
+      }
+    }
+  }, [threadId]);
+
+  // Log searchSessions changes for debugging
+  useEffect(() => {
+    console.log('[Chat] searchSessions updated:', searchSessions.length, searchSessions);
+  }, [searchSessions]);
 
   // useChat for AI streaming (AI SDK v5 API)
   // userData is guaranteed to be available at this point
@@ -216,8 +251,8 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
       console.log('[Chat] Extracted message content:', messageContent.slice(0, 100));
       
       // Save assistant message to Convex when streaming finishes
-      // Use pendingThreadIdRef for new threads where state hasn't updated yet
-      const targetThreadId = threadId || pendingThreadIdRef.current;
+      // Use pendingThreadIdRef first since state may not be updated yet for new threads
+      const targetThreadId = pendingThreadIdRef.current || threadId;
       console.log('[Chat] Saving to threadId:', targetThreadId);
       if (targetThreadId) {
         try {
@@ -323,40 +358,88 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
     }
   }, [chatId, sendMessage, startConversation]);
 
-  // Handle item matching - calls mutation to create look from user preferences
+  // Handle item matching - calls mutation to create looks from user preferences
+  // Then triggers image generation for those looks
   const handleMatchItems = useCallback(async (occasion: string) => {
-    setChatState('searching');
-    console.log('[Chat] Starting item matching for occasion:', occasion);
+    console.log('[Chat] handleMatchItems starting:', {
+      occasion,
+      threadId,
+      pendingThreadId: pendingThreadIdRef.current,
+      currentSearchSessions: searchSessions.length,
+    });
+    
+    // Step 1: Curating - Match items and create looks
+    setChatState('curating');
+    setGenerationProgress('Curating based on your preferences...');
 
     try {
-      const result = await createLookFromChat({ occasion, context: occasion });
-      console.log('[Chat] createLookFromChat result:', result);
+      const result = await createLooksFromChat({ occasion, context: occasion });
+      console.log('[Chat] createLooksFromChat result:', result);
 
-      if (result.success) {
-        // Look was created successfully
-        const lookId = result.lookId;
-        setCreatedLookIds((prev) => [...prev, lookId]);
-        setSearchSessions((prev) => [...prev, lookId]);
-        setChatState('chatting');
-      } else {
-        // No matching items found
+      if (!result.success) {
+        // Handle errors gracefully - no auto-dismiss so users can read messages
         if (result.message === 'no_matches') {
+          console.log('[Chat] No matching items found for occasion:', occasion);
           setChatState('no_matches');
-          // Reset after showing message
-          setTimeout(() => {
-            setChatState('chatting');
-          }, 100);
+          // Don't auto-dismiss - let user read the message and try again
+        } else if (result.message === 'no_photo') {
+          console.log('[Chat] User needs to upload a photo');
+          setChatState('no_matches');
+          // Will show a helpful message in the UI instead of alert
         } else {
-          // Other error (e.g., no user photo)
           console.warn('[Chat] Match items failed:', result.message);
           setChatState('chatting');
         }
+        return;
+      }
+
+      // Step 2: Generating - Create try-on images
+      const lookIds = result.lookIds;
+      setCreatedLookIds(lookIds);
+      setChatState('generating');
+      setGenerationProgress('Creating the new you...');
+      
+      console.log('[Chat] Starting image generation for', lookIds.length, 'looks');
+
+      // Generate images for all looks
+      const genResult = await generateChatLookImages({ lookIds });
+      console.log('[Chat] Image generation result:', genResult);
+
+      if (genResult.success) {
+        // Success! Add to search sessions to show fitting room card
+        // Use comma-separated lookIds as session ID for multi-look support
+        const sessionId = lookIds.join(',');
+        const newSessions = [...searchSessions, sessionId];
+        setSearchSessions(newSessions);
+        
+        // Also persist to sessionStorage immediately using pending or current threadId
+        const targetThreadId = threadId || pendingThreadIdRef.current;
+        if (targetThreadId) {
+          sessionStorage.setItem(`nima-sessions-${targetThreadId}`, JSON.stringify(newSessions));
+          console.log('[Chat] Saved searchSessions to sessionStorage for thread:', targetThreadId);
+        }
+        
+        setChatState('chatting');
+      } else {
+        // Some or all images failed, but still show what we have
+        console.warn('[Chat] Some image generations failed');
+        const sessionId = lookIds.join(',');
+        const newSessions = [...searchSessions, sessionId];
+        setSearchSessions(newSessions);
+        
+        // Also persist to sessionStorage immediately
+        const targetThreadId = threadId || pendingThreadIdRef.current;
+        if (targetThreadId) {
+          sessionStorage.setItem(`nima-sessions-${targetThreadId}`, JSON.stringify(newSessions));
+        }
+        
+        setChatState('chatting');
       }
     } catch (error) {
-      console.error('[Chat] Error creating look from chat:', error);
+      console.error('[Chat] Error in item matching flow:', error);
       setChatState('chatting');
     }
-  }, [createLookFromChat]);
+  }, [createLooksFromChat, generateChatLookImages, searchSessions, threadId]);
 
   // Legacy search ready handler
   const handleSearchReady = useCallback(() => {
@@ -374,8 +457,18 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
   const handleSendMessage = async (content: string) => {
     console.log('[Chat] handleSendMessage called:', { content: content.slice(0, 50), chatState, isNewThread, threadId });
     
-    if (chatState !== 'chatting' || !content.trim()) {
+    // Reset no_matches state when user tries again
+    if (chatState === 'no_matches') {
+      setChatState('chatting');
+    }
+    
+    if (chatState !== 'chatting' && chatState !== 'no_matches') {
       console.log('[Chat] Blocked - chatState:', chatState, 'content empty:', !content.trim());
+      return;
+    }
+    
+    if (!content.trim()) {
+      console.log('[Chat] Blocked - content empty');
       return;
     }
 
@@ -467,12 +560,19 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
     });
   });
 
-  // Add "no matches" message if in that state
+  // Add "no matches" message if in that state - helpful and actionable
   if (chatState === 'no_matches') {
     displayMessages.push({
       id: 'no-matches',
       role: 'nima',
-      content: "Hmm, I couldn't find items that perfectly match your taste right now. But don't worry! Check out the Explore page to see looks that other stylish users have created - you might find some inspiration there! 💫",
+      content: `Oops! I couldn't find enough items in our collection that match your request right now. 😅
+
+Don't worry though! Here's what you can try:
+• Ask for a different occasion (like "casual brunch" or "office meeting")
+• Check out the Discover page - I've already created some looks for you there!
+• Try being more general (like "casual" instead of "outdoor camping")
+
+We're always adding new items, so check back soon! ✨`,
       timestamp: new Date(),
       type: 'text',
     });
@@ -564,17 +664,44 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
             {(chatState === 'typing' || isAiLoading) && <TypingIndicator />}
           </AnimatePresence>
 
-          {/* Searching state */}
+          {/* Curating/Generating state */}
           <AnimatePresence>
-            {chatState === 'searching' && (
+            {(chatState === 'curating' || chatState === 'generating') && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="flex items-center gap-3 p-4 bg-surface/50 rounded-2xl border border-border/30"
+                className="p-4 bg-gradient-to-r from-surface/80 to-surface/50 rounded-2xl border border-border/30"
               >
-                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm text-muted-foreground">Finding items that match your style...</span>
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-primary-foreground animate-pulse" />
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      {chatState === 'curating' ? 'Curating your looks...' : 'Creating the new you...'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {generationProgress || (chatState === 'curating' 
+                        ? 'Finding the perfect items for your style' 
+                        : 'Generating your personalized try-on images')}
+                    </p>
+                  </div>
+                </div>
+                {/* Progress indicator */}
+                <div className="mt-3 h-1 bg-surface-alt rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-primary to-secondary rounded-full"
+                    initial={{ width: '0%' }}
+                    animate={{ 
+                      width: chatState === 'curating' ? '40%' : '90%' 
+                    }}
+                    transition={{ duration: 1, ease: 'easeOut' }}
+                  />
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -632,10 +759,12 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
         <div className="max-w-3xl mx-auto">
           <ChatInput
             onSend={handleSendMessage}
-            disabled={chatState === 'searching' || isAiLoading}
+            disabled={chatState === 'curating' || chatState === 'generating' || isAiLoading}
             placeholder={
-              chatState === 'searching'
-                ? 'Finding your looks...'
+              chatState === 'curating'
+                ? 'Curating your looks...'
+                : chatState === 'generating'
+                ? 'Creating your try-on images...'
                 : isAiLoading
                 ? 'Nima is typing...'
                 : 'Type your message...'

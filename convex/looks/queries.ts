@@ -53,6 +53,7 @@ const itemValidator = v.object({
     v.literal('top'),
     v.literal('bottom'),
     v.literal('dress'),
+    v.literal('outfit'),
     v.literal('outerwear'),
     v.literal('shoes'),
     v.literal('accessory'),
@@ -848,6 +849,154 @@ export const getPublicLooks = query({
       nextCursor: hasMore && looks.length > 0 ? looks[looks.length - 1]._id : null,
       hasMore,
     };
+  },
+});
+
+/**
+ * Get multiple looks by their IDs with full details
+ * Used in the fitting room when multiple looks were created from a chat session
+ */
+export const getMultipleLooksWithDetails = query({
+  args: {
+    lookIds: v.array(v.id('looks')),
+  },
+  returns: v.array(
+    v.union(
+      v.object({
+        look: lookValidator,
+        lookImage: v.union(
+          v.object({
+            _id: v.id('look_images'),
+            storageId: v.optional(v.id('_storage')),
+            imageUrl: v.union(v.string(), v.null()),
+            status: v.union(
+              v.literal('pending'),
+              v.literal('processing'),
+              v.literal('completed'),
+              v.literal('failed')
+            ),
+          }),
+          v.null()
+        ),
+        items: v.array(
+          v.object({
+            item: itemValidator,
+            primaryImageUrl: v.union(v.string(), v.null()),
+          })
+        ),
+      }),
+      v.null()
+    )
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { lookIds: Id<'looks'>[] }
+  ): Promise<
+    Array<{
+      look: Doc<'looks'>;
+      lookImage: {
+        _id: Id<'look_images'>;
+        storageId?: Id<'_storage'>;
+        imageUrl: string | null;
+        status: 'pending' | 'processing' | 'completed' | 'failed';
+      } | null;
+      items: Array<{
+        item: Doc<'items'>;
+        primaryImageUrl: string | null;
+      }>;
+    } | null>
+  > => {
+    const identity = await ctx.auth.getUserIdentity();
+    let userId: Id<'users'> | null = null;
+
+    if (identity) {
+      const user = await ctx.db
+        .query('users')
+        .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+        .unique();
+      if (user) {
+        userId = user._id;
+      }
+    }
+
+    // Fetch all looks in parallel
+    const results = await Promise.all(
+      args.lookIds.map(async (lookId) => {
+        const look = await ctx.db.get(lookId);
+        if (!look || !look.isActive) {
+          return null;
+        }
+
+        // Get look image for this user (if authenticated) or the first one
+        let lookImage = null;
+        if (userId) {
+          lookImage = await ctx.db
+            .query('look_images')
+            .withIndex('by_look_and_user', (q) => q.eq('lookId', look._id).eq('userId', userId!))
+            .first();
+        }
+
+        // If no user-specific image, get any image for this look
+        if (!lookImage) {
+          lookImage = await ctx.db
+            .query('look_images')
+            .withIndex('by_look', (q) => q.eq('lookId', look._id))
+            .first();
+        }
+
+        let imageUrl: string | null = null;
+        if (lookImage?.storageId) {
+          imageUrl = await ctx.storage.getUrl(lookImage.storageId);
+        }
+
+        // Get items with their images
+        const items = await Promise.all(
+          look.itemIds.map(async (itemId) => {
+            const item = await ctx.db.get(itemId);
+            if (!item || !item.isActive) {
+              return null;
+            }
+
+            // Get primary image
+            const primaryImage = await ctx.db
+              .query('item_images')
+              .withIndex('by_item_and_primary', (q) => q.eq('itemId', itemId).eq('isPrimary', true))
+              .unique();
+
+            let primaryImageUrl: string | null = null;
+            if (primaryImage) {
+              if (primaryImage.storageId) {
+                primaryImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+              } else if (primaryImage.externalUrl) {
+                primaryImageUrl = primaryImage.externalUrl;
+              }
+            }
+
+            return { item, primaryImageUrl };
+          })
+        );
+
+        // Filter out null items
+        const validItems = items.filter(
+          (i): i is { item: Doc<'items'>; primaryImageUrl: string | null } => i !== null
+        );
+
+        return {
+          look,
+          lookImage: lookImage
+            ? {
+                _id: lookImage._id,
+                storageId: lookImage.storageId,
+                imageUrl,
+                status: lookImage.status,
+              }
+            : null,
+          items: validItems,
+        };
+      })
+    );
+
+    return results;
   },
 });
 

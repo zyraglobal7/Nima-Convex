@@ -29,6 +29,7 @@ export type ItemCategory =
   | 'top'
   | 'bottom'
   | 'dress'
+  | 'outfit'
   | 'outerwear'
   | 'shoes'
   | 'accessory'

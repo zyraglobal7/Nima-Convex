@@ -86,6 +86,7 @@ export function ProductSwapperModal({
                     src={currentProduct.imageUrl}
                     alt={currentProduct.name}
                     fill
+                    unoptimized={currentProduct.imageUrl.includes('convex.cloud') || currentProduct.imageUrl.includes('convex.site')}
                     className="object-cover"
                   />
                 </div>
