@@ -17,6 +17,7 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import { LookbookItemGrid } from '@/components/lookbooks/LookbookItemGrid';
 import {
   AlertDialog,
@@ -134,6 +135,8 @@ export default function LookbookDetailPage() {
 
             {/* Right actions */}
             <div className="flex items-center gap-1">
+              <ThemeToggle />
+              <MessagesIcon />
               <button
                 onClick={handleShare}
                 className="p-2 rounded-full hover:bg-surface transition-colors"

@@ -156,7 +156,7 @@ Return exactly 3 looks as a JSON array.`;
 
     // Use AI to generate look compositions
     const result = await generateText({
-      model: openai('gpt-5'),
+      model: openai('gpt-4o'),
       system: systemPrompt,
       prompt: `Create 3 complete outfits with DIFFERENT item counts. Return a JSON array with this exact structure:
 
@@ -297,7 +297,7 @@ async function generateNimaComment(
 ): Promise<string> {
   try {
     const result = await generateText({
-      model: openai('gpt-5'),
+      model: openai('gpt-4o-mini'),
       prompt: `You are Nima, a fun and hyping fashion stylist. Generate a short, energetic comment (1-2 sentences max) about this outfit called "${lookName}" for ${occasion}. 
 Address the user${userName ? ` (their name is ${userName})` : ''} directly. Be encouraging, fun, and use fashion-forward language. 
 Keep it under 100 characters if possible. No emojis. Examples of tone: "You're gonna turn heads!", "This is giving main character energy!", "Trust me, this combo is *chef's kiss*"`,
@@ -547,7 +547,7 @@ export const generateLookImage = internalAction({
       const outfitDescription = itemImagesBase64.map((item) => item.description).join(', ');
       
       const promptResult = await generateText({
-        model: openai('gpt-5'),
+        model: openai('gpt-4o'),
         prompt: `You are a fashion photography director. Write a detailed image generation prompt for a virtual try-on photo.
 
 The person in the reference photo should be shown wearing these clothing items:

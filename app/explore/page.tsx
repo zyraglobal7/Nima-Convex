@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { User, Sparkles, Heart, Users, ArrowLeft } from 'lucide-react';
+import { Sparkles, Heart, Users, ArrowLeft, User } from 'lucide-react';
+import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery } from 'convex/react';
@@ -40,9 +41,7 @@ export default function ExplorePage() {
             {/* Right actions */}
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <Link href="/profile" className="p-2 rounded-full hover:bg-surface transition-colors">
-                <User className="w-5 h-5 text-muted-foreground" />
-              </Link>
+              <MessagesIcon />
             </div>
           </div>
         </div>

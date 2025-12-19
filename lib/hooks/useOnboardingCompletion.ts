@@ -102,6 +102,7 @@ export function useOnboardingCompletion() {
       if (user === null) {
         try {
           const createdUser = await getOrCreateUser();
+          console.log('[ONBOARDING_COMPLETION] Created user:', JSON.stringify(createdUser, null, 2));
           if (!createdUser) {
             // Truly not authenticated
             setCompleted(true);

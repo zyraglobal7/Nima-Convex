@@ -248,6 +248,7 @@ export default defineSchema({
     isActive: v.boolean(),
     isFeatured: v.optional(v.boolean()),
     isPublic: v.optional(v.boolean()), // For user-shareable looks on /explore
+    sharedWithFriends: v.optional(v.boolean()), // Share with friends (can be true even if isPublic is false)
     viewCount: v.optional(v.number()),
     saveCount: v.optional(v.number()),
 
@@ -439,4 +440,45 @@ export default defineSchema({
   })
     .index('by_thread', ['threadId'])
     .index('by_user', ['userId']),
+
+  // ============================================
+  // FRIENDS & SOCIAL
+  // ============================================
+
+  /**
+   * friendships - Friend relationships between users
+   * Bidirectional: when status is 'accepted', either user can query as requester or addressee
+   */
+  friendships: defineTable({
+    requesterId: v.id('users'), // User who sent the request
+    addresseeId: v.id('users'), // User who received the request
+    status: v.union(
+      v.literal('pending'), // Request sent, waiting for response
+      v.literal('accepted') // Both accepted - they're friends!
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_requester', ['requesterId'])
+    .index('by_addressee', ['addresseeId'])
+    .index('by_users', ['requesterId', 'addresseeId']) // For quick lookup
+    .index('by_status', ['status'])
+    .index('by_addressee_and_status', ['addresseeId', 'status']), // For pending requests
+
+  /**
+   * direct_messages - Private look sharing between users
+   * Simple conversation history tracking looks shared between two users
+   */
+  direct_messages: defineTable({
+    senderId: v.id('users'), // User who sent the look
+    recipientId: v.id('users'), // User who received the look
+    lookId: v.id('looks'), // The look being shared
+    isRead: v.boolean(), // Whether recipient has viewed the message
+    createdAt: v.number(),
+  })
+    .index('by_sender', ['senderId'])
+    .index('by_recipient', ['recipientId'])
+    .index('by_recipient_and_read', ['recipientId', 'isRead'])
+    .index('by_users', ['senderId', 'recipientId']) // For conversation lookup
+    .index('by_recipient_and_created', ['recipientId', 'createdAt']), // For sorting conversations
 });

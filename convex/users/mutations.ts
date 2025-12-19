@@ -539,6 +539,12 @@ export const getOrCreateUser = mutation({
     if (!identity) {
       return null;
     }
+    console.log('[USER_CREATION] Identity object:', JSON.stringify(identity, null, 2));
+  console.log('[USER_CREATION] Identity keys:', Object.keys(identity));
+  console.log('[USER_CREATION] Email:', identity.email);
+  console.log('[USER_CREATION] GivenName:', identity.givenName);
+  console.log('[USER_CREATION] FamilyName:', identity.familyName);
+  console.log('[USER_CREATION] PictureUrl:', identity.pictureUrl);
 
     const workosUserId = identity.subject;
     const email = identity.email ?? '';

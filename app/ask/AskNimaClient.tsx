@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import {
   WelcomeHero,
   ChatInput,
@@ -117,6 +118,7 @@ export default function AskNimaClient({ authExpired = false }: AskNimaClientProp
             {/* Right actions */}
             <div className="flex items-center gap-1">
               <ThemeToggle />
+              <MessagesIcon />
               <ChatHistoryButton onNewChat={handleNewChat} />
             </div>
           </div>
