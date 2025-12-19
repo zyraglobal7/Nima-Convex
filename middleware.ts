@@ -1,6 +1,10 @@
 import { authkitMiddleware } from '@workos-inc/authkit-nextjs';
 
 export default authkitMiddleware({
+  redirectUri:
+    process.env.WORKOS_REDIRECT_URI ||
+    process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI ||
+    'http://localhost:3000/callback',
   // Eager auth ensures the session is always available on the server
   eagerAuth: true,
   middlewareAuth: {

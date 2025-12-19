@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -53,6 +53,18 @@ export default function LookbookDetailPage() {
 
   const isOwner = currentUser && lookbook && currentUser._id === lookbook.userId;
 
+  // Safe navigation helper
+  const safeNavigate = useCallback((path: string) => {
+    requestAnimationFrame(() => {
+      try {
+        router.push(path);
+      } catch (error) {
+        console.warn('Router navigation failed, using fallback:', error);
+        window.location.href = path;
+      }
+    });
+  }, [router]);
+
   const handleShare = async () => {
     if (!lookbook) return;
 
@@ -75,7 +87,7 @@ export default function LookbookDetailPage() {
     if (!lookbookId) return;
     try {
       await deleteLookbook({ lookbookId: lookbookId as Id<'lookbooks'> });
-      router.push('/lookbooks');
+      safeNavigate('/lookbooks');
     } catch (error) {
       console.error('Failed to delete lookbook:', error);
       alert('Failed to delete lookbook. Please try again.');

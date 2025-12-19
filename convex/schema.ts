@@ -247,6 +247,7 @@ export default defineSchema({
     // Status & Metrics
     isActive: v.boolean(),
     isFeatured: v.optional(v.boolean()),
+    isPublic: v.optional(v.boolean()), // For user-shareable looks on /explore
     viewCount: v.optional(v.number()),
     saveCount: v.optional(v.number()),
 
@@ -271,7 +272,8 @@ export default defineSchema({
     .index('by_active_and_gender', ['isActive', 'targetGender'])
     .index('by_occasion', ['occasion'])
     .index('by_active_and_featured', ['isActive', 'isFeatured'])
-    .index('by_creator_and_status', ['creatorUserId', 'generationStatus']),
+    .index('by_creator_and_status', ['creatorUserId', 'generationStatus'])
+    .index('by_public_and_active', ['isPublic', 'isActive']),
 
   /**
    * look_images - AI-generated try-on images

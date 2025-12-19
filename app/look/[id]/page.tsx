@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -11,15 +11,21 @@ import {
   Share2, 
   Sparkles,
   X,
-  Loader2
+  Loader2,
+  Plus
 } from 'lucide-react';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { NimaChatBubble, ProductCard } from '@/components/discover';
-import { formatPrice, mockLookbooks } from '@/lib/mock-data';
-import { useQuery } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import type { Id } from '@/convex/_generated/dataModel';
+import type { Id, Doc } from '@/convex/_generated/dataModel';
+import { toast } from 'sonner';
+
+// Simple price formatter that displays price as stored in database (no conversion)
+function formatPrice(price: number, currency: string = 'KES'): string {
+  return `${currency} ${price.toLocaleString()}`;
+}
 
 // Transform product data for ProductCard component
 interface TransformedProduct {
@@ -35,6 +41,70 @@ interface TransformedProduct {
   color: string;
 }
 
+// Wrapper component for lookbook option with cover image
+function LookbookOption({
+  lookbook,
+  isSaved,
+  onToggle,
+  disabled,
+}: {
+  lookbook: Doc<'lookbooks'>;
+  isSaved: boolean;
+  onToggle: () => void;
+  disabled: boolean;
+}) {
+  const lookbookWithCover = useQuery(api.lookbooks.queries.getLookbookWithCover, {
+    lookbookId: lookbook._id,
+  });
+
+  return (
+    <button
+      onClick={onToggle}
+      disabled={disabled}
+      className={`
+        w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200
+        ${isSaved
+          ? 'bg-primary/10 border-2 border-primary'
+          : 'bg-surface border-2 border-border/50 hover:border-primary/30'
+        }
+        ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+      `}
+    >
+      {/* Cover image */}
+      <div className="w-12 h-12 rounded-lg overflow-hidden bg-surface-alt flex-shrink-0">
+        {lookbookWithCover?.coverImageUrl ? (
+          <img
+            src={lookbookWithCover.coverImageUrl}
+            alt={lookbook.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Sparkles className="w-5 h-5 text-muted-foreground" />
+          </div>
+        )}
+      </div>
+      
+      {/* Info */}
+      <div className="flex-1 text-left">
+        <p className="font-medium text-foreground">{lookbook.name}</p>
+        <p className="text-xs text-muted-foreground">
+          {lookbook.itemCount} {lookbook.itemCount === 1 ? 'look' : 'looks'}
+        </p>
+      </div>
+
+      {/* Check indicator */}
+      {isSaved && (
+        <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+          <svg className="w-4 h-4 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+      )}
+    </button>
+  );
+}
+
 export default function LookDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -43,8 +113,22 @@ export default function LookDetailPage() {
   const [isLiked, setIsLiked] = useState(false);
   const [isDisliked, setIsDisliked] = useState(false);
   const [showLookbookModal, setShowLookbookModal] = useState(false);
-  const [savedToLookbooks, setSavedToLookbooks] = useState<string[]>([]);
   const [newLookbookName, setNewLookbookName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Fetch user's lookbooks
+  const userLookbooks = useQuery(api.lookbooks.queries.listUserLookbooks, { includeArchived: false });
+
+  // Check which lookbooks this look is saved to
+  const savedStatus = useQuery(
+    api.lookbooks.queries.isItemSaved,
+    lookId ? { itemType: 'look' as const, lookId: lookId as Id<'looks'> } : 'skip'
+  );
+
+  // Mutations for lookbook operations
+  const addToLookbookMutation = useMutation(api.lookbooks.mutations.addToLookbook);
+  const createLookbookMutation = useMutation(api.lookbooks.mutations.createLookbook);
 
   // Fetch look data from Convex
   const lookData = useQuery(
@@ -96,6 +180,18 @@ export default function LookDetailPage() {
     return 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&h=900&fit=crop';
   }, [lookData?.lookImage?.imageUrl, products]);
 
+  // Safe navigation helper
+  const safeGoBack = useCallback(() => {
+    requestAnimationFrame(() => {
+      try {
+        router.back();
+      } catch (error) {
+        console.warn('Router navigation failed, using fallback:', error);
+        window.history.back();
+      }
+    });
+  }, [router]);
+
   const handleLike = () => {
     if (isLiked) {
       setIsLiked(false);
@@ -114,19 +210,59 @@ export default function LookDetailPage() {
     }
   };
 
-  const handleSaveToLookbook = (lookbookId: string) => {
-    if (savedToLookbooks.includes(lookbookId)) {
-      setSavedToLookbooks(savedToLookbooks.filter(id => id !== lookbookId));
-    } else {
-      setSavedToLookbooks([...savedToLookbooks, lookbookId]);
+  const handleSaveToLookbook = async (lookbookId: Id<'lookbooks'>) => {
+    if (isSaving) return;
+    
+    const isCurrentlySaved = savedStatus?.lookbookIds.includes(lookbookId);
+    
+    if (isCurrentlySaved) {
+      // Already saved - for now just show a toast that it's already saved
+      // Full unsave would require finding the lookbook_item ID and using removeFromLookbook
+      toast.info('Already saved to this lookbook');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await addToLookbookMutation({
+        lookbookId,
+        itemType: 'look',
+        lookId: lookId as Id<'looks'>,
+      });
+      toast.success('Saved to lookbook!');
+    } catch (error) {
+      console.error('Failed to save to lookbook:', error);
+      const message = error instanceof Error ? error.message : 'Failed to save';
+      toast.error(message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleCreateLookbook = () => {
-    if (newLookbookName.trim()) {
-      const newId = `lookbook-new-${Date.now()}`;
-      setSavedToLookbooks([...savedToLookbooks, newId]);
+  const handleCreateLookbook = async () => {
+    if (!newLookbookName.trim() || isCreating) return;
+
+    setIsCreating(true);
+    try {
+      const newLookbookId = await createLookbookMutation({
+        name: newLookbookName.trim(),
+      });
+      
+      // Auto-add the current look to the new lookbook
+      await addToLookbookMutation({
+        lookbookId: newLookbookId,
+        itemType: 'look',
+        lookId: lookId as Id<'looks'>,
+      });
+      
+      toast.success(`Created "${newLookbookName}" and saved look!`);
       setNewLookbookName('');
+    } catch (error) {
+      console.error('Failed to create lookbook:', error);
+      const message = error instanceof Error ? error.message : 'Failed to create lookbook';
+      toast.error(message);
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -173,7 +309,7 @@ export default function LookDetailPage() {
           <div className="flex items-center justify-between">
             {/* Back button */}
             <button
-              onClick={() => router.back()}
+              onClick={safeGoBack}
               className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-foreground" />
@@ -273,15 +409,15 @@ export default function LookDetailPage() {
             onClick={() => setShowLookbookModal(true)}
             className={`
               flex flex-col items-center gap-1 p-4 rounded-2xl transition-all duration-200
-              ${savedToLookbooks.length > 0 
+              ${savedStatus?.isSaved 
                 ? 'bg-primary/10 border-2 border-primary' 
                 : 'bg-surface border-2 border-border/50 hover:border-primary/50'
               }
             `}
           >
-            <Bookmark className={`w-6 h-6 ${savedToLookbooks.length > 0 ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
-            <span className={`text-xs font-medium ${savedToLookbooks.length > 0 ? 'text-primary' : 'text-muted-foreground'}`}>
-              Save
+            <Bookmark className={`w-6 h-6 ${savedStatus?.isSaved ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
+            <span className={`text-xs font-medium ${savedStatus?.isSaved ? 'text-primary' : 'text-muted-foreground'}`}>
+              {savedStatus?.isSaved ? 'Saved' : 'Save'}
             </span>
           </motion.button>
         </motion.div>
@@ -392,47 +528,33 @@ export default function LookDetailPage() {
 
                 {/* Existing lookbooks */}
                 <div className="space-y-3">
-                  {mockLookbooks.map((lookbook) => (
-                    <button
-                      key={lookbook.id}
-                      onClick={() => handleSaveToLookbook(lookbook.id)}
-                      className={`
-                        w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200
-                        ${savedToLookbooks.includes(lookbook.id)
-                          ? 'bg-primary/10 border-2 border-primary'
-                          : 'bg-surface border-2 border-border/50 hover:border-primary/30'
-                        }
-                      `}
-                    >
-                      {/* Cover image */}
-                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-surface-alt flex-shrink-0">
-                        {lookbook.coverImageUrl && (
-                          <img
-                            src={lookbook.coverImageUrl}
-                            alt={lookbook.name}
-                            className="w-full h-full object-cover"
-                          />
-                        )}
+                  {userLookbooks === undefined ? (
+                    // Loading state
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                    </div>
+                  ) : userLookbooks.length === 0 ? (
+                    // Empty state
+                    <div className="text-center py-6">
+                      <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-surface-alt flex items-center justify-center">
+                        <Sparkles className="w-6 h-6 text-muted-foreground" />
                       </div>
-                      
-                      {/* Info */}
-                      <div className="flex-1 text-left">
-                        <p className="font-medium text-foreground">{lookbook.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {lookbook.lookIds.length} looks
-                        </p>
-                      </div>
-
-                      {/* Check indicator */}
-                      {savedToLookbooks.includes(lookbook.id) && (
-                        <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                          <svg className="w-4 h-4 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      )}
-                    </button>
-                  ))}
+                      <p className="text-sm text-muted-foreground">
+                        No lookbooks yet. Create one below!
+                      </p>
+                    </div>
+                  ) : (
+                    // Lookbook list
+                    userLookbooks.map((lookbook) => (
+                      <LookbookOption
+                        key={lookbook._id}
+                        lookbook={lookbook}
+                        isSaved={savedStatus?.lookbookIds.includes(lookbook._id) ?? false}
+                        onToggle={() => handleSaveToLookbook(lookbook._id)}
+                        disabled={isSaving}
+                      />
+                    ))
+                  )}
                 </div>
 
                 {/* Create new lookbook */}
@@ -443,15 +565,27 @@ export default function LookDetailPage() {
                       type="text"
                       value={newLookbookName}
                       onChange={(e) => setNewLookbookName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleCreateLookbook();
+                        }
+                      }}
                       placeholder="e.g., Summer Vacation"
-                      className="flex-1 h-12 px-4 rounded-xl bg-surface border border-border/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-foreground placeholder:text-muted-foreground"
+                      disabled={isCreating}
+                      className="flex-1 h-12 px-4 rounded-xl bg-surface border border-border/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-foreground placeholder:text-muted-foreground disabled:opacity-50"
                     />
                     <button
                       onClick={handleCreateLookbook}
-                      disabled={!newLookbookName.trim()}
-                      className="h-12 px-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                      disabled={!newLookbookName.trim() || isCreating}
+                      className="h-12 px-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex items-center gap-2"
                     >
-                      Create
+                      {isCreating ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Plus className="w-4 h-4" />
+                      )}
+                      {isCreating ? 'Creating...' : 'Create'}
                     </button>
                   </div>
                 </div>

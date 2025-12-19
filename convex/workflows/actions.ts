@@ -122,7 +122,7 @@ export const selectItemsForLooks = internalAction({
       throw new Error('No items available for look generation');
     }
 
-    // Build prompt for AI - Generate 3 looks with multiple items each
+    // Build prompt for AI - Generate 3 looks with smart outfit composition
     const systemPrompt = `You are Nima, an expert fashion stylist with a fun, energetic personality. 
 Your task is to create 3 unique, stylish outfit combinations (looks) for a new user based on their preferences.
 
@@ -135,14 +135,22 @@ User Profile:
 Available Items (use these item IDs exactly):
 ${uniqueItems.map((item) => `- ID: ${item._id}, Name: "${item.name}", Category: ${item.category}, Colors: ${item.colors.join(', ')}, Tags: ${item.tags.join(', ')}, Price: ${item.price} ${item.currency}`).join('\n')}
 
-IMPORTANT RULES:
-1. Create exactly 3 different outfit looks
-2. Each look MUST have AT LEAST 2-4 items that work well together (top + bottom, or dress + accessories, etc.)
-3. Include variety across looks - different occasions like casual, work, date night, weekend, etc.
-4. Make sure items complement each other in style and color within each look
+SMART OUTFIT COMPOSITION RULES:
+1. Create exactly 3 different outfit looks with VARIED item counts (not all the same size!)
+2. UNDERSTAND COMPLETE OUTFITS:
+   - A DRESS is a complete outfit on its own - only add shoes/accessories, NOT a top or bottom
+   - A JUMPSUIT is a complete outfit on its own - only add shoes/accessories
+   - Top + Bottom together form a complete base outfit
+3. VARY THE OUTFIT SIZES:
+   - Look 1: Could be 2 items (e.g., dress + shoes)
+   - Look 2: Could be 3 items (e.g., top + bottom + shoes)
+   - Look 3: Could be 4 items (e.g., top + bottom + shoes + accessory)
+   - Mix it up! Don't make all looks the same size.
+4. Items in each look must complement each other in style and color
 5. Use ONLY the item IDs from the available items list
-6. Give each look a catchy name and describe why these items work together
-7. Try not to repeat items across looks if possible
+6. Give each look a catchy, creative name
+7. Include variety in occasions: casual, work, date night, weekend, brunch, etc.
+8. NEVER repeat items across the 3 looks
 
 Return exactly 3 looks as a JSON array.`;
 
@@ -150,29 +158,39 @@ Return exactly 3 looks as a JSON array.`;
     const result = await generateText({
       model: openai('gpt-5'),
       system: systemPrompt,
-      prompt: `Create 3 complete outfits, each with at least 2 items that work beautifully together. Return a JSON array with this exact structure:
+      prompt: `Create 3 complete outfits with DIFFERENT item counts. Return a JSON array with this exact structure:
+
+EXAMPLES OF VALID LOOKS:
+- 2 items: Dress + Heels (dress IS the outfit)
+- 2 items: Blouse + Skirt (minimal but complete)
+- 3 items: T-shirt + Jeans + Sneakers
+- 4 items: Top + Pants + Blazer + Watch
+
 [
   {
-    "items": [{"itemId": "actual_item_id", "category": "top/bottom/etc", "name": "item name"}, {"itemId": "second_item_id", "category": "category", "name": "item name"}],
-    "occasion": "casual/work/date_night/weekend/etc",
-    "styleTags": ["tag1", "tag2"],
-    "name": "Catchy Look Name"
+    "items": [{"itemId": "actual_item_id", "category": "dress", "name": "item name"}, {"itemId": "shoe_id", "category": "shoes", "name": "shoe name"}],
+    "occasion": "date_night",
+    "styleTags": ["elegant", "romantic"],
+    "name": "Candlelit Dinner Ready"
   },
   {
-    "items": [...],
-    "occasion": "...",
-    "styleTags": [...],
-    "name": "..."
+    "items": [{"itemId": "top_id", "category": "top", "name": "top name"}, {"itemId": "bottom_id", "category": "bottom", "name": "bottom name"}, {"itemId": "shoe_id", "category": "shoes", "name": "shoe name"}],
+    "occasion": "casual",
+    "styleTags": ["casual", "comfortable"],
+    "name": "Weekend Wanderer"
   },
   {
-    "items": [...],
-    "occasion": "...",
+    "items": [...4 items...],
+    "occasion": "work",
     "styleTags": [...],
     "name": "..."
   }
 ]
 
-IMPORTANT: Each look must have at least 2 items. Be creative with the names! Examples: "Sunday Brunch Vibes", "Boss Mode Monday", "Date Night Chic"`,
+IMPORTANT: 
+- If you pick a dress/jumpsuit, do NOT add a top or bottom - the dress IS the outfit!
+- Each look should have a DIFFERENT number of items (2, 3, or 4)
+- Be creative with the names! Examples: "Sunday Brunch Vibes", "Boss Mode Monday", "Golden Hour Glow"`,
     });
 
     console.log(`[WORKFLOW:ONBOARDING] AI response received, parsing...`);
@@ -294,7 +312,8 @@ Keep it under 100 characters if possible. No emojis. Examples of tone: "You're g
 }
 
 /**
- * Create fallback looks when AI fails - creates 3 looks with at least 2 items per look
+ * Create fallback looks when AI fails - creates 3 looks with VARIED item counts (2, 3, 4 items)
+ * Respects that dresses are complete outfits
  */
 function createFallbackLooks(items: ItemForAI[]): LookComposition[] {
   const looks: LookComposition[] = [];
@@ -312,25 +331,35 @@ function createFallbackLooks(items: ItemForAI[]): LookComposition[] {
     {} as Record<string, ItemForAI[]>
   );
 
-  // Define 3 different look configurations
+  // Define 3 different look configurations with VARIED sizes
+  // Each config specifies exactly how many items to include
   const lookConfigs = [
     {
+      // 2-item look: Dress + Shoes (dress is the complete outfit)
+      occasion: 'Date Night',
+      styleTags: ['elegant', 'romantic', 'chic'],
+      name: 'Evening Elegance',
+      strategy: 'dress_based',
+      targetItems: 2,
+      categories: ['dress', 'shoes'],
+    },
+    {
+      // 3-item look: Top + Bottom + Shoes
       occasion: 'Everyday Casual',
       styleTags: ['casual', 'comfortable', 'versatile'],
       name: 'Effortless Style',
-      categories: ['top', 'bottom', 'shoes', 'accessory'],
+      strategy: 'separates',
+      targetItems: 3,
+      categories: ['top', 'bottom', 'shoes'],
     },
     {
-      occasion: 'Weekend Ready',
-      styleTags: ['relaxed', 'weekend', 'laid-back'],
-      name: 'Weekend Vibes',
-      categories: ['dress', 'shoes', 'bag', 'accessory'],
-    },
-    {
+      // 4-item look: Full outfit with accessory
       occasion: 'Smart Casual',
       styleTags: ['smart', 'polished', 'versatile'],
       name: 'Polished Look',
-      categories: ['outerwear', 'top', 'bottom', 'shoes'],
+      strategy: 'complete',
+      targetItems: 4,
+      categories: ['top', 'bottom', 'shoes', 'accessory'],
     },
   ];
 
@@ -338,24 +367,60 @@ function createFallbackLooks(items: ItemForAI[]): LookComposition[] {
   for (const config of lookConfigs) {
     const lookItems: Array<{ itemId: string; category: string; name: string }> = [];
 
-    // Try to pick items from specified categories
-    for (const category of config.categories) {
-      const categoryItems = byCategory[category] || [];
-      const available = categoryItems.find((item) => !usedItems.has(item._id));
-      if (available && lookItems.length < 4) {
+    // For dress-based looks, only add dress + accessories (no top/bottom)
+    if (config.strategy === 'dress_based') {
+      // First try to get a dress
+      const dresses = byCategory['dress'] || [];
+      const dress = dresses.find((item) => !usedItems.has(item._id));
+      
+      if (dress) {
         lookItems.push({
-          itemId: available._id,
-          category: available.category,
-          name: available.name,
+          itemId: dress._id,
+          category: dress.category,
+          name: dress.name,
         });
-        usedItems.add(available._id);
+        usedItems.add(dress._id);
+
+        // Add shoes only
+        const shoes = byCategory['shoes'] || [];
+        const shoe = shoes.find((item) => !usedItems.has(item._id));
+        if (shoe) {
+          lookItems.push({
+            itemId: shoe._id,
+            category: shoe.category,
+            name: shoe.name,
+          });
+          usedItems.add(shoe._id);
+        }
+      }
+    } else {
+      // For separates: pick items from each category up to targetItems
+      for (const category of config.categories) {
+        if (lookItems.length >= config.targetItems) break;
+        
+        const categoryItems = byCategory[category] || [];
+        const available = categoryItems.find((item) => !usedItems.has(item._id));
+        if (available) {
+          lookItems.push({
+            itemId: available._id,
+            category: available.category,
+            name: available.name,
+          });
+          usedItems.add(available._id);
+        }
       }
     }
 
     // If not enough items from preferred categories, pick from any
     if (lookItems.length < 2) {
       for (const item of items) {
-        if (!usedItems.has(item._id) && lookItems.length < 3) {
+        if (!usedItems.has(item._id) && lookItems.length < config.targetItems) {
+          // Don't add top/bottom if we already have a dress
+          const hasDress = lookItems.some((li) => li.category === 'dress');
+          if (hasDress && (item.category === 'top' || item.category === 'bottom')) {
+            continue;
+          }
+          
           lookItems.push({
             itemId: item._id,
             category: item.category,
@@ -366,8 +431,9 @@ function createFallbackLooks(items: ItemForAI[]): LookComposition[] {
       }
     }
 
-    // Ensure at least 2 items for a valid look
-    if (lookItems.length >= 2) {
+    // Ensure at least 2 items for a valid look (or 1 for dress-based if that's all we have)
+    const minItems = config.strategy === 'dress_based' ? 1 : 2;
+    if (lookItems.length >= minItems) {
       looks.push({
         items: lookItems,
         occasion: config.occasion,

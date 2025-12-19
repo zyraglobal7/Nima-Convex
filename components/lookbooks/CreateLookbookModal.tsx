@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -12,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 interface CreateLookbookModalProps {
     isOpen: boolean;
@@ -33,11 +33,16 @@ export function CreateLookbookModal({ isOpen, onClose }: CreateLookbookModalProp
 
         setIsCreating(true);
         try {
+            console.log('[CreateLookbook] Creating lookbook:', { name: name.trim(), isPublic });
+            
             const lookbookId = await createLookbook({
                 name: name.trim(),
                 description: description.trim() || undefined,
                 isPublic,
             });
+
+            console.log('[CreateLookbook] Lookbook created successfully:', lookbookId);
+            toast.success(`Lookbook "${name}" created!`);
 
             // Reset form
             setName('');
@@ -45,11 +50,19 @@ export function CreateLookbookModal({ isOpen, onClose }: CreateLookbookModalProp
             setIsPublic(false);
             onClose();
 
-            // Navigate to the new lookbook
-            router.push(`/lookbooks/${lookbookId}`);
+            // Navigate to the new lookbook (defer to next frame to avoid router issues)
+            requestAnimationFrame(() => {
+                try {
+                    router.push(`/lookbooks/${lookbookId}`);
+                } catch (error) {
+                    console.warn('Router navigation failed, using fallback:', error);
+                    window.location.href = `/lookbooks/${lookbookId}`;
+                }
+            });
         } catch (error) {
-            console.error('Failed to create lookbook:', error);
-            alert('Failed to create lookbook. Please try again.');
+            console.error('[CreateLookbook] Failed to create lookbook:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            toast.error(`Failed to create lookbook: ${errorMessage}`);
         } finally {
             setIsCreating(false);
         }

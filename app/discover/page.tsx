@@ -13,6 +13,12 @@ import type { Look, Product } from '@/lib/mock-data';
 
 type ViewState = 'loading' | 'generating' | 'ready';
 
+// Extended Look type with generation status
+interface LookWithStatus extends Look {
+  isGenerating: boolean;
+  generationFailed: boolean;
+}
+
 // Transform Convex look data to the Look format expected by components
 function transformConvexLook(
   lookData: {
@@ -27,6 +33,7 @@ function transformConvexLook(
     };
     lookImage: {
       imageUrl: string | null;
+      status?: 'pending' | 'processing' | 'completed' | 'failed';
     } | null;
     items: Array<{
       item: {
@@ -42,12 +49,12 @@ function transformConvexLook(
     }>;
   },
   index: number
-): Look {
+): LookWithStatus {
   // Determine height based on index for masonry effect
   const heights: Array<'short' | 'medium' | 'tall' | 'extra-tall'> = ['medium', 'tall', 'short', 'extra-tall'];
   const height = heights[index % heights.length];
 
-  // Transform items to products
+  // Transform items to products - no placeholder images
   const products: Product[] = lookData.items.map((itemData) => ({
     id: itemData.item._id,
     name: itemData.item.name,
@@ -55,15 +62,16 @@ function transformConvexLook(
     category: itemData.item.category as Product['category'],
     price: itemData.item.price,
     currency: itemData.item.currency,
-    imageUrl: itemData.primaryImageUrl || 'https://images.unsplash.com/photo-1485462537746-965f33f7f6a7?w=400&h=500&fit=crop',
+    imageUrl: itemData.primaryImageUrl || '', // No placeholder
     storeUrl: '#',
     storeName: itemData.item.brand || 'Store',
     color: itemData.item.colors[0] || 'Mixed',
   }));
 
-  // Use the generated look image, or a placeholder if not ready
-  const imageUrl = lookData.lookImage?.imageUrl || 
-    'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&h=900&fit=crop';
+  // Use the generated look image - no placeholder, track status
+  const imageUrl = lookData.lookImage?.imageUrl || '';
+  const isGenerating = lookData.lookImage?.status === 'pending' || lookData.lookImage?.status === 'processing';
+  const generationFailed = lookData.lookImage?.status === 'failed';
 
   return {
     id: lookData.look._id,
@@ -78,6 +86,8 @@ function transformConvexLook(
     height,
     isLiked: false,
     isDisliked: false,
+    isGenerating,
+    generationFailed,
   };
 }
 
@@ -85,7 +95,7 @@ export default function DiscoverPage() {
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [showWelcome, setShowWelcome] = useState(true);
   const [workflowStarted, setWorkflowStarted] = useState(false);
-  const [looks, setLooks] = useState<Look[]>([]);
+  const [looks, setLooks] = useState<LookWithStatus[]>([]);
 
   // Convex queries and mutations
   const shouldStartWorkflow = useQuery(api.workflows.index.shouldStartOnboardingWorkflow);

@@ -1,12 +1,12 @@
 /**
  * Format a price value for display
- * @param priceInCents - Price in cents (smallest currency unit)
+ * Displays the price as stored in the database (no conversion from cents)
+ * @param price - Price value as stored in database
  * @param currency - Currency code (e.g., 'USD', 'KES')
- * @param showDecimals - Whether to show decimal places (default: false, true for checkout)
+ * @param showDecimals - Whether to show decimal places (default: false)
  * @returns Formatted price string
  */
-export function formatPrice(priceInCents: number, currency: string = 'USD', showDecimals: boolean = false): string {
-  const price = priceInCents / 100;
+export function formatPrice(price: number, currency: string = 'KES', showDecimals: boolean = false): string {
   if (showDecimals) {
     return `${currency} ${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }

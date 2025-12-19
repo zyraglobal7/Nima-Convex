@@ -1,14 +1,39 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { quickPrompts } from '@/lib/mock-chat-data';
 
 interface PromptSuggestionsProps {
   onSelect: (prompt: string) => void;
   className?: string;
+  displayCount?: number;
 }
 
-export function PromptSuggestions({ onSelect, className = '' }: PromptSuggestionsProps) {
+// Fisher-Yates shuffle algorithm
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+export function PromptSuggestions({ onSelect, className = '', displayCount = 3 }: PromptSuggestionsProps) {
+  // Initialize with null to avoid hydration mismatch - randomization only happens client-side
+  const [selectedPrompts, setSelectedPrompts] = useState<typeof quickPrompts | null>(null);
+
+  // Shuffle prompts only on the client (after mount) to avoid SSR/client mismatch
+  useEffect(() => {
+    setSelectedPrompts(shuffleArray(quickPrompts).slice(0, displayCount));
+  }, [displayCount]);
+
+  // Don't render until client-side shuffle is complete
+  if (!selectedPrompts) {
+    return null;
+  }
+
   return (
     <div className={`space-y-3 ${className}`}>
       <p className="text-sm text-muted-foreground text-center">
@@ -21,7 +46,7 @@ export function PromptSuggestions({ onSelect, className = '' }: PromptSuggestion
         transition={{ duration: 0.4, delay: 0.2 }}
         className="flex flex-wrap justify-center gap-2"
       >
-        {quickPrompts.map((prompt, index) => (
+        {selectedPrompts.map((prompt, index) => (
           <motion.button
             key={prompt.id}
             initial={{ opacity: 0, y: 10 }}

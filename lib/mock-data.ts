@@ -593,6 +593,8 @@ export function getLookById(id: string): Look | undefined {
 }
 
 // Helper to format price
+// Note: For mock data, prices are in whole currency units
+// For real database data, use the formatPrice from lib/utils/format.ts which handles cents
 export function formatPrice(price: number, currency: string = 'KES'): string {
   return `${currency} ${price.toLocaleString()}`;
 }
