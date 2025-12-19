@@ -147,6 +147,36 @@ If you cannot determine certain details with confidence, omit them rather than g
       };
     } catch (error) {
       console.error('AI product generation error:', error);
+      
+      // Handle the case where AI returns malformed JSON schema format
+      // The error object contains a 'text' property with the raw response
+      if (error && typeof error === 'object' && 'text' in error) {
+        try {
+          const errorText = (error as { text?: string }).text;
+          if (typeof errorText === 'string') {
+            const parsed = JSON.parse(errorText);
+            
+            // If it's wrapped in a schema format, extract from properties
+            if (parsed.type === 'object' && parsed.properties) {
+              const productData = parsed.properties;
+              
+              // Validate the extracted data
+              const validated = productDetailsSchema.safeParse(productData);
+              if (validated.success) {
+                return {
+                  success: true,
+                  data: validated.data,
+                };
+              } else {
+                console.error('Schema validation failed after extraction:', validated.error);
+              }
+            }
+          }
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+        }
+      }
+      
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to generate product details',

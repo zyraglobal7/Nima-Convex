@@ -363,8 +363,6 @@ function generateDate(daysAgo: number): Date {
   return date;
 }
 
-// Height distribution for masonry effect
-const heights: Array<'short' | 'medium' | 'tall' | 'extra-tall'> = ['short', 'medium', 'tall', 'extra-tall'];
 
 // Mock looks - fashion outfit images
 export const mockLooks: Look[] = [

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { StepProps, STYLE_OUTFIT_IMAGES } from '../types';
 import { ArrowLeft, Heart, Check } from 'lucide-react';
 
-export function StyleVibeStep({ formData, updateFormData, onNext, onBack }: StepProps) {
+export function StyleVibeStep({ updateFormData, onNext, onBack }: StepProps) {
   const [selectedOutfits, setSelectedOutfits] = useState<string[]>([]);
 
   const toggleOutfit = (outfitId: string) => {

@@ -4,9 +4,13 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, User, Camera, LogOut, ChevronRight, Save, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { MessagesIcon } from '@/components/messages/MessagesIcon';
+import { FriendsList } from '@/components/friends/FriendsList';
+import { AddFriendButton } from '@/components/friends/AddFriendButton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -196,6 +200,7 @@ export default function ProfilePage() {
             {/* Right actions */}
             <div className="flex items-center gap-2">
               <ThemeToggle />
+              <MessagesIcon />
             </div>
           </div>
         </div>
@@ -210,12 +215,13 @@ export default function ProfilePage() {
           className="flex items-center gap-4 mb-8"
         >
           <div className="relative">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center overflow-hidden">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center overflow-hidden relative">
               {currentUser.profileImageUrl ? (
-                <img
+                <Image
                   src={currentUser.profileImageUrl}
                   alt="Profile"
-                  className="w-full h-full object-cover"
+                  fill
+                  className="object-cover"
                 />
               ) : (
                 <User className="w-10 h-10 text-primary-foreground" />
@@ -239,9 +245,10 @@ export default function ProfilePage() {
 
         {/* Tabs */}
         <Tabs defaultValue="style" className="w-full">
-          <TabsList className="w-full grid grid-cols-3 mb-6">
+          <TabsList className="w-full grid grid-cols-4 mb-6">
             <TabsTrigger value="style">Style</TabsTrigger>
             <TabsTrigger value="size">Size & Fit</TabsTrigger>
+            <TabsTrigger value="friends">Friends</TabsTrigger>
             <TabsTrigger value="account">Account</TabsTrigger>
           </TabsList>
 
@@ -374,7 +381,7 @@ export default function ProfilePage() {
                     <SelectContent>
                       {waistSizes.map((size) => (
                         <SelectItem key={size} value={size}>
-                          {size}"
+                          {size}{'"'}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -445,6 +452,26 @@ export default function ProfilePage() {
                 )}
                 Save Size Preferences
               </Button>
+            </motion.div>
+          </TabsContent>
+
+          {/* Friends Tab */}
+          <TabsContent value="friends" className="space-y-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-6"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium text-foreground">Friends</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Connect with friends to see their shared looks
+                  </p>
+                </div>
+                <AddFriendButton />
+              </div>
+              <FriendsList />
             </motion.div>
           </TabsContent>
 

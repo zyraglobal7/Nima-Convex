@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Heart, ThumbsDown, Bookmark, Sparkles, AlertCircle } from 'lucide-react';
+import Image from 'next/image';
 import {
   Carousel,
   CarouselContent,
@@ -92,10 +93,11 @@ export function LookCarousel({
                   {hasImage ? (
                     <>
                       {/* Try-on image */}
-                      <img
+                      <Image
                         src={look.imageUrl}
                         alt={`Look ${index + 1}`}
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
                       />
                       {/* Gradient overlay */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />

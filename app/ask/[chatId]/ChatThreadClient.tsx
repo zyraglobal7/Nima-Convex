@@ -10,6 +10,7 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import {
   ChatInput,
   MessageBubble,
@@ -183,7 +184,7 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
   const createLookFromChat = useMutation(api.chat.mutations.createLookFromChat);
   
   // Track created look IDs for fitting room navigation
-  const [createdLookIds, setCreatedLookIds] = useState<string[]>([]);
+  const [, setCreatedLookIds] = useState<string[]>([]);
 
   // Set threadId from chatId prop if it's a valid ID
   useEffect(() => {
@@ -528,6 +529,7 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
             {/* Right actions */}
             <div className="flex items-center gap-1">
               <ThemeToggle />
+              <MessagesIcon />
               <ChatHistoryButton currentChatId={chatId} onNewChat={handleNewChat} />
             </div>
           </div>

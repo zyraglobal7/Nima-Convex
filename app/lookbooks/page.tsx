@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Plus, User, Settings } from 'lucide-react';
+import { Sparkles, Plus, Settings, User } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -10,6 +10,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { LookbookCard } from '@/components/lookbooks/LookbookCard';
 import { CreateLookbookModal } from '@/components/lookbooks/CreateLookbookModal';
 import type { Doc } from '@/convex/_generated/dataModel';
+import { MessagesIcon } from '@/components/messages/MessagesIcon';
 
 // Wrapper component that fetches cover image
 function LookbookCardWithCover({ lookbook, index }: { lookbook: Doc<'lookbooks'>; index: number }) {
@@ -58,9 +59,7 @@ export default function LookbooksPage() {
               <button className="p-2 rounded-full hover:bg-surface transition-colors">
                 <Settings className="w-5 h-5 text-muted-foreground" />
               </button>
-              <button className="p-2 rounded-full hover:bg-surface transition-colors">
-                <User className="w-5 h-5 text-muted-foreground" />
-              </button>
+              <MessagesIcon />
             </div>
           </div>
         </div>

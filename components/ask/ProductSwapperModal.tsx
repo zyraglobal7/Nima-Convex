@@ -10,6 +10,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { ProductItemCompact } from './ProductItem';
+import Image from 'next/image';
 import type { Product } from '@/lib/mock-data';
 
 interface ProductSwapperModalProps {
@@ -80,11 +81,12 @@ export function ProductSwapperModal({
             <div className="p-4 bg-surface/50 border-b border-border/30">
               <p className="text-xs text-muted-foreground mb-2">Currently selected:</p>
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-lg overflow-hidden bg-surface-alt">
-                  <img
+                <div className="w-12 h-12 rounded-lg overflow-hidden bg-surface-alt relative">
+                  <Image
                     src={currentProduct.imageUrl}
                     alt={currentProduct.name}
-                    className="w-full h-full object-cover"
+                    fill
+                    className="object-cover"
                   />
                 </div>
                 <div>
