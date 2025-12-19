@@ -26,6 +26,7 @@ export function ProductCard({ product, index }: ProductCardProps) {
             src={product.imageUrl}
             alt={product.name}
             fill
+            unoptimized={product.imageUrl.includes('convex.cloud') || product.imageUrl.includes('convex.site')}
             className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         </div>

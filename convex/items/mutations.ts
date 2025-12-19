@@ -8,6 +8,7 @@ const categoryValidator = v.union(
   v.literal('top'),
   v.literal('bottom'),
   v.literal('dress'),
+  v.literal('outfit'),
   v.literal('outerwear'),
   v.literal('shoes'),
   v.literal('accessory'),
@@ -61,7 +62,7 @@ export const createItem = internalMutation({
       name: string;
       brand?: string;
       description?: string;
-      category: 'top' | 'bottom' | 'dress' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+      category: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
       subcategory?: string;
       gender: 'male' | 'female' | 'unisex';
       price: number;
@@ -155,7 +156,7 @@ export const updateItem = internalMutation({
       name?: string;
       brand?: string;
       description?: string;
-      category?: 'top' | 'bottom' | 'dress' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+      category?: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
       subcategory?: string;
       gender?: 'male' | 'female' | 'unisex';
       price?: number;

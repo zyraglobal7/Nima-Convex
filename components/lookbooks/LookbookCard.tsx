@@ -33,6 +33,7 @@ export function LookbookCard({ lookbook, coverImageUrl, index }: LookbookCardPro
                 src={coverImageUrl}
                 alt={lookbook.name}
                 fill
+                unoptimized={coverImageUrl.includes('convex.cloud') || coverImageUrl.includes('convex.site')}
                 className="object-cover transition-transform duration-500 group-hover:scale-105"
               />
             ) : (

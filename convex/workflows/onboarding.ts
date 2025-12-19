@@ -24,112 +24,146 @@ export const onboardingWorkflow = workflow.define({
   },
   handler: async (ctx, args): Promise<void> => {
     const { userId } = args;
-    const workflowStartTime = Date.now();
+    // Call the shared workflow logic with no exclusions
+    await runLookGenerationWorkflow(ctx, userId, [], 'ONBOARDING');
+  },
+});
 
-    console.log(`[WORKFLOW:ONBOARDING] ========================================`);
-    console.log(`[WORKFLOW:ONBOARDING] Starting workflow for user ${userId}`);
-    console.log(`[WORKFLOW:ONBOARDING] ========================================`);
+/**
+ * Generate More Looks Workflow
+ * Triggered when user clicks "Generate more looks" on discover page
+ * Excludes items from previous looks to ensure variety
+ */
+export const generateMoreLooksWorkflow = workflow.define({
+  args: {
+    userId: v.id('users'),
+    excludeItemIds: v.array(v.string()),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const { userId, excludeItemIds } = args;
+    // Call the shared workflow logic with exclusions
+    await runLookGenerationWorkflow(ctx, userId, excludeItemIds, 'GENERATE_MORE');
+  },
+});
 
-    // ========================================
-    // STEP 1: Curate Personalized Looks
-    // ========================================
-    console.log(`[WORKFLOW:ONBOARDING] Step 1: Curating personalized looks...`);
+/**
+ * Shared workflow logic for generating looks
+ * Used by both onboarding and "generate more" flows
+ */
+async function runLookGenerationWorkflow(
+  ctx: Parameters<Parameters<typeof workflow.define>[0]['handler']>[0],
+  userId: Id<'users'>,
+  excludeItemIds: string[],
+  workflowName: string
+): Promise<void> {
+  const workflowStartTime = Date.now();
 
-    // Use AI to select items and create look compositions
-    const lookCompositions = await ctx.runAction(
-      internal.workflows.actions.selectItemsForLooks,
-      { userId },
+  console.log(`[WORKFLOW:${workflowName}] ========================================`);
+  console.log(`[WORKFLOW:${workflowName}] Starting workflow for user ${userId}`);
+  if (excludeItemIds.length > 0) {
+    console.log(`[WORKFLOW:${workflowName}] Excluding ${excludeItemIds.length} items from previous looks`);
+  }
+  console.log(`[WORKFLOW:${workflowName}] ========================================`);
+
+  // ========================================
+  // STEP 1: Curate Personalized Looks
+  // ========================================
+  console.log(`[WORKFLOW:${workflowName}] Step 1: Curating personalized looks...`);
+
+  // Use AI to select items and create look compositions
+  const lookCompositions = await ctx.runAction(
+    internal.workflows.actions.selectItemsForLooks,
+    { userId, excludeItemIds },
+    { retry: true }
+  );
+
+  console.log(`[WORKFLOW:${workflowName}] AI created ${lookCompositions.length} look compositions`);
+
+  // Get user profile for look creation
+  const userProfile = await ctx.runQuery(internal.workflows.queries.getUserForWorkflow, {
+    userId,
+  });
+
+  if (!userProfile) {
+    console.error(`[WORKFLOW:${workflowName}] User not found: ${userId}`);
+    return;
+  }
+
+  // Map user gender to item gender for looks
+  const targetGender: 'male' | 'female' | 'unisex' =
+    userProfile.gender === 'male'
+      ? 'male'
+      : userProfile.gender === 'female'
+        ? 'female'
+        : 'unisex';
+
+  // Create looks in the database with pending status
+  const createdLookIds: Id<'looks'>[] = [];
+
+  for (const lookComp of lookCompositions) {
+    // Convert string IDs to proper Id types
+    const itemIds = lookComp.itemIds.map((id) => id as Id<'items'>);
+
+    const lookId: Id<'looks'> = await ctx.runMutation(
+      internal.workflows.mutations.createPendingLook,
+      {
+        userId,
+        itemIds,
+        name: lookComp.name,
+        styleTags: lookComp.styleTags,
+        occasion: lookComp.occasion,
+        nimaComment: lookComp.nimaComment,
+        targetGender,
+        targetBudgetRange: userProfile.budgetRange,
+      }
+    );
+
+    createdLookIds.push(lookId);
+    console.log(`[WORKFLOW:${workflowName}] Created pending look: ${lookId}`);
+  }
+
+  console.log(`[WORKFLOW:${workflowName}] Step 1 complete: ${createdLookIds.length} looks created`);
+
+  // ========================================
+  // STEP 2: Generate Images for Each Look
+  // ========================================
+  console.log(`[WORKFLOW:${workflowName}] Step 2: Generating images for looks...`);
+
+  let successCount = 0;
+  let failureCount = 0;
+
+  // Process each look one at a time to avoid overwhelming the image generation API
+  for (const lookId of createdLookIds) {
+    console.log(`[WORKFLOW:${workflowName}] Processing look ${lookId}...`);
+
+    const result = await ctx.runAction(
+      internal.workflows.actions.generateLookImage,
+      { lookId, userId },
       { retry: true }
     );
 
-    console.log(`[WORKFLOW:ONBOARDING] AI created ${lookCompositions.length} look compositions`);
-
-    // Get user profile for look creation
-    const userProfile = await ctx.runQuery(internal.workflows.queries.getUserForWorkflow, {
-      userId,
-    });
-
-    if (!userProfile) {
-      console.error(`[WORKFLOW:ONBOARDING] User not found: ${userId}`);
-      return;
+    if (result.success) {
+      successCount++;
+      console.log(`[WORKFLOW:${workflowName}] Successfully generated image for look ${lookId}`);
+    } else {
+      failureCount++;
+      console.error(`[WORKFLOW:${workflowName}] Failed to generate image for look ${lookId}: ${result.error}`);
     }
+  }
 
-    // Map user gender to item gender for looks
-    const targetGender: 'male' | 'female' | 'unisex' =
-      userProfile.gender === 'male'
-        ? 'male'
-        : userProfile.gender === 'female'
-          ? 'female'
-          : 'unisex';
+  console.log(
+    `[WORKFLOW:${workflowName}] Step 2 complete: ${successCount} succeeded, ${failureCount} failed`
+  );
 
-    // Create looks in the database with pending status
-    const createdLookIds: Id<'looks'>[] = [];
-
-    for (const lookComp of lookCompositions) {
-      // Convert string IDs to proper Id types
-      const itemIds = lookComp.itemIds.map((id) => id as Id<'items'>);
-
-      const lookId: Id<'looks'> = await ctx.runMutation(
-        internal.workflows.mutations.createPendingLook,
-        {
-          userId,
-          itemIds,
-          name: lookComp.name,
-          styleTags: lookComp.styleTags,
-          occasion: lookComp.occasion,
-          nimaComment: lookComp.nimaComment,
-          targetGender,
-          targetBudgetRange: userProfile.budgetRange,
-        }
-      );
-
-      createdLookIds.push(lookId);
-      console.log(`[WORKFLOW:ONBOARDING] Created pending look: ${lookId}`);
-    }
-
-    console.log(`[WORKFLOW:ONBOARDING] Step 1 complete: ${createdLookIds.length} looks created`);
-
-    // ========================================
-    // STEP 2: Generate Images for Each Look
-    // ========================================
-    console.log(`[WORKFLOW:ONBOARDING] Step 2: Generating images for looks...`);
-
-    let successCount = 0;
-    let failureCount = 0;
-
-    // Process each look one at a time to avoid overwhelming the image generation API
-    for (const lookId of createdLookIds) {
-      console.log(`[WORKFLOW:ONBOARDING] Processing look ${lookId}...`);
-
-      const result = await ctx.runAction(
-        internal.workflows.actions.generateLookImage,
-        { lookId, userId },
-        { retry: true }
-      );
-
-      if (result.success) {
-        successCount++;
-        console.log(`[WORKFLOW:ONBOARDING] Successfully generated image for look ${lookId}`);
-      } else {
-        failureCount++;
-        console.error(`[WORKFLOW:ONBOARDING] Failed to generate image for look ${lookId}: ${result.error}`);
-      }
-    }
-
-    console.log(
-      `[WORKFLOW:ONBOARDING] Step 2 complete: ${successCount} succeeded, ${failureCount} failed`
-    );
-
-    // ========================================
-    // STEP 3: Finish Workflow
-    // ========================================
-    const totalTime = Date.now() - workflowStartTime;
-    console.log(`[WORKFLOW:ONBOARDING] ========================================`);
-    console.log(`[WORKFLOW:ONBOARDING] Workflow complete for user ${userId}`);
-    console.log(`[WORKFLOW:ONBOARDING] Total time: ${totalTime}ms`);
-    console.log(`[WORKFLOW:ONBOARDING] Looks created: ${createdLookIds.length}`);
-    console.log(`[WORKFLOW:ONBOARDING] Images generated: ${successCount}/${createdLookIds.length}`);
-    console.log(`[WORKFLOW:ONBOARDING] ========================================`);
-  },
-});
+  // ========================================
+  // STEP 3: Finish Workflow
+  // ========================================
+  const totalTime = Date.now() - workflowStartTime;
+  console.log(`[WORKFLOW:${workflowName}] ========================================`);
+  console.log(`[WORKFLOW:${workflowName}] Workflow complete for user ${userId}`);
+  console.log(`[WORKFLOW:${workflowName}] Total time: ${totalTime}ms`);
+  console.log(`[WORKFLOW:${workflowName}] Looks created: ${createdLookIds.length}`);
+  console.log(`[WORKFLOW:${workflowName}] Images generated: ${successCount}/${createdLookIds.length}`);
+  console.log(`[WORKFLOW:${workflowName}] ========================================`);
+}
 

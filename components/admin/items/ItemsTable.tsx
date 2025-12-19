@@ -53,13 +53,14 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 
-type Category = 'top' | 'bottom' | 'dress' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+type Category = 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
 type Gender = 'male' | 'female' | 'unisex';
 
 const categoryLabels: Record<Category, string> = {
   top: 'Top',
   bottom: 'Bottom',
   dress: 'Dress',
+  outfit: 'Outfit / Set',
   outerwear: 'Outerwear',
   shoes: 'Shoes',
   accessory: 'Accessory',
@@ -302,6 +303,7 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
                           alt={item.name}
                           width={48}
                           height={48}
+                          unoptimized={imageUrl.includes('convex.cloud') || imageUrl.includes('convex.site')}
                           className="h-full w-full object-cover"
                         />
                       ) : (

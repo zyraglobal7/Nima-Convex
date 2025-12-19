@@ -55,16 +55,41 @@ interface LookComposition {
 }
 
 // ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+/**
+ * Validate that a look has no duplicate categories (e.g., no 2 jackets, 2 shoes)
+ * Returns filtered items with only one item per category
+ */
+function validateNoDuplicateCategories(
+  items: Array<{ itemId: string; category: string; name: string }>
+): Array<{ itemId: string; category: string; name: string }> {
+  const seenCategories = new Set<string>();
+  return items.filter((item) => {
+    if (seenCategories.has(item.category)) {
+      console.warn(`[WORKFLOW:ONBOARDING] Removing duplicate category item: ${item.name} (${item.category})`);
+      return false;
+    }
+    seenCategories.add(item.category);
+    return true;
+  });
+}
+
+// ============================================
 // STEP 1: AI ITEM SELECTION
 // ============================================
 
 /**
- * Use AI to select items and create 1 look composition with multiple items
- * Returns look composition that will be saved to the database
+ * Use AI to select items and create 3 look compositions with multiple items
+ * Returns look compositions that will be saved to the database
+ * 
+ * @param excludeItemIds - Optional array of item IDs to exclude (for "generate more" flow)
  */
 export const selectItemsForLooks = internalAction({
   args: {
     userId: v.id('users'),
+    excludeItemIds: v.optional(v.array(v.string())),
   },
   returns: v.array(
     v.object({
@@ -77,7 +102,7 @@ export const selectItemsForLooks = internalAction({
   ),
   handler: async (
     ctx: ActionCtx,
-    args: { userId: Id<'users'> }
+    args: { userId: Id<'users'>; excludeItemIds?: string[] }
   ): Promise<
     Array<{
       itemIds: string[];
@@ -87,7 +112,11 @@ export const selectItemsForLooks = internalAction({
       nimaComment: string;
     }>
   > => {
+    const excludeSet = new Set(args.excludeItemIds || []);
     console.log(`[WORKFLOW:ONBOARDING] Step 1: Selecting items for user ${args.userId}`);
+    if (excludeSet.size > 0) {
+      console.log(`[WORKFLOW:ONBOARDING] Excluding ${excludeSet.size} items from previous looks`);
+    }
     const startTime = Date.now();
 
     // Get user profile
@@ -105,18 +134,50 @@ export const selectItemsForLooks = internalAction({
       budgetRange: userProfile.budgetRange,
     });
 
-    // Get ALL items from the database (no gender filtering for now)
-    // This ensures we have enough variety to create complete looks
-    const allItems = (await ctx.runQuery(internal.workflows.queries.getAllItemsForAI, {
-      limit: 500, // Get all items
-    })) as ItemForAI[];
+    // Determine user's gender for filtering (male/female get gender-specific + unisex, others get all)
+    const userGender = userProfile.gender === 'male' ? 'male' 
+      : userProfile.gender === 'female' ? 'female' 
+      : undefined;
 
-    console.log(`[WORKFLOW:ONBOARDING] Retrieved ${allItems.length} total items from database`);
+    // Get gender-appropriate items + unisex items to ensure proper clothing matches
+    let allItems: ItemForAI[] = [];
+    
+    if (userGender) {
+      // Get gender-specific items
+      const genderItems = (await ctx.runQuery(internal.workflows.queries.getAllItemsForAI, {
+        gender: userGender,
+        limit: 300,
+      })) as ItemForAI[];
+      
+      // Get unisex items (can be worn by anyone)
+      const unisexItems = (await ctx.runQuery(internal.workflows.queries.getAllItemsForAI, {
+        gender: 'unisex',
+        limit: 200,
+      })) as ItemForAI[];
+      
+      allItems = [...genderItems, ...unisexItems];
+      console.log(`[WORKFLOW:ONBOARDING] Retrieved ${genderItems.length} ${userGender} items + ${unisexItems.length} unisex items`);
+    } else {
+      // No gender specified - get all items
+      allItems = (await ctx.runQuery(internal.workflows.queries.getAllItemsForAI, {
+        limit: 500,
+      })) as ItemForAI[];
+      console.log(`[WORKFLOW:ONBOARDING] No gender specified, retrieved ${allItems.length} total items`);
+    }
+
+    console.log(`[WORKFLOW:ONBOARDING] Total items for AI selection: ${allItems.length}`);
 
     // Deduplicate items
-    const uniqueItems = Array.from(new Map(allItems.map((item) => [item._id, item])).values());
+    const deduplicatedItems = Array.from(new Map(allItems.map((item) => [item._id, item])).values());
 
-    console.log(`[WORKFLOW:ONBOARDING] Found ${uniqueItems.length} unique items for AI selection`);
+    // Filter out excluded items (from previous looks)
+    const uniqueItems = deduplicatedItems.filter((item) => !excludeSet.has(item._id));
+    
+    if (excludeSet.size > 0) {
+      console.log(`[WORKFLOW:ONBOARDING] After exclusions: ${uniqueItems.length} items available (excluded ${deduplicatedItems.length - uniqueItems.length})`);
+    } else {
+      console.log(`[WORKFLOW:ONBOARDING] Found ${uniqueItems.length} unique items for AI selection`);
+    }
 
     if (uniqueItems.length === 0) {
       throw new Error('No items available for look generation');
@@ -135,14 +196,20 @@ User Profile:
 Available Items (use these item IDs exactly):
 ${uniqueItems.map((item) => `- ID: ${item._id}, Name: "${item.name}", Category: ${item.category}, Colors: ${item.colors.join(', ')}, Tags: ${item.tags.join(', ')}, Price: ${item.price} ${item.currency}`).join('\n')}
 
+CRITICAL GENDER RULES (MUST FOLLOW):
+${userProfile.gender === 'male' ? `- User is MALE: NEVER include dresses, skirts, blouses, heels, or feminine clothing.
+- ONLY use items categorized as: top, bottom, outerwear, shoes, accessory, bag, jewelry (no dress category for males!)` : ''}
+${userProfile.gender === 'female' ? `- User is FEMALE: You may include dresses, skirts, blouses, heels, and any clothing items.` : ''}
+${!userProfile.gender || userProfile.gender === 'prefer-not-to-say' ? `- Gender not specified: Use gender-neutral items only. Prefer tops, bottoms, outerwear, and unisex accessories.` : ''}
+
 SMART OUTFIT COMPOSITION RULES:
 1. Create exactly 3 different outfit looks with VARIED item counts (not all the same size!)
 2. UNDERSTAND COMPLETE OUTFITS:
-   - A DRESS is a complete outfit on its own - only add shoes/accessories, NOT a top or bottom
+   - A DRESS or OUTFIT/SET is a complete outfit on its own - only add shoes/accessories, NOT a top or bottom${userProfile.gender === 'male' ? ' (BUT NEVER USE DRESSES FOR MALE USERS!)' : ''}
    - A JUMPSUIT is a complete outfit on its own - only add shoes/accessories
    - Top + Bottom together form a complete base outfit
 3. VARY THE OUTFIT SIZES:
-   - Look 1: Could be 2 items (e.g., dress + shoes)
+   - Look 1: Could be 2 items (e.g., ${userProfile.gender === 'male' ? 'shirt + pants' : 'dress + shoes'})
    - Look 2: Could be 3 items (e.g., top + bottom + shoes)
    - Look 3: Could be 4 items (e.g., top + bottom + shoes + accessory)
    - Mix it up! Don't make all looks the same size.
@@ -151,6 +218,13 @@ SMART OUTFIT COMPOSITION RULES:
 6. Give each look a catchy, creative name
 7. Include variety in occasions: casual, work, date night, weekend, brunch, etc.
 8. NEVER repeat items across the 3 looks
+9. CRITICAL - NO DUPLICATE CATEGORIES IN A SINGLE LOOK:
+   - Each look should have AT MOST ONE item per category type
+   - NO 2 jackets, NO 2 shirts, NO 2 pants, NO 2 shoes, NO 2 bags
+   - ONE top, ONE bottom, ONE pair of shoes, ONE outerwear piece maximum
+   - Layering exception: You CAN pair an outerwear piece (jacket/coat) OVER a top - that's 1 top + 1 outerwear, NOT 2 tops
+10. SHOES RULE: Only ONE pair of shoes per look - never mix different shoes
+11. OUTFIT/SET items (category: "outfit") are pre-styled COMPLETE outfits - like dresses, only add shoes/accessories, NOT tops or bottoms
 
 Return exactly 3 looks as a JSON array.`;
 
@@ -188,9 +262,15 @@ EXAMPLES OF VALID LOOKS:
 ]
 
 IMPORTANT: 
-- If you pick a dress/jumpsuit, do NOT add a top or bottom - the dress IS the outfit!
+- If you pick a dress/jumpsuit/outfit, do NOT add a top or bottom - the dress/outfit IS the complete outfit!
 - Each look should have a DIFFERENT number of items (2, 3, or 4)
-- Be creative with the names! Examples: "Sunday Brunch Vibes", "Boss Mode Monday", "Golden Hour Glow"`,
+- Be creative with the names! Examples: "Sunday Brunch Vibes", "Boss Mode Monday", "Golden Hour Glow"
+- NO duplicate categories: never put 2 jackets, 2 shirts, 2 shoes, 2 bags in the same look
+
+CRITICAL: You MUST ALWAYS return a valid JSON array, even if you can only create 1 or 2 looks.
+- If items are limited, create fewer looks but still return valid JSON
+- NEVER respond with conversational text or explanations
+- If you cannot create any valid looks, return an empty array: []`,
     });
 
     console.log(`[WORKFLOW:ONBOARDING] AI response received, parsing...`);
@@ -210,27 +290,34 @@ IMPORTANT:
       lookCompositions = createFallbackLooks(uniqueItems);
     }
 
-    // Validate and filter looks - ensure each look has at least 2 items
+    // Validate and filter looks - ensure each look has at least 2 items and no duplicate categories
     const validLooks = lookCompositions
       .slice(0, 3) // Take up to 3 looks
       .map((look) => {
-        // Validate item IDs exist
-        const validItemIds = look.items
-          .map((item) => item.itemId)
-          .filter((itemId) => uniqueItems.some((ui) => ui._id === itemId));
+        // First filter for valid item IDs that exist
+        const validItems = look.items.filter((item) =>
+          uniqueItems.some((ui) => ui._id === item.itemId)
+        );
+
+        // Remove duplicate categories (e.g., no 2 jackets, 2 shoes)
+        const deduplicatedItems = validateNoDuplicateCategories(validItems);
+        let validItemIds = deduplicatedItems.map((item) => item.itemId);
 
         // Must have at least 2 items
         if (validItemIds.length < 2) {
           console.warn(`[WORKFLOW:ONBOARDING] Look has less than 2 valid items, will add more`);
-          // Add more items if needed
-          const categories = ['top', 'bottom', 'shoes', 'accessory', 'dress', 'outerwear'];
+          // Add more items if needed (respecting no duplicate categories)
+          const usedCategories = new Set(deduplicatedItems.map((item) => item.category));
+          const categories = ['top', 'bottom', 'shoes', 'accessory', 'dress', 'outfit', 'outerwear'];
           for (const cat of categories) {
             if (validItemIds.length >= 2) break;
+            if (usedCategories.has(cat)) continue; // Skip if category already used
             const itemInCat = uniqueItems.find(
               (ui) => ui.category === cat && !validItemIds.includes(ui._id)
             );
             if (itemInCat) {
               validItemIds.push(itemInCat._id);
+              usedCategories.add(cat);
             }
           }
         }
@@ -313,7 +400,7 @@ Keep it under 100 characters if possible. No emojis. Examples of tone: "You're g
 
 /**
  * Create fallback looks when AI fails - creates 3 looks with VARIED item counts (2, 3, 4 items)
- * Respects that dresses are complete outfits
+ * Respects that dresses and outfit/sets are complete outfits
  */
 function createFallbackLooks(items: ItemForAI[]): LookComposition[] {
   const looks: LookComposition[] = [];
@@ -335,13 +422,13 @@ function createFallbackLooks(items: ItemForAI[]): LookComposition[] {
   // Each config specifies exactly how many items to include
   const lookConfigs = [
     {
-      // 2-item look: Dress + Shoes (dress is the complete outfit)
+      // 2-item look: Outfit/Dress + Shoes (outfit/dress is the complete outfit)
       occasion: 'Date Night',
       styleTags: ['elegant', 'romantic', 'chic'],
       name: 'Evening Elegance',
-      strategy: 'dress_based',
+      strategy: 'complete_piece', // Handles both 'outfit' and 'dress' categories
       targetItems: 2,
-      categories: ['dress', 'shoes'],
+      categories: ['outfit', 'dress', 'shoes'], // Try outfit first, then dress
     },
     {
       // 3-item look: Top + Bottom + Shoes
@@ -367,19 +454,21 @@ function createFallbackLooks(items: ItemForAI[]): LookComposition[] {
   for (const config of lookConfigs) {
     const lookItems: Array<{ itemId: string; category: string; name: string }> = [];
 
-    // For dress-based looks, only add dress + accessories (no top/bottom)
-    if (config.strategy === 'dress_based') {
-      // First try to get a dress
+    // For complete piece looks (outfit/dress), only add the piece + accessories (no top/bottom)
+    if (config.strategy === 'complete_piece') {
+      // First try to get an outfit (pre-styled set), then fall back to dress
+      const outfits = byCategory['outfit'] || [];
       const dresses = byCategory['dress'] || [];
-      const dress = dresses.find((item) => !usedItems.has(item._id));
+      const completePiece = outfits.find((item) => !usedItems.has(item._id)) 
+        || dresses.find((item) => !usedItems.has(item._id));
       
-      if (dress) {
+      if (completePiece) {
         lookItems.push({
-          itemId: dress._id,
-          category: dress.category,
-          name: dress.name,
+          itemId: completePiece._id,
+          category: completePiece.category,
+          name: completePiece.name,
         });
-        usedItems.add(dress._id);
+        usedItems.add(completePiece._id);
 
         // Add shoes only
         const shoes = byCategory['shoes'] || [];
@@ -415,9 +504,15 @@ function createFallbackLooks(items: ItemForAI[]): LookComposition[] {
     if (lookItems.length < 2) {
       for (const item of items) {
         if (!usedItems.has(item._id) && lookItems.length < config.targetItems) {
-          // Don't add top/bottom if we already have a dress
-          const hasDress = lookItems.some((li) => li.category === 'dress');
-          if (hasDress && (item.category === 'top' || item.category === 'bottom')) {
+          // Don't add top/bottom if we already have a dress or outfit (complete pieces)
+          const hasCompletePiece = lookItems.some((li) => li.category === 'dress' || li.category === 'outfit');
+          if (hasCompletePiece && (item.category === 'top' || item.category === 'bottom')) {
+            continue;
+          }
+          
+          // Prevent duplicate categories
+          const hasCategory = lookItems.some((li) => li.category === item.category);
+          if (hasCategory) {
             continue;
           }
           
