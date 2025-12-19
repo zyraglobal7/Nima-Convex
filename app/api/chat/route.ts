@@ -160,7 +160,7 @@ export async function POST(req: Request) {
   console.log('[API /api/chat] POST request received');
   
   // #region agent log
-  try { fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({location:'route.ts:POST',message:'API called',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})+'\n'); } catch(e){}
+  try { fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({location:'route.ts:POST',message:'API called',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})+'\n'); } catch {}
   // #endregion
   
   try {
@@ -176,7 +176,7 @@ export async function POST(req: Request) {
     });
     
     // #region agent log
-    try { fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({location:'route.ts:body',message:'Request body parsed',data:{messageCount:messages?.length,hasUserData:!!userData,fullMessages:messages},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})+'\n'); } catch(e){}
+    try { fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({location:'route.ts:body',message:'Request body parsed',data:{messageCount:messages?.length,hasUserData:!!userData,fullMessages:messages},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})+'\n'); } catch {}
     // #endregion
 
     // Build the full system prompt with user context
@@ -203,14 +203,14 @@ export async function POST(req: Request) {
 
     console.log('[API /api/chat] streamText returned, sending response');
     // #region agent log
-    try { fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({location:'route.ts:success',message:'streamText success',data:{hasResult:!!result},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})+'\n'); } catch(e){}
+    try { fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({location:'route.ts:success',message:'streamText success',data:{hasResult:!!result},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})+'\n'); } catch {}
     // #endregion
     // Use toUIMessageStreamResponse for AI SDK v5 useChat compatibility (populates parts array)
     return result.toUIMessageStreamResponse();
   } catch (error) {
     console.error('[API /api/chat] Error:', error);
     // #region agent log
-    try { fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({location:'route.ts:error',message:'API error',data:{error:String(error)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})+'\n'); } catch(e){}
+    try { fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({location:'route.ts:error',message:'API error',data:{error:String(error)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})+'\n'); } catch {}
     // #endregion
     
     // Return a more descriptive error

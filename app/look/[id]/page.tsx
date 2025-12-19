@@ -15,6 +15,7 @@ import {
   Plus
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { NimaChatBubble, ProductCard } from '@/components/discover';
 import { useQuery, useMutation } from 'convex/react';
@@ -71,12 +72,13 @@ function LookbookOption({
       `}
     >
       {/* Cover image */}
-      <div className="w-12 h-12 rounded-lg overflow-hidden bg-surface-alt flex-shrink-0">
+      <div className="w-12 h-12 rounded-lg overflow-hidden bg-surface-alt flex-shrink-0 relative">
         {lookbookWithCover?.coverImageUrl ? (
-          <img
+          <Image
             src={lookbookWithCover.coverImageUrl}
             alt={lookbook.name}
-            className="w-full h-full object-cover"
+            fill
+            className="object-cover"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
@@ -338,11 +340,14 @@ export default function LookDetailPage() {
           transition={{ duration: 0.5 }}
           className="relative rounded-2xl overflow-hidden mb-6 bg-surface"
         >
-          <img
-            src={lookImageUrl}
-            alt={`Look featuring ${look.styleTags.join(', ')}`}
-            className="w-full aspect-[3/4] object-cover"
-          />
+          <div className="relative w-full aspect-[3/4]">
+            <Image
+              src={lookImageUrl}
+              alt={`Look featuring ${look.styleTags.join(', ')}`}
+              fill
+              className="object-cover"
+            />
+          </div>
           
           {/* Style tags overlay */}
           <div className="absolute bottom-4 left-4 right-4 flex flex-wrap gap-2">

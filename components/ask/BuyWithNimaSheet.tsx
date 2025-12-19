@@ -3,10 +3,8 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ShoppingBag, 
   Plus, 
   Minus, 
-  Trash2, 
   MapPin, 
   Phone, 
   CheckCircle2,
@@ -23,6 +21,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { formatPrice as formatPriceUtils } from '@/lib/utils/format';
+import Image from 'next/image';
 import { type Product } from '@/lib/mock-data';
 import type { FittingLook } from '@/lib/mock-chat-data';
 
@@ -100,11 +99,6 @@ export function BuyWithNimaSheet({
         )
         .filter((item) => item.quantity > 0)
     );
-  };
-
-  // Remove item
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.product.id !== productId));
   };
 
   // Check if product is in cart
@@ -221,11 +215,12 @@ export function BuyWithNimaSheet({
                             }`}
                           >
                             {/* Image */}
-                            <div className="w-14 h-14 rounded-lg overflow-hidden bg-surface-alt flex-shrink-0">
-                              <img
+                            <div className="w-14 h-14 rounded-lg overflow-hidden bg-surface-alt flex-shrink-0 relative">
+                              <Image
                                 src={product.imageUrl}
                                 alt={product.name}
-                                className="w-full h-full object-cover"
+                                fill
+                                className="object-cover"
                               />
                             </div>
 
@@ -460,7 +455,7 @@ export function BuyWithNimaSheet({
                       <div className="flex-1">
                         <p className="text-xs text-muted-foreground mb-1 font-medium">Nima says</p>
                         <p className="text-sm text-foreground leading-relaxed">
-                          I'm on it! 💫 I'll purchase all your items and have everything delivered to you soon. Sit back, relax, and get ready to look amazing!
+                          I&apos;m on it! 💫 I&apos;ll purchase all your items and have everything delivered to you soon. Sit back, relax, and get ready to look amazing!
                         </p>
                       </div>
                     </div>
@@ -477,7 +472,7 @@ export function BuyWithNimaSheet({
                   className="mt-8 space-y-3 w-full max-w-sm"
                 >
                   <p className="text-xs text-muted-foreground">
-                    You'll receive updates via SMS at {address.phone}
+                    You&apos;ll receive updates via SMS at {address.phone}
                   </p>
                 </motion.div>
               </motion.div>

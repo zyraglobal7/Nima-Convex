@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { Lock, Globe, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import type { Doc } from '@/convex/_generated/dataModel';
 
 interface LookbookCardProps {
@@ -28,10 +29,11 @@ export function LookbookCard({ lookbook, coverImageUrl, index }: LookbookCardPro
           {/* Cover Image */}
           <div className="relative aspect-[3/4] overflow-hidden bg-surface-alt">
             {coverImageUrl ? (
-              <img
+              <Image
                 src={coverImageUrl}
                 alt={lookbook.name}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                fill
+                className="object-cover transition-transform duration-500 group-hover:scale-105"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">

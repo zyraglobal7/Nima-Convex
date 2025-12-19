@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { StepProps, UploadedImage } from '../types';
 import { ArrowLeft, Upload, X, Camera, Shield, Loader2, AlertCircle } from 'lucide-react';
 import type { Id } from '@/convex/_generated/dataModel';
+import Image from 'next/image';
 
 // Constants for validation
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -52,45 +53,49 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
   };
 
   // Upload a single file
-  const uploadFile = async (file: File, tempId: string): Promise<UploadedImage | null> => {
-    try {
-      // Generate upload URL
-      const uploadUrl = await generateUploadUrl({ onboardingToken: formData.onboardingToken });
+  const uploadFile = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    async (file: File, _tempId: string): Promise<UploadedImage | null> => {
+      try {
+        // Generate upload URL
+        const uploadUrl = await generateUploadUrl({ onboardingToken: formData.onboardingToken });
 
-      // Upload to Convex storage
-      const result = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      });
+        // Upload to Convex storage
+        const result = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': file.type },
+          body: file,
+        });
 
-      if (!result.ok) {
-        throw new Error('Upload failed');
+        if (!result.ok) {
+          throw new Error('Upload failed');
+        }
+
+        const { storageId } = await result.json();
+
+        // Save the image record
+        const imageId = await saveImage({
+          onboardingToken: formData.onboardingToken,
+          storageId,
+          filename: file.name,
+          contentType: file.type,
+          sizeBytes: file.size,
+          imageType: 'full_body', // Default for onboarding
+        });
+
+        return {
+          imageId,
+          storageId,
+          filename: file.name,
+          previewUrl: URL.createObjectURL(file),
+        };
+      } catch (err) {
+        console.error('Upload error:', err);
+        throw err;
       }
-
-      const { storageId } = await result.json();
-
-      // Save the image record
-      const imageId = await saveImage({
-        onboardingToken: formData.onboardingToken,
-        storageId,
-        filename: file.name,
-        contentType: file.type,
-        sizeBytes: file.size,
-        imageType: 'full_body', // Default for onboarding
-      });
-
-      return {
-        imageId,
-        storageId,
-        filename: file.name,
-        previewUrl: URL.createObjectURL(file),
-      };
-    } catch (err) {
-      console.error('Upload error:', err);
-      throw err;
-    }
-  };
+    },
+    [formData.onboardingToken, generateUploadUrl, saveImage]
+  );
 
   // Handle file selection
   const handleFiles = useCallback(
@@ -140,7 +145,7 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
           }
           // Remove from uploading state
           setUploadingFiles((prev) => prev.filter((f) => f.id !== tempFile.id));
-        } catch (err) {
+        } catch {
           // Mark as error
           setUploadingFiles((prev) =>
             prev.map((f) =>
@@ -159,7 +164,7 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
         });
       }
     },
-    [formData.onboardingToken, formData.uploadedImages, uploadingFiles.length, generateUploadUrl, saveImage, updateFormData]
+    [formData.onboardingToken, formData.uploadedImages, uploadingFiles.length, updateFormData, uploadFile]
   );
 
   // Handle drag events
@@ -234,7 +239,7 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
           uploadedImages: [...formData.uploadedImages, result],
         });
       }
-    } catch (err) {
+    } catch {
       setUploadingFiles((prev) =>
         prev.map((f) =>
           f.id === tempId
@@ -296,10 +301,12 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
                   key={image.imageId}
                   className="relative aspect-[3/4] rounded-xl overflow-hidden bg-surface animate-in fade-in zoom-in duration-300"
                 >
-                  <img
+                  <Image
                     src={image.previewUrl}
                     alt={image.filename}
-                    className="w-full h-full object-cover"
+                    fill
+                    unoptimized
+                    className="object-cover"
                   />
                   <button
                     onClick={() => removePhoto(image.imageId)}
@@ -321,10 +328,12 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
                   key={file.id}
                   className="relative aspect-[3/4] rounded-xl overflow-hidden bg-surface animate-in fade-in zoom-in duration-300"
                 >
-                  <img
+                  <Image
                     src={file.previewUrl}
                     alt={file.file.name}
-                    className={`w-full h-full object-cover ${file.status === 'uploading' ? 'opacity-50' : ''}`}
+                    fill
+                    unoptimized
+                    className={`object-cover ${file.status === 'uploading' ? 'opacity-50' : ''}`}
                   />
                   
                   {file.status === 'uploading' && (

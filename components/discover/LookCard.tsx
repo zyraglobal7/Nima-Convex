@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { Heart, Sparkles, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import type { Look } from '@/lib/mock-data';
 import { formatPrice } from '@/lib/utils/format';
 
@@ -46,10 +47,11 @@ export function LookCard({ look, index }: LookCardProps) {
           <div className={`relative ${heightClasses[look.height]} overflow-hidden`}>
             {hasImage ? (
               <>
-                <img
+                <Image
                   src={look.imageUrl}
                   alt={`Look featuring ${look.styleTags.join(', ')}`}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  fill
+                  className="object-cover transition-transform duration-500 group-hover:scale-105"
                 />
                 
                 {/* Gradient overlay */}
@@ -82,13 +84,14 @@ export function LookCard({ look, index }: LookCardProps) {
                   {look.products.slice(0, 3).map((product) => (
                     <div
                       key={product.id}
-                      className="w-12 h-12 rounded-lg bg-surface border border-border/50 overflow-hidden"
+                      className="w-12 h-12 rounded-lg bg-surface border border-border/50 overflow-hidden relative"
                     >
                       {product.imageUrl ? (
-                        <img
+                        <Image
                           src={product.imageUrl}
                           alt={product.name}
-                          className="w-full h-full object-cover"
+                          fill
+                          className="object-cover"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">

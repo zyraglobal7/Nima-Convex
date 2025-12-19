@@ -183,7 +183,7 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
   const createLookFromChat = useMutation(api.chat.mutations.createLookFromChat);
   
   // Track created look IDs for fitting room navigation
-  const [createdLookIds, setCreatedLookIds] = useState<string[]>([]);
+  const [, setCreatedLookIds] = useState<string[]>([]);
 
   // Set threadId from chatId prop if it's a valid ID
   useEffect(() => {

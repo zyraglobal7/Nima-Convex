@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, User, Camera, LogOut, ChevronRight, Save, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -210,12 +211,13 @@ export default function ProfilePage() {
           className="flex items-center gap-4 mb-8"
         >
           <div className="relative">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center overflow-hidden">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center overflow-hidden relative">
               {currentUser.profileImageUrl ? (
-                <img
+                <Image
                   src={currentUser.profileImageUrl}
                   alt="Profile"
-                  className="w-full h-full object-cover"
+                  fill
+                  className="object-cover"
                 />
               ) : (
                 <User className="w-10 h-10 text-primary-foreground" />
@@ -374,7 +376,7 @@ export default function ProfilePage() {
                     <SelectContent>
                       {waistSizes.map((size) => (
                         <SelectItem key={size} value={size}>
-                          {size}"
+                          {size}{'"'}
                         </SelectItem>
                       ))}
                     </SelectContent>

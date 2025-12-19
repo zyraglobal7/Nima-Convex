@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
 import { formatPrice } from '@/lib/utils/format';
 import type { Doc } from '@/convex/_generated/dataModel';
 
@@ -65,10 +66,11 @@ export function LookbookItemGrid({ items, onRemove, canEdit = false }: LookbookI
                 <div className="relative overflow-hidden rounded-2xl bg-surface border border-border/30 hover:border-primary/30 transition-all duration-300 hover:shadow-lg">
                   <div className="relative aspect-[3/4] overflow-hidden bg-surface-alt">
                     {lookImageUrl ? (
-                      <img
+                      <Image
                         src={lookImageUrl}
                         alt={`Look ${look.publicId}`}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        fill
+                        className="object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
@@ -128,10 +130,11 @@ export function LookbookItemGrid({ items, onRemove, canEdit = false }: LookbookI
                 <div className="relative overflow-hidden rounded-2xl bg-surface border border-border/30 hover:border-primary/30 transition-all duration-300 hover:shadow-lg">
                   <div className="relative aspect-[3/4] overflow-hidden bg-surface-alt">
                     {itemImageUrl ? (
-                      <img
+                      <Image
                         src={itemImageUrl}
                         alt={item.name}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        fill
+                        className="object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">

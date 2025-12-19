@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { User, Sparkles, Heart, Users, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { StepProps } from '../types';
 import { Sparkles, Check } from 'lucide-react';
 
-export function SuccessStep({ formData, onNext }: StepProps) {
+export function SuccessStep({ formData }: StepProps) {
   const router = useRouter();
   const [showContent, setShowContent] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -89,7 +89,7 @@ export function SuccessStep({ formData, onNext }: StepProps) {
               <div className="flex items-start gap-2">
                 <span className="text-muted-foreground min-w-[80px]">Size:</span>
                 <span className="text-foreground">
-                  {formData.shirtSize} top, {formData.pantsSize} bottom
+                  {formData.shirtSize} top, {formData.waistSize} waist
                 </span>
               </div>
             )}

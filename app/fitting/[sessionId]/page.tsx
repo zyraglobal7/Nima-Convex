@@ -2,8 +2,8 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Share2, Sparkles, ShoppingBag, X, Info } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Share2, Sparkles, ShoppingBag, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';

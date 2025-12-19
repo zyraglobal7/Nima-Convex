@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { LoadingScreen, NimaChatBubble, LookGrid } from '@/components/discover';
+import { NimaChatBubble, LookGrid } from '@/components/discover';
 import { discoverWelcomeMessage } from '@/lib/mock-data';
 import { User, Settings, Sparkles } from 'lucide-react';
 import Link from 'next/link';

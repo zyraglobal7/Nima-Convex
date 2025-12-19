@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Authenticated, Unauthenticated, useQuery } from 'convex/react';
 import { GateSplash, OnboardingWizard } from '@/components/onboarding';
 import { useOnboardingCompletion } from '@/lib/hooks/useOnboardingCompletion';
