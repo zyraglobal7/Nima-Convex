@@ -2,8 +2,8 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Share2, Sparkles, ShoppingBag, X, Info } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Share2, Sparkles, ShoppingBag, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -39,10 +39,48 @@ interface FittingSession {
   createdAt: Date;
 }
 
+// Type for look data from Convex query
+type LookData = {
+  look: {
+    _id: Id<'looks'>;
+    _creationTime: number;
+    totalPrice: number;
+    currency: string;
+    styleTags: string[];
+    occasion?: string;
+    nimaComment?: string;
+  };
+  lookImage: {
+    _id: Id<'look_images'>;
+    storageId?: Id<'_storage'>;
+    imageUrl: string | null;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+  } | null;
+  items: Array<{
+    item: {
+      _id: Id<'items'>;
+      name: string;
+      brand?: string;
+      category: string;
+      price: number;
+      currency: string;
+      colors: string[];
+      sourceUrl?: string;
+      sourceStore?: string;
+    };
+    primaryImageUrl: string | null;
+  }>;
+} | null;
+
 export default function FittingRoomPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.sessionId as string;
+
+  // Parse lookIds from sessionId (can be comma-separated for multiple looks)
+  const lookIds = useMemo(() => {
+    return sessionId.split(',').filter(Boolean) as Id<'looks'>[];
+  }, [sessionId]);
 
   const [currentLookIndex, setCurrentLookIndex] = useState(0);
   const [likedProducts, setLikedProducts] = useState<Set<string>>(new Set());
@@ -53,61 +91,96 @@ export default function FittingRoomPage() {
   const [likedLooks, setLikedLooks] = useState<Set<string>>(new Set());
   const [savedLooks, setSavedLooks] = useState<Set<string>>(new Set());
 
-  // Fetch the specific look for this session (sessionId is actually the lookId)
-  const lookData = useQuery(
+  // Fetch looks - for now we only support single look or first look from multi
+  // TODO: Use getMultipleLooksWithDetails once API types are regenerated
+  const firstLookId = lookIds[0];
+  const look1Data = useQuery(
     api.looks.queries.getLookWithFullDetails,
-    { lookId: sessionId as Id<'looks'> }
+    firstLookId ? { lookId: firstLookId } : 'skip'
+  );
+  
+  // Query additional looks if multiple IDs provided
+  const look2Id = lookIds[1];
+  const look2Data = useQuery(
+    api.looks.queries.getLookWithFullDetails,
+    look2Id ? { lookId: look2Id } : 'skip'
+  );
+  
+  const look3Id = lookIds[2];
+  const look3Data = useQuery(
+    api.looks.queries.getLookWithFullDetails,
+    look3Id ? { lookId: look3Id } : 'skip'
   );
 
-  // Track if the look image is still generating
-  const isGenerating = lookData?.lookImage?.status === 'pending' || lookData?.lookImage?.status === 'processing';
-  const generationFailed = lookData?.lookImage?.status === 'failed';
+  // Combine look data
+  const allLookData = useMemo<LookData[]>(() => {
+    const results: LookData[] = [];
+    if (look1Data) results.push(look1Data as LookData);
+    if (look2Data) results.push(look2Data as LookData);
+    if (look3Data) results.push(look3Data as LookData);
+    return results;
+  }, [look1Data, look2Data, look3Data]);
+
+  // Track if any look image is still generating
+  const isGenerating = allLookData.some(
+    (data) => data?.lookImage?.status === 'pending' || data?.lookImage?.status === 'processing'
+  );
+  const generationFailed = allLookData.length > 0 && allLookData.every(
+    (data) => data?.lookImage?.status === 'failed'
+  );
 
   // Transform Convex data to the format expected by components
   const session = useMemo<FittingSession | null>(() => {
-    if (!lookData) return null;
+    if (allLookData.length === 0) return null;
 
-    // Transform items to products
-    const products: Product[] = lookData.items.map((itemData) => ({
-      id: itemData.item._id,
-      name: itemData.item.name,
-      brand: itemData.item.brand || 'Unknown',
-      category: itemData.item.category as Product['category'],
-      price: itemData.item.price,
-      currency: itemData.item.currency,
-      imageUrl: itemData.primaryImageUrl || '', // No placeholder - will show generating state
-      storeUrl: itemData.item.sourceUrl || '#',
-      storeName: itemData.item.sourceStore || itemData.item.brand || 'Store',
-      color: itemData.item.colors[0] || 'Mixed',
-    }));
+    // Transform each look to the expected format
+    const looks: FittingLook[] = allLookData
+      .filter((lookData): lookData is NonNullable<LookData> => lookData !== null)
+      .map((lookData) => {
+        // Transform items to products
+        const products: Product[] = lookData.items.map((itemData) => ({
+          id: itemData.item._id,
+          name: itemData.item.name,
+          brand: itemData.item.brand || 'Unknown',
+          category: itemData.item.category as Product['category'],
+          price: itemData.item.price,
+          currency: itemData.item.currency,
+          imageUrl: itemData.primaryImageUrl || '', // No placeholder - will show generating state
+          storeUrl: itemData.item.sourceUrl || '#',
+          storeName: itemData.item.sourceStore || itemData.item.brand || 'Store',
+          color: itemData.item.colors[0] || 'Mixed',
+        }));
 
-    // Use the generated look image, or null if not ready (no placeholder)
-    const imageUrl = lookData.lookImage?.imageUrl || null;
+        // Use the generated look image, or null if not ready (no placeholder)
+        const imageUrl = lookData.lookImage?.imageUrl || null;
 
-    const look: FittingLook = {
-      id: lookData.look._id,
-      imageUrl: imageUrl || '', // Will check isGenerating for UI state
-      userTryOnImageUrl: imageUrl || '',
-      products,
-      totalPrice: lookData.look.totalPrice,
-      currency: lookData.look.currency,
-      styleTags: lookData.look.styleTags,
-      occasion: lookData.look.occasion || 'Everyday',
-      nimaNote: lookData.look.nimaComment || "I curated this look just for you! The pieces work beautifully together.",
-      createdAt: new Date(lookData.look._creationTime),
-      height: 'tall',
-      isLiked: likedLooks.has(lookData.look._id),
-      isSaved: savedLooks.has(lookData.look._id),
-    };
+        return {
+          id: lookData.look._id,
+          imageUrl: imageUrl || '', // Will check isGenerating for UI state
+          userTryOnImageUrl: imageUrl || '',
+          products,
+          totalPrice: lookData.look.totalPrice,
+          currency: lookData.look.currency,
+          styleTags: lookData.look.styleTags,
+          occasion: lookData.look.occasion || 'Everyday',
+          nimaNote: lookData.look.nimaComment || "I curated this look just for you! The pieces work beautifully together.",
+          createdAt: new Date(lookData.look._creationTime),
+          height: 'tall' as const,
+          isLiked: likedLooks.has(lookData.look._id),
+          isSaved: savedLooks.has(lookData.look._id),
+        };
+      });
+
+    if (looks.length === 0) return null;
 
     return {
       id: sessionId,
       chatId: sessionId,
-      query: 'Your personalized look',
-      looks: [look],
-      createdAt: new Date(lookData.look._creationTime),
+      query: looks.length > 1 ? 'Your personalized looks' : 'Your personalized look',
+      looks,
+      createdAt: looks[0].createdAt,
     };
-  }, [lookData, sessionId, likedLooks, savedLooks]);
+  }, [allLookData, sessionId, likedLooks, savedLooks]);
 
   const currentLook = session?.looks[currentLookIndex];
 
@@ -219,20 +292,22 @@ export default function FittingRoomPage() {
     setShowSwapModal(false);
   };
 
-  // Loading state
-  if (lookData === undefined) {
+  // Loading state - wait for queries to load
+  const isLoading = firstLookId && look1Data === undefined;
+    
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading your look...</p>
+          <p className="text-muted-foreground">Loading your looks...</p>
         </div>
       </div>
     );
   }
 
   // Look not found state
-  if (lookData === null || !session || session.looks.length === 0) {
+  if (!session || session.looks.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center max-w-md px-4">

@@ -11,8 +11,14 @@
 import type * as admin_aiActions from "../admin/aiActions.js";
 import type * as admin_items from "../admin/items.js";
 import type * as admin_queries from "../admin/queries.js";
+import type * as chat_actions from "../chat/actions.js";
 import type * as chat_mutations from "../chat/mutations.js";
 import type * as chat_queries from "../chat/queries.js";
+import type * as crons from "../crons.js";
+import type * as directMessages_mutations from "../directMessages/mutations.js";
+import type * as directMessages_queries from "../directMessages/queries.js";
+import type * as friends_mutations from "../friends/mutations.js";
+import type * as friends_queries from "../friends/queries.js";
 import type * as http from "../http.js";
 import type * as items_mutations from "../items/mutations.js";
 import type * as items_queries from "../items/queries.js";
@@ -35,6 +41,11 @@ import type * as workflows_index from "../workflows/index.js";
 import type * as workflows_mutations from "../workflows/mutations.js";
 import type * as workflows_onboarding from "../workflows/onboarding.js";
 import type * as workflows_queries from "../workflows/queries.js";
+import type * as wrapped_actions from "../wrapped/actions.js";
+import type * as wrapped_constants from "../wrapped/constants.js";
+import type * as wrapped_internalQueries from "../wrapped/internalQueries.js";
+import type * as wrapped_mutations from "../wrapped/mutations.js";
+import type * as wrapped_queries from "../wrapped/queries.js";
 
 import type {
   ApiFromModules,
@@ -46,8 +57,14 @@ declare const fullApi: ApiFromModules<{
   "admin/aiActions": typeof admin_aiActions;
   "admin/items": typeof admin_items;
   "admin/queries": typeof admin_queries;
+  "chat/actions": typeof chat_actions;
   "chat/mutations": typeof chat_mutations;
   "chat/queries": typeof chat_queries;
+  crons: typeof crons;
+  "directMessages/mutations": typeof directMessages_mutations;
+  "directMessages/queries": typeof directMessages_queries;
+  "friends/mutations": typeof friends_mutations;
+  "friends/queries": typeof friends_queries;
   http: typeof http;
   "items/mutations": typeof items_mutations;
   "items/queries": typeof items_queries;
@@ -70,6 +87,11 @@ declare const fullApi: ApiFromModules<{
   "workflows/mutations": typeof workflows_mutations;
   "workflows/onboarding": typeof workflows_onboarding;
   "workflows/queries": typeof workflows_queries;
+  "wrapped/actions": typeof wrapped_actions;
+  "wrapped/constants": typeof wrapped_constants;
+  "wrapped/internalQueries": typeof wrapped_internalQueries;
+  "wrapped/mutations": typeof wrapped_mutations;
+  "wrapped/queries": typeof wrapped_queries;
 }>;
 
 /**

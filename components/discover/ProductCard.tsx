@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { ExternalLink } from 'lucide-react';
 import type { Product } from '@/lib/mock-data';
 import { formatPrice } from '@/lib/utils/format';
+import Image from 'next/image';
 
 interface ProductCardProps {
   product: Product;
@@ -20,11 +21,13 @@ export function ProductCard({ product, index }: ProductCardProps) {
     >
       <div className="flex gap-4 p-4 bg-surface rounded-xl border border-border/30 hover:border-primary/30 transition-all duration-300">
         {/* Product image */}
-        <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-surface-alt">
-          <img
+        <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-surface-alt relative">
+          <Image
             src={product.imageUrl}
             alt={product.name}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            fill
+            unoptimized={product.imageUrl.includes('convex.cloud') || product.imageUrl.includes('convex.site')}
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         </div>
 

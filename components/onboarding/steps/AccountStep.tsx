@@ -60,7 +60,7 @@ export function clearOnboardingData(): void {
   localStorage.removeItem(ONBOARDING_STORAGE_KEY);
 }
 
-export function AccountStep({ formData, updateFormData, onNext, onBack }: StepProps) {
+export function AccountStep({ formData, onNext, onBack }: StepProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

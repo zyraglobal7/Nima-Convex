@@ -1,5 +1,5 @@
 // Mock data for Ask Nima chat feature
-import { Look, mockLooks, mockProducts, type Product } from './mock-data';
+import { Look, mockLooks, type Product } from './mock-data';
 
 // ============================================================================
 // Types

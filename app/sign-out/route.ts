@@ -2,6 +2,6 @@ import { redirect } from 'next/navigation';
 import { signOut } from '@workos-inc/authkit-nextjs';
 
 export async function GET() {
-  const authorizationUrl = await signOut();
+  await signOut();
   return redirect('/');
 }

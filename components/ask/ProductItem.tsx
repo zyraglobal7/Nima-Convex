@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { Heart, Bookmark, Shuffle, X, ExternalLink } from 'lucide-react';
 import { formatPrice } from '@/lib/utils/format';
+import Image from 'next/image';
 
 // Product type that works with both mock and Convex data
 export interface ProductData {
@@ -56,10 +57,12 @@ export function ProductItem({
       <div className="flex gap-3 p-3 bg-surface rounded-xl border border-border/30 hover:border-primary/30 transition-all duration-200">
         {/* Product image */}
         <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-surface-alt">
-          <img
+          <Image
             src={product.imageUrl}
             alt={product.name}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            fill
+            unoptimized={product.imageUrl.includes('convex.cloud') || product.imageUrl.includes('convex.site')}
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         </div>
 
@@ -191,11 +194,13 @@ export function ProductItemCompact({
         }
       `}
     >
-      <div className="w-16 h-16 rounded-lg overflow-hidden bg-surface-alt mb-2">
-        <img
+      <div className="w-16 h-16 rounded-lg overflow-hidden bg-surface-alt mb-2 relative">
+        <Image
           src={product.imageUrl}
           alt={product.name}
-          className="w-full h-full object-cover"
+          fill
+          unoptimized={product.imageUrl.includes('convex.cloud') || product.imageUrl.includes('convex.site')}
+          className="object-cover"
         />
       </div>
       {product.brand && (

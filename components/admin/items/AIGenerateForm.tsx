@@ -40,6 +40,51 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
   const createItem = useMutation(api.admin.items.createItem);
   const addItemImage = useMutation(api.admin.items.addItemImage);
 
+  const generateDetails = useCallback(
+    async (imageUrl: string) => {
+      try {
+        const result = await generateProductDetails({ imageUrl });
+
+        if (result.success && result.data) {
+          // Convert AI response to form data
+          setFormData({
+            name: result.data.name,
+            brand: result.data.brand || '',
+            description: result.data.description,
+            category: result.data.category,
+            subcategory: result.data.subcategory || '',
+            gender: result.data.suggestedGender,
+            price: result.data.suggestedPriceRange
+              ? String(Math.round((result.data.suggestedPriceRange.min + result.data.suggestedPriceRange.max) / 2))
+              : '',
+            currency: 'USD',
+            originalPrice: '',
+            colors: result.data.colors,
+            sizes: [],
+            material: result.data.material || '',
+            tags: result.data.tags,
+            occasion: result.data.occasion || [],
+            season: result.data.season || [],
+            sourceStore: '',
+            sourceUrl: '',
+            inStock: true,
+          });
+
+          setStep('review');
+          toast.success('AI analysis complete! Review the details below.');
+        } else {
+          toast.error(result.error || 'Failed to analyze image');
+          setStep('upload');
+        }
+      } catch (error) {
+        console.error('AI generation error:', error);
+        toast.error('Failed to generate product details');
+        setStep('upload');
+      }
+    },
+    [generateProductDetails]
+  );
+
   const handleFileUpload = useCallback(
     async (file: File) => {
       if (!file.type.startsWith('image/')) {
@@ -84,50 +129,8 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
         setIsUploading(false);
       }
     },
-    [generateUploadUrl, getStorageUrl]
+    [generateUploadUrl, getStorageUrl, generateDetails]
   );
-
-  const generateDetails = async (imageUrl: string) => {
-    try {
-      const result = await generateProductDetails({ imageUrl });
-
-      if (result.success && result.data) {
-        // Convert AI response to form data
-        setFormData({
-          name: result.data.name,
-          brand: result.data.brand || '',
-          description: result.data.description,
-          category: result.data.category,
-          subcategory: result.data.subcategory || '',
-          gender: result.data.suggestedGender,
-          price: result.data.suggestedPriceRange
-            ? String(Math.round((result.data.suggestedPriceRange.min + result.data.suggestedPriceRange.max) / 2))
-            : '',
-          currency: 'USD',
-          originalPrice: '',
-          colors: result.data.colors,
-          sizes: [],
-          material: result.data.material || '',
-          tags: result.data.tags,
-          occasion: result.data.occasion || [],
-          season: result.data.season || [],
-          sourceStore: '',
-          sourceUrl: '',
-          inStock: true,
-        });
-
-        setStep('review');
-        toast.success('AI analysis complete! Review the details below.');
-      } else {
-        toast.error(result.error || 'Failed to analyze image');
-        setStep('upload');
-      }
-    } catch (error) {
-      console.error('AI generation error:', error);
-      toast.error('Failed to generate product details');
-      setStep('upload');
-    }
-  };
 
   const handleRegenerate = async () => {
     if (uploadedImage) {
@@ -294,6 +297,7 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
                     alt="Uploaded product"
                     width={192}
                     height={192}
+                    unoptimized={uploadedImage.url.includes('convex.cloud') || uploadedImage.url.includes('convex.site')}
                     className="h-full w-full object-cover"
                   />
                 </div>
@@ -352,6 +356,7 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
                   alt="Uploaded product"
                   width={192}
                   height={192}
+                  unoptimized={uploadedImage.url.includes('convex.cloud') || uploadedImage.url.includes('convex.site')}
                   className="h-full w-full object-cover"
                 />
               </div>

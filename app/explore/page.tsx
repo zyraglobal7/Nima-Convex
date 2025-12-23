@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { User, Sparkles, Heart, Users, ArrowLeft } from 'lucide-react';
+import { Sparkles, Heart, Users, ArrowLeft, User } from 'lucide-react';
+import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery } from 'convex/react';
@@ -40,9 +41,7 @@ export default function ExplorePage() {
             {/* Right actions */}
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <Link href="/profile" className="p-2 rounded-full hover:bg-surface transition-colors">
-                <User className="w-5 h-5 text-muted-foreground" />
-              </Link>
+              <MessagesIcon />
             </div>
           </div>
         </div>
@@ -253,6 +252,7 @@ function PublicLookCard({ look, index }: PublicLookCardProps) {
             src={imageUrl}
             alt={look.look.occasion || 'Look'}
             fill
+            unoptimized={imageUrl.includes('convex.cloud') || imageUrl.includes('convex.site')}
             className="object-cover transition-transform duration-500 group-hover:scale-105"
             sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
           />
@@ -284,6 +284,7 @@ function PublicLookCard({ look, index }: PublicLookCardProps) {
                 alt={creatorName}
                 width={20}
                 height={20}
+                unoptimized={look.creator.profileImageUrl.includes('convex.cloud') || look.creator.profileImageUrl.includes('convex.site')}
                 className="rounded-full"
               />
             ) : (
