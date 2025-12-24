@@ -82,16 +82,11 @@ export function StyleVibeStep({ updateFormData, onNext, onBack }: StepProps) {
                   `}
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
-                  {/* Placeholder outfit image */}
-                  <div 
-                    className={`
-                      absolute inset-0 bg-gradient-to-br 
-                      ${index % 4 === 0 ? 'from-rose-100 to-rose-200' : ''}
-                      ${index % 4 === 1 ? 'from-amber-100 to-amber-200' : ''}
-                      ${index % 4 === 2 ? 'from-emerald-100 to-emerald-200' : ''}
-                      ${index % 4 === 3 ? 'from-sky-100 to-sky-200' : ''}
-                      dark:opacity-80
-                    `}
+                  {/* Outfit image */}
+                  <img 
+                    src={outfit.url}
+                    alt={outfit.tags.join(', ')}
+                    className="absolute inset-0 w-full h-full object-cover"
                   />
                   
                   {/* Style tags overlay */}

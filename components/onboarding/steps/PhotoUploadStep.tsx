@@ -470,31 +470,26 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
         <div className="max-w-md mx-auto space-y-3">
           <Button
             onClick={onNext}
-            disabled={hasUploading}
+            disabled={hasUploading || !hasPhotos}
             size="lg"
-            className="w-full h-14 text-base font-medium tracking-wide rounded-full bg-primary hover:bg-primary-hover text-primary-foreground transition-all duration-300 hover:scale-[1.01] hover:shadow-lg disabled:opacity-50"
+            className="w-full h-14 text-base font-medium tracking-wide rounded-full bg-primary hover:bg-primary-hover text-primary-foreground transition-all duration-300 hover:scale-[1.01] hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {hasUploading ? (
               <>
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                 Uploading...
               </>
-            ) : hasPhotos ? (
-              'Continue'
             ) : (
-              'Skip for now'
+              'Continue'
             )}
           </Button>
-          {!hasPhotos && !hasUploading && (
-            <p className="text-xs text-center text-muted-foreground">
-              You can add photos later, but the magic happens when we can show <em>you</em>
-            </p>
-          )}
-          {hasPhotos && (
-            <p className="text-xs text-center text-muted-foreground">
-              {formData.uploadedImages.length} photo{formData.uploadedImages.length !== 1 ? 's' : ''} uploaded
-            </p>
-          )}
+          <p className="text-xs text-center text-muted-foreground">
+            {hasPhotos ? (
+              <>{formData.uploadedImages.length} photo{formData.uploadedImages.length !== 1 ? 's' : ''} uploaded</>
+            ) : (
+              <>Upload at least 1 photo to continue</>
+            )}
+          </p>
         </div>
       </div>
     </div>

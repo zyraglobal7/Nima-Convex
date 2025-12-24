@@ -540,15 +540,53 @@ export const getOrCreateUser = mutation({
       return null;
     }
     console.log('[USER_CREATION] Identity object:', JSON.stringify(identity, null, 2));
-  console.log('[USER_CREATION] Identity keys:', Object.keys(identity));
-  console.log('[USER_CREATION] Email:', identity.email);
-  console.log('[USER_CREATION] GivenName:', identity.givenName);
-  console.log('[USER_CREATION] FamilyName:', identity.familyName);
-  console.log('[USER_CREATION] PictureUrl:', identity.pictureUrl);
+    console.log('[USER_CREATION] Identity keys:', Object.keys(identity));
 
     const workosUserId = identity.subject;
     const email = identity.email ?? '';
     const emailVerified = identity.emailVerified ?? false;
+
+    // Extract user profile from identity claims
+    // WorkOS may use different claim names, so we check multiple sources
+    // Cast identity to access potential custom claims from WorkOS
+    const identityAny = identity as Record<string, unknown>;
+    
+    // Try to get first/last name from multiple possible claim names
+    let firstName = identity.givenName as string | undefined;
+    let lastName = identity.familyName as string | undefined;
+    let profileImageUrl = identity.pictureUrl as string | undefined;
+
+    // WorkOS-specific claims (snake_case)
+    if (!firstName && identityAny['first_name']) {
+      firstName = identityAny['first_name'] as string;
+    }
+    if (!lastName && identityAny['last_name']) {
+      lastName = identityAny['last_name'] as string;
+    }
+    if (!profileImageUrl && identityAny['profile_picture_url']) {
+      profileImageUrl = identityAny['profile_picture_url'] as string;
+    }
+
+    // Try to extract from full 'name' claim if individual parts are missing
+    if ((!firstName || !lastName) && identity.name) {
+      const nameParts = identity.name.split(' ');
+      if (nameParts.length >= 2) {
+        if (!firstName) firstName = nameParts[0];
+        if (!lastName) lastName = nameParts.slice(1).join(' ');
+      } else if (nameParts.length === 1 && !firstName) {
+        firstName = nameParts[0];
+      }
+    }
+
+    // Fallback: extract name from email if still missing
+    if (!firstName && email) {
+      const emailName = email.split('@')[0];
+      // Convert email prefix to title case (e.g., "john.doe" -> "John")
+      const cleanName = emailName.replace(/[._-]/g, ' ').split(' ')[0];
+      firstName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1).toLowerCase();
+    }
+
+    console.log('[USER_CREATION] Extracted - Email:', email, 'FirstName:', firstName, 'LastName:', lastName, 'Picture:', profileImageUrl);
 
     // Check if user exists
     let user = await ctx.db
@@ -557,6 +595,40 @@ export const getOrCreateUser = mutation({
       .unique();
 
     if (user) {
+      // Update existing user with any missing profile data
+      const updates: Partial<{
+        email: string;
+        emailVerified: boolean;
+        firstName: string;
+        lastName: string;
+        profileImageUrl: string;
+        updatedAt: number;
+      }> = {};
+
+      // Only update fields that are missing in the database but available from identity
+      if (!user.firstName && firstName) {
+        updates.firstName = firstName;
+      }
+      if (!user.lastName && lastName) {
+        updates.lastName = lastName;
+      }
+      if (!user.profileImageUrl && profileImageUrl) {
+        updates.profileImageUrl = profileImageUrl;
+      }
+      // Always update email if it changed
+      if (email && user.email !== email) {
+        updates.email = email;
+        updates.emailVerified = emailVerified;
+      }
+
+      // Apply updates if any
+      if (Object.keys(updates).length > 0) {
+        updates.updatedAt = Date.now();
+        await ctx.db.patch(user._id, updates);
+        console.log('[USER_CREATION] Updated existing user with missing data:', Object.keys(updates));
+        user = await ctx.db.get(user._id);
+      }
+
       return user;
     }
 
@@ -566,9 +638,9 @@ export const getOrCreateUser = mutation({
       workosUserId,
       email,
       emailVerified,
-      firstName: identity.givenName,
-      lastName: identity.familyName,
-      profileImageUrl: identity.pictureUrl,
+      firstName,
+      lastName,
+      profileImageUrl,
       stylePreferences: [],
       subscriptionTier: 'free',
       dailyTryOnCount: 0,
@@ -579,6 +651,7 @@ export const getOrCreateUser = mutation({
       updatedAt: now,
     });
 
+    console.log('[USER_CREATION] Created new user:', userId, 'with firstName:', firstName, 'lastName:', lastName);
     user = await ctx.db.get(userId);
     return user;
   },
