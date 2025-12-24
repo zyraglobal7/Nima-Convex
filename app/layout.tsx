@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   title: 'Nima AI | Your Personal AI Stylist',
   description: 'See yourself in every outfit. AI-powered fashion discovery and personal styling.',
   icons: {
-    icon: '/convex.svg',
+    icon: '/nima-mascott.png',
   },
 };
 

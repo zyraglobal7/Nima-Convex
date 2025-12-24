@@ -1,10 +1,17 @@
 import { authkitMiddleware } from '@workos-inc/authkit-nextjs';
 
+// Log the redirect URI being used for debugging
+const redirectUri =
+  process.env.WORKOS_REDIRECT_URI ||
+  process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI ||
+  'http://localhost:3000/callback';
+
+console.log('[WorkOS Auth] Redirect URI being used:', redirectUri);
+console.log('[WorkOS Auth] WORKOS_REDIRECT_URI env:', process.env.WORKOS_REDIRECT_URI);
+console.log('[WorkOS Auth] NEXT_PUBLIC_WORKOS_REDIRECT_URI env:', process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI);
+
 export default authkitMiddleware({
-  redirectUri:
-    process.env.WORKOS_REDIRECT_URI ||
-    process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI ||
-    'http://localhost:3000/callback',
+  redirectUri,
   // Eager auth ensures the session is always available on the server
   eagerAuth: true,
   middlewareAuth: {

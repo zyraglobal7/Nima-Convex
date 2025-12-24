@@ -125,23 +125,29 @@ async function runLookGenerationWorkflow(
   console.log(`[WORKFLOW:${workflowName}] Step 1 complete: ${createdLookIds.length} looks created`);
 
   // ========================================
-  // STEP 2: Generate Images for Each Look
+  // STEP 2: Generate Images for Each Look (PARALLEL)
   // ========================================
-  console.log(`[WORKFLOW:${workflowName}] Step 2: Generating images for looks...`);
+  console.log(`[WORKFLOW:${workflowName}] Step 2: Generating images for ${createdLookIds.length} looks in PARALLEL...`);
+  const imageGenStartTime = Date.now();
 
+  // Process all looks in parallel for faster generation
+  const results = await Promise.all(
+    createdLookIds.map((lookId) => {
+      console.log(`[WORKFLOW:${workflowName}] Starting parallel generation for look ${lookId}...`);
+      return ctx.runAction(
+        internal.workflows.actions.generateLookImage,
+        { lookId, userId },
+        { retry: true }
+      );
+    })
+  );
+
+  // Count successes and failures
   let successCount = 0;
   let failureCount = 0;
 
-  // Process each look one at a time to avoid overwhelming the image generation API
-  for (const lookId of createdLookIds) {
-    console.log(`[WORKFLOW:${workflowName}] Processing look ${lookId}...`);
-
-    const result = await ctx.runAction(
-      internal.workflows.actions.generateLookImage,
-      { lookId, userId },
-      { retry: true }
-    );
-
+  results.forEach((result, index) => {
+    const lookId = createdLookIds[index];
     if (result.success) {
       successCount++;
       console.log(`[WORKFLOW:${workflowName}] Successfully generated image for look ${lookId}`);
@@ -149,10 +155,11 @@ async function runLookGenerationWorkflow(
       failureCount++;
       console.error(`[WORKFLOW:${workflowName}] Failed to generate image for look ${lookId}: ${result.error}`);
     }
-  }
+  });
 
+  const imageGenTime = Date.now() - imageGenStartTime;
   console.log(
-    `[WORKFLOW:${workflowName}] Step 2 complete: ${successCount} succeeded, ${failureCount} failed`
+    `[WORKFLOW:${workflowName}] Step 2 complete: ${successCount} succeeded, ${failureCount} failed (parallel generation took ${imageGenTime}ms)`
   );
 
   // ========================================
