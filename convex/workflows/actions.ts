@@ -3,7 +3,7 @@
 /**
  * AI Actions for Onboarding Workflow
  * Uses GPT-5 via OpenAI for text/prompt generation
- * Uses Google GenAI SDK with gemini-3-pro-image-preview for image generation
+ * Uses Google GenAI SDK with gemini-2.5-flash-image for image generation
  */
 
 import { internalAction, ActionCtx } from '../_generated/server';
@@ -20,7 +20,7 @@ const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Initialize Google GenAI for image generation (gemini-3-pro-image-preview)
+// Initialize Google GenAI for image generation (gemini-2.5-flash-image)
 const genAI = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_STUDIO_KEY });
 
 // ============================================
@@ -550,7 +550,7 @@ function createFallbackLooks(items: ItemForAI[]): LookComposition[] {
 
 /**
  * Generate a try-on image for a look using Google GenAI with reference images
- * Uses gemini-3-pro-image-preview for high-quality image generation
+ * Uses gemini-2.5-flash-image for high-quality image generation
  */
 export const generateLookImage = internalAction({
   args: {
@@ -703,9 +703,9 @@ Important:
 
       console.log(`[WORKFLOW:ONBOARDING] Calling Gemini image generation with ${contents.length - 1} reference images...`);
 
-      // Call Google GenAI with gemini-3-pro-image-preview for high-quality image generation
+      // Call Google GenAI with gemini-2.5-flash-image for high-quality image generation
       const response = await genAI.models.generateContent({
-        model: 'gemini-3-pro-image-preview',
+        model: 'gemini-2.5-flash-image',
         contents: contents,
         config: {
           responseModalities: ['TEXT', 'IMAGE'],
@@ -732,7 +732,7 @@ Important:
         
         // Try with just text prompt (the model might generate based on description)
         const simpleResponse = await genAI.models.generateContent({
-          model: 'gemini-3-pro-image-preview',
+          model: "gemini-2.5-flash-image", 
           contents: [{
             text: `Generate a professional fashion photograph of a person wearing: ${outfitDescription}. 
 Make it look like a high-end fashion editorial photo with clean background and natural lighting.`,

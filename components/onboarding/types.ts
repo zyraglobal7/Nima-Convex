@@ -136,20 +136,16 @@ export const STYLE_TAGS = [
   'Classic',
 ];
 
-// Placeholder outfit images for the style quiz (would be replaced with real images)
+// Style outfit images for the style quiz
 export const STYLE_OUTFIT_IMAGES = [
-  { id: '1', url: '/placeholder-outfit-1.jpg', tags: ['Casual', 'Minimalist'] },
-  { id: '2', url: '/placeholder-outfit-2.jpg', tags: ['Formal', 'Elegant'] },
-  { id: '3', url: '/placeholder-outfit-3.jpg', tags: ['Streetwear', 'Edgy'] },
-  { id: '4', url: '/placeholder-outfit-4.jpg', tags: ['Bohemian', 'Vintage'] },
-  { id: '5', url: '/placeholder-outfit-5.jpg', tags: ['Sporty', 'Casual'] },
-  { id: '6', url: '/placeholder-outfit-6.jpg', tags: ['Classic', 'Preppy'] },
-  { id: '7', url: '/placeholder-outfit-7.jpg', tags: ['Romantic', 'Elegant'] },
-  { id: '8', url: '/placeholder-outfit-8.jpg', tags: ['Minimalist', 'Classic'] },
-  { id: '9', url: '/placeholder-outfit-9.jpg', tags: ['Edgy', 'Streetwear'] },
-  { id: '10', url: '/placeholder-outfit-10.jpg', tags: ['Vintage', 'Romantic'] },
-  { id: '11', url: '/placeholder-outfit-11.jpg', tags: ['Formal', 'Classic'] },
-  { id: '12', url: '/placeholder-outfit-12.jpg', tags: ['Casual', 'Sporty'] },
+  { id: '1', url: '/minimalist, casual.png', tags: ['Casual', 'Minimalist'] },
+  { id: '2', url: '/Formal, Elegant.png', tags: ['Formal', 'Elegant'] },
+  { id: '3', url: '/Streetwear, Edgy.png', tags: ['Streetwear', 'Edgy'] },
+  { id: '4', url: '/Sporty, gym wear.png', tags: ['Sporty', 'Casual'] },
+  { id: '5', url: '/Classic, Preppy.png', tags: ['Classic', 'Preppy'] },
+  { id: '6', url: '/Vintage, Romantic, .png', tags: ['Vintage', 'Romantic'] },
+  { id: '7', url: '/Neutrals, classic.png', tags: ['Minimalist', 'Classic'] },
+  { id: '8', url: '/Trendy, Casual.png', tags: ['Casual', 'Sporty'] },
 ];
 
 // Only Kenya for now
