@@ -12,6 +12,191 @@ import { generatePublicId } from '../types';
 const genderValidator = v.union(v.literal('male'), v.literal('female'), v.literal('unisex'));
 const budgetValidator = v.union(v.literal('low'), v.literal('mid'), v.literal('premium'));
 
+// ============================================
+// SMART OUTFIT MATCHING SYSTEM
+// ============================================
+
+/**
+ * Formality levels for style coherence
+ * Items within 1 level can be combined, items 2+ levels apart should not be mixed
+ */
+type FormalityLevel = 'casual' | 'smart_casual' | 'formal' | 'evening';
+
+const FORMALITY_ORDER: FormalityLevel[] = ['casual', 'smart_casual', 'formal', 'evening'];
+
+// Keywords that indicate formality level (checked against name, subcategory, tags)
+const FORMALITY_KEYWORDS: Record<FormalityLevel, string[]> = {
+  casual: [
+    'sweatpants', 'hoodie', 'sneakers', 'track pants', 't-shirt', 'tee',
+    'joggers', 'slides', 'flip-flops', 'cargo', 'denim', 'jeans', 'casual',
+    'streetwear', 'athleisure', 'sporty', 'relaxed', 'everyday', 'weekend'
+  ],
+  smart_casual: [
+    'chinos', 'polo', 'loafers', 'blazer', 'cardigan', 'khaki', 'button-up',
+    'smart', 'brunch', 'date', 'work', 'office', 'business casual', 'preppy',
+    'classic', 'timeless', 'versatile', 'refined'
+  ],
+  formal: [
+    'dress pants', 'dress shirt', 'oxford', 'heels', 'boots', 'formal',
+    'suit', 'tailored', 'professional', 'meeting', 'interview', 'elegant',
+    'sophisticated', 'polished', 'structured'
+  ],
+  evening: [
+    'gown', 'cocktail dress', 'tuxedo', 'evening', 'black tie', 'red carpet',
+    'glamorous', 'luxe', 'party', 'gala', 'wedding', 'prom', 'ball'
+  ]
+};
+
+/**
+ * Detect if an item is a complete outfit (set, dress, jumpsuit, etc.)
+ * These items should NOT be mixed with other tops/bottoms
+ */
+function isCompleteOutfit(item: Doc<'items'>): boolean {
+  // Category-based detection
+  if (item.category === 'outfit' || item.category === 'dress') {
+    return true;
+  }
+  
+  // Name-based detection for sets (items that are top+bottom combos)
+  const setKeywords = [
+    'set', 'suit', 'combo', 'matching', 'co-ord', 'coord',
+    'jumpsuit', 'romper', 'overall', 'and pants', 'and trouser',
+    'and shorts', 'and skirt', 'two-piece', 'two piece'
+  ];
+  const nameLower = item.name.toLowerCase();
+  
+  return setKeywords.some(keyword => nameLower.includes(keyword));
+}
+
+/**
+ * Get the formality level of an item based on its name, subcategory, and tags
+ * Returns the most formal level found, or 'smart_casual' as default
+ */
+function getFormalityLevel(item: Doc<'items'>): FormalityLevel {
+  const searchText = [
+    item.name.toLowerCase(),
+    item.subcategory?.toLowerCase() || '',
+    ...item.tags.map(t => t.toLowerCase()),
+    ...(item.occasion || []).map(o => o.toLowerCase())
+  ].join(' ');
+  
+  // Check from most formal to least formal (evening -> casual)
+  // Return the highest formality level found
+  for (const level of [...FORMALITY_ORDER].reverse()) {
+    const keywords = FORMALITY_KEYWORDS[level];
+    if (keywords.some(keyword => searchText.includes(keyword))) {
+      return level;
+    }
+  }
+  
+  // Default to smart_casual if no clear match
+  return 'smart_casual';
+}
+
+/**
+ * Check if two items are compatible based on formality level
+ * Items within 1 formality level can be combined
+ */
+function areItemsCompatible(item1: Doc<'items'>, item2: Doc<'items'>): boolean {
+  const level1 = FORMALITY_ORDER.indexOf(getFormalityLevel(item1));
+  const level2 = FORMALITY_ORDER.indexOf(getFormalityLevel(item2));
+  
+  // Allow items within 1 formality level difference
+  return Math.abs(level1 - level2) <= 1;
+}
+
+/**
+ * Calculate coherence score between two items
+ * Higher score = better match
+ */
+function calculateCoherenceScore(item1: Doc<'items'>, item2: Doc<'items'>): number {
+  let score = 0;
+  
+  // Formality match (most important)
+  const level1 = FORMALITY_ORDER.indexOf(getFormalityLevel(item1));
+  const level2 = FORMALITY_ORDER.indexOf(getFormalityLevel(item2));
+  const formalityDiff = Math.abs(level1 - level2);
+  
+  if (formalityDiff === 0) {
+    score += 25; // Same formality level
+  } else if (formalityDiff === 1) {
+    score += 15; // Adjacent formality level
+  } else {
+    score -= 20; // Penalty for incompatible formality
+  }
+  
+  // Occasion match
+  const occasions1 = new Set(item1.occasion?.map(o => o.toLowerCase()) || []);
+  const occasions2 = new Set(item2.occasion?.map(o => o.toLowerCase()) || []);
+  const sharedOccasions = [...occasions1].filter(o => occasions2.has(o));
+  score += sharedOccasions.length * 15;
+  
+  // Tag overlap
+  const tags1 = new Set(item1.tags.map(t => t.toLowerCase()));
+  const tags2 = new Set(item2.tags.map(t => t.toLowerCase()));
+  const sharedTags = [...tags1].filter(t => tags2.has(t));
+  score += sharedTags.length * 5;
+  
+  // Color harmony (basic check - neutral colors go with everything)
+  const neutralColors = ['black', 'white', 'grey', 'gray', 'beige', 'navy', 'brown', 'cream'];
+  const colors1 = item1.colors.map(c => c.toLowerCase());
+  const colors2 = item2.colors.map(c => c.toLowerCase());
+  
+  const hasNeutral1 = colors1.some(c => neutralColors.includes(c));
+  const hasNeutral2 = colors2.some(c => neutralColors.includes(c));
+  
+  if (hasNeutral1 || hasNeutral2) {
+    score += 5; // Neutral colors are versatile
+  }
+  
+  // Same color family bonus
+  const sharedColors = colors1.filter(c => colors2.includes(c));
+  if (sharedColors.length > 0) {
+    score += 10; // Matching colors
+  }
+  
+  return score;
+}
+
+/**
+ * Check if an item is compatible with all items in a collection
+ * Returns true only if the item is coherent with ALL existing items
+ */
+function isItemCoherentWithLook(
+  newItem: Doc<'items'>,
+  existingItems: Doc<'items'>[],
+  minCoherenceScore: number = 10
+): boolean {
+  if (existingItems.length === 0) return true;
+  
+  // Check formality compatibility with all items
+  for (const existing of existingItems) {
+    if (!areItemsCompatible(newItem, existing)) {
+      return false;
+    }
+  }
+  
+  // Calculate average coherence score
+  const totalScore = existingItems.reduce(
+    (sum, existing) => sum + calculateCoherenceScore(newItem, existing),
+    0
+  );
+  const avgScore = totalScore / existingItems.length;
+  
+  return avgScore >= minCoherenceScore;
+}
+
+/**
+ * Get categories that are allowed to be added to a complete outfit
+ * Sets/dresses should only have accessories added, not more clothing
+ */
+function getAllowedCategoriesForCompleteOutfit(): ItemCategory[] {
+  return ['shoes', 'accessory', 'bag', 'jewelry'];
+}
+
+// Type for item category
+type ItemCategory = 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+
 /**
  * Create a look from chat based on user preferences
  * Matches items from the items table and creates a pending look for image generation
@@ -159,6 +344,10 @@ export const createLookFromChat = mutation({
  * Create multiple looks from chat based on user preferences (3 looks)
  * Matches items from the items table and creates pending looks for image generation
  * 
+ * Detects if matched items overlap with user's previous looks and returns:
+ * - scenario: 'fresh' - All new items the user hasn't tried before
+ * - scenario: 'remix' - More than half the items overlap with previous looks
+ * 
  * @returns lookIds if items were found and looks were created, error if no matching items
  */
 export const createLooksFromChat = mutation({
@@ -170,6 +359,7 @@ export const createLooksFromChat = mutation({
     v.object({
       success: v.literal(true),
       lookIds: v.array(v.id('looks')),
+      scenario: v.union(v.literal('fresh'), v.literal('remix')),
       message: v.string(),
     }),
     v.object({
@@ -184,7 +374,7 @@ export const createLooksFromChat = mutation({
       context?: string;
     }
   ): Promise<
-    | { success: true; lookIds: Id<'looks'>[]; message: string }
+    | { success: true; lookIds: Id<'looks'>[]; scenario: 'fresh' | 'remix'; message: string }
     | { success: false; message: string }
   > => {
     // Get current user
@@ -234,9 +424,25 @@ export const createLooksFromChat = mutation({
     const userStyles = user.stylePreferences || [];
     const userBudget = user.budgetRange;
 
+    // Get user's previous looks to detect item overlap
+    const previousLooks = await ctx.db
+      .query('looks')
+      .withIndex('by_creator_and_status', (q) => q.eq('creatorUserId', user._id))
+      .take(20);
+    
+    // Build set of all previously used item IDs
+    const previousItemIds = new Set<string>();
+    for (const look of previousLooks) {
+      for (const itemId of look.itemIds) {
+        previousItemIds.add(itemId);
+      }
+    }
+    console.log(`[Chat:Mutation] User has ${previousLooks.length} previous looks with ${previousItemIds.size} unique items`);
+
     // Create 3 looks with different strategies
     const lookIds: Id<'looks'>[] = [];
     const usedItemIds = new Set<string>();
+    const allMatchedItemIds: string[] = []; // Track all matched items for overlap calculation
     const now = Date.now();
 
     // Try to create 3 looks using different outfit strategies
@@ -255,8 +461,11 @@ export const createLooksFromChat = mutation({
         continue;
       }
 
-      // Mark items as used
-      matchedItems.forEach((item) => usedItemIds.add(item._id));
+      // Mark items as used and track for overlap
+      matchedItems.forEach((item) => {
+        usedItemIds.add(item._id);
+        allMatchedItemIds.push(item._id);
+      });
 
       // Calculate total price
       let totalPrice = 0;
@@ -309,16 +518,33 @@ export const createLooksFromChat = mutation({
       };
     }
 
+    // Calculate overlap ratio to determine scenario
+    const overlappingItems = allMatchedItemIds.filter((id) => previousItemIds.has(id));
+    const overlapRatio = allMatchedItemIds.length > 0 
+      ? overlappingItems.length / allMatchedItemIds.length 
+      : 0;
+    
+    // Scenario: 'remix' if more than 50% of items overlap with previous looks
+    const scenario: 'fresh' | 'remix' = overlapRatio > 0.5 ? 'remix' : 'fresh';
+    
+    console.log(`[Chat:Mutation] Created ${lookIds.length} looks. Overlap: ${overlappingItems.length}/${allMatchedItemIds.length} (${(overlapRatio * 100).toFixed(1)}%) - Scenario: ${scenario}`);
+
+    const message = scenario === 'remix'
+      ? `I found ${lookIds.length} looks - some featuring items you've loved before with fresh combinations!`
+      : `I found ${lookIds.length} amazing looks for you! Step into the fitting room to see yourself in these outfits.`;
+
     return {
       success: true,
       lookIds,
-      message: `I found ${lookIds.length} amazing looks for you! Step into the fitting room to see yourself in these outfits.`,
+      scenario,
+      message,
     };
   },
 });
 
 /**
  * Match items for a look with exclusions (for creating multiple looks)
+ * Uses smart coherence scoring to ensure items make sense together
  */
 async function matchItemsForLookWithExclusions(
   ctx: MutationCtx,
@@ -337,11 +563,11 @@ async function matchItemsForLookWithExclusions(
     ...outfitStrategies.filter((_, i) => i !== preferences.strategyIndex % outfitStrategies.length),
   ];
 
-  // Reuse the existing matching logic with exclusions
+  // Budget ranges in KES (matching actual database prices after migration)
   const budgetRanges = {
-    low: { min: 0, max: 5000 },
-    mid: { min: 5000, max: 20000 },
-    premium: { min: 20000, max: Infinity },
+    low: { min: 0, max: 3000 },       // 0 - 3,000 KES
+    mid: { min: 3000, max: 15000 },   // 3,000 - 15,000 KES
+    premium: { min: 15000, max: Infinity }, // 15,000+ KES
   };
 
   async function getItemsByCategory(
@@ -417,15 +643,36 @@ async function matchItemsForLookWithExclusions(
   for (const strategy of strategyOrder) {
     const matchedItems: Doc<'items'>[] = [];
     const usedItemIds = new Set<string>();
+    let baseIsCompleteOutfit = false;
 
+    // Step 1: Get base items
     let baseComplete = true;
     for (const category of strategy.base) {
       const items = await getItemsByCategory(category);
-      const available = items.find((i) => !usedItemIds.has(i.item._id));
       
-      if (available) {
-        matchedItems.push(available.item);
-        usedItemIds.add(available.item._id);
+      // Find a compatible item
+      let selectedItem: Doc<'items'> | null = null;
+      
+      for (const { item } of items) {
+        if (usedItemIds.has(item._id)) continue;
+        
+        // Check coherence with existing items
+        if (matchedItems.length > 0 && !isItemCoherentWithLook(item, matchedItems)) {
+          continue;
+        }
+        
+        selectedItem = item;
+        break;
+      }
+      
+      if (selectedItem) {
+        matchedItems.push(selectedItem);
+        usedItemIds.add(selectedItem._id);
+        
+        // Check if this is a complete outfit (set/dress)
+        if (isCompleteOutfit(selectedItem)) {
+          baseIsCompleteOutfit = true;
+        }
       } else {
         baseComplete = false;
         break;
@@ -436,27 +683,60 @@ async function matchItemsForLookWithExclusions(
       continue;
     }
 
+    // Step 2: Determine allowed optional categories
+    // If base is a complete outfit, only add accessories (no tops/bottoms/outerwear)
+    let allowedOptional = strategy.optional;
+    if (baseIsCompleteOutfit || strategy.isCompleteBase) {
+      allowedOptional = getAllowedCategoriesForCompleteOutfit().filter(
+        cat => strategy.optional.includes(cat)
+      );
+      console.log(`[Chat:Matching] Base is complete outfit, limiting optional to: ${allowedOptional.join(', ')}`);
+    }
+
+    // Step 3: Add optional items with coherence check
     const optionalSlots = Math.min(
       strategy.maxItems - matchedItems.length,
-      Math.floor(Math.random() * (strategy.optional.length + 1))
+      Math.max(1, Math.floor(Math.random() * 2)) // Add 1-2 optional items
     );
 
-    const shuffledOptional = [...strategy.optional].sort(() => Math.random() - 0.5);
+    // Shuffle optional categories for variety
+    const shuffledOptional = [...allowedOptional].sort(() => Math.random() - 0.5);
 
     for (const category of shuffledOptional) {
       if (matchedItems.length >= strategy.maxItems) break;
       if (matchedItems.length >= strategy.base.length + optionalSlots) break;
 
       const items = await getItemsByCategory(category);
-      const available = items.find((i) => !usedItemIds.has(i.item._id));
       
-      if (available) {
-        matchedItems.push(available.item);
-        usedItemIds.add(available.item._id);
+      // Find a coherent item
+      let selectedItem: Doc<'items'> | null = null;
+      
+      for (const { item } of items) {
+        if (usedItemIds.has(item._id)) continue;
+        
+        // CRITICAL: Check coherence with all existing items
+        if (!isItemCoherentWithLook(item, matchedItems)) {
+          console.log(`[Chat:Matching] Skipping ${item.name} - not coherent with existing items`);
+          continue;
+        }
+        
+        selectedItem = item;
+        break;
+      }
+      
+      if (selectedItem) {
+        matchedItems.push(selectedItem);
+        usedItemIds.add(selectedItem._id);
+        console.log(`[Chat:Matching] Added ${selectedItem.name} (${selectedItem.category}) - formality: ${getFormalityLevel(selectedItem)}`);
       }
     }
 
     if (matchedItems.length >= strategy.minItems) {
+      // Log the final look composition
+      console.log(`[Chat:Matching] Created look with ${matchedItems.length} items using ${strategy.name} strategy:`);
+      matchedItems.forEach(item => {
+        console.log(`  - ${item.name} (${item.category}, ${getFormalityLevel(item)})`);
+      });
       return matchedItems;
     }
   }
@@ -467,15 +747,15 @@ async function matchItemsForLookWithExclusions(
 /**
  * Outfit building strategies - defines different ways to compose an outfit
  * Each strategy has required base categories and optional additions
+ * NOTE: ItemCategory type is defined at the top of this file
  */
-type ItemCategory = 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
-
 interface OutfitStrategy {
   name: string;
   base: ItemCategory[]; // Required items for a complete outfit
   optional: ItemCategory[]; // Optional items to enhance the look
   minItems: number; // Minimum items needed
   maxItems: number; // Maximum items to include
+  isCompleteBase: boolean; // If true, base is already a complete outfit (set/dress)
 }
 
 const outfitStrategies: OutfitStrategy[] = [
@@ -486,6 +766,7 @@ const outfitStrategies: OutfitStrategy[] = [
     optional: ['shoes', 'accessory', 'bag', 'jewelry'],
     minItems: 1,
     maxItems: 3,
+    isCompleteBase: true, // Dress is complete - don't add tops/bottoms
   },
   // Pre-styled outfit/set - already a complete outfit (like matching sets, co-ords)
   {
@@ -494,28 +775,31 @@ const outfitStrategies: OutfitStrategy[] = [
     optional: ['shoes', 'accessory', 'bag', 'jewelry'],
     minItems: 1,
     maxItems: 3,
+    isCompleteBase: true, // Set is complete - don't add tops/bottoms
   },
   // Classic top + bottom
   {
     name: 'separates',
     base: ['top', 'bottom'],
-    optional: ['shoes', 'accessory', 'outerwear'],
+    optional: ['shoes', 'accessory'],
     minItems: 2,
-    maxItems: 4,
+    maxItems: 3,
+    isCompleteBase: false,
   },
-  // Layered look with outerwear
+  // Layered look with outerwear (only when weather/occasion calls for it)
   {
     name: 'layered',
-    base: ['top', 'bottom', 'outerwear'],
-    optional: ['shoes', 'accessory'],
-    minItems: 3,
-    maxItems: 4,
+    base: ['top', 'bottom'],
+    optional: ['shoes', 'outerwear'],
+    minItems: 2,
+    maxItems: 3,
+    isCompleteBase: false,
   },
 ];
 
 /**
  * Match items for creating a complete look based on user preferences
- * Uses smart outfit composition to create 2-4 item looks depending on what makes sense
+ * Uses smart outfit composition with coherence scoring to ensure items make sense together
  */
 async function matchItemsForLook(
   ctx: MutationCtx,
@@ -526,11 +810,11 @@ async function matchItemsForLook(
     occasion?: string;
   }
 ): Promise<Doc<'items'>[]> {
-  // Budget ranges in cents
+  // Budget ranges in KES (matching actual database prices after migration)
   const budgetRanges = {
-    low: { min: 0, max: 5000 }, // $0 - $50
-    mid: { min: 5000, max: 20000 }, // $50 - $200
-    premium: { min: 20000, max: Infinity }, // $200+
+    low: { min: 0, max: 3000 },       // 0 - 3,000 KES
+    mid: { min: 3000, max: 15000 },   // 3,000 - 15,000 KES
+    premium: { min: 15000, max: Infinity }, // 15,000+ KES
   };
 
   // Helper to get items by category with scoring
@@ -615,16 +899,36 @@ async function matchItemsForLook(
   for (const strategy of outfitStrategies) {
     const matchedItems: Doc<'items'>[] = [];
     const usedItemIds = new Set<string>();
+    let baseIsCompleteOutfit = false;
 
-    // Try to get base items
+    // Try to get base items with coherence checking
     let baseComplete = true;
     for (const category of strategy.base) {
       const items = await getItemsByCategory(category);
-      const available = items.find((i) => !usedItemIds.has(i.item._id));
       
-      if (available) {
-        matchedItems.push(available.item);
-        usedItemIds.add(available.item._id);
+      // Find a compatible item
+      let selectedItem: Doc<'items'> | null = null;
+      
+      for (const { item } of items) {
+        if (usedItemIds.has(item._id)) continue;
+        
+        // Check coherence with existing items
+        if (matchedItems.length > 0 && !isItemCoherentWithLook(item, matchedItems)) {
+          continue;
+        }
+        
+        selectedItem = item;
+        break;
+      }
+      
+      if (selectedItem) {
+        matchedItems.push(selectedItem);
+        usedItemIds.add(selectedItem._id);
+        
+        // Check if this is a complete outfit (set/dress)
+        if (isCompleteOutfit(selectedItem)) {
+          baseIsCompleteOutfit = true;
+        }
       } else {
         baseComplete = false;
         break;
@@ -636,26 +940,48 @@ async function matchItemsForLook(
       continue;
     }
 
-    // Randomly decide how many optional items to add (variety in outfit sizes)
+    // Determine allowed optional categories based on whether base is a complete outfit
+    let allowedOptional = strategy.optional;
+    if (baseIsCompleteOutfit || strategy.isCompleteBase) {
+      allowedOptional = getAllowedCategoriesForCompleteOutfit().filter(
+        cat => strategy.optional.includes(cat)
+      );
+    }
+
+    // Randomly decide how many optional items to add (1-2 items)
     const optionalSlots = Math.min(
       strategy.maxItems - matchedItems.length,
-      Math.floor(Math.random() * (strategy.optional.length + 1)) // 0 to optional.length items
+      Math.max(1, Math.floor(Math.random() * 2))
     );
 
     // Shuffle optional categories for variety
-    const shuffledOptional = [...strategy.optional].sort(() => Math.random() - 0.5);
+    const shuffledOptional = [...allowedOptional].sort(() => Math.random() - 0.5);
 
-    // Add optional items
+    // Add optional items with coherence checking
     for (const category of shuffledOptional) {
       if (matchedItems.length >= strategy.maxItems) break;
       if (matchedItems.length >= strategy.base.length + optionalSlots) break;
 
       const items = await getItemsByCategory(category);
-      const available = items.find((i) => !usedItemIds.has(i.item._id));
       
-      if (available) {
-        matchedItems.push(available.item);
-        usedItemIds.add(available.item._id);
+      // Find a coherent item
+      let selectedItem: Doc<'items'> | null = null;
+      
+      for (const { item } of items) {
+        if (usedItemIds.has(item._id)) continue;
+        
+        // Check coherence with all existing items
+        if (!isItemCoherentWithLook(item, matchedItems)) {
+          continue;
+        }
+        
+        selectedItem = item;
+        break;
+      }
+      
+      if (selectedItem) {
+        matchedItems.push(selectedItem);
+        usedItemIds.add(selectedItem._id);
       }
     }
 
@@ -746,3 +1072,348 @@ function generateNimaComment(
   const comment = comments[Math.floor(Math.random() * comments.length)];
   return greeting + comment;
 }
+
+/**
+ * Create a mixed look by combining items from different existing looks
+ * Supports both explicit item selection and remix-based creation
+ */
+export const createMixedLook = mutation({
+  args: {
+    itemIds: v.array(v.id('items')),
+    occasion: v.optional(v.string()),
+    mixType: v.union(v.literal('explicit'), v.literal('remix')),
+    sourceLookIds: v.optional(v.array(v.id('looks'))), // For tracking
+    context: v.optional(v.string()),
+  },
+  returns: v.union(
+    v.object({
+      success: v.literal(true),
+      lookId: v.id('looks'),
+      message: v.string(),
+    }),
+    v.object({
+      success: v.literal(false),
+      message: v.string(),
+    })
+  ),
+  handler: async (
+    ctx: MutationCtx,
+    args: {
+      itemIds: Id<'items'>[];
+      occasion?: string;
+      mixType: 'explicit' | 'remix';
+      sourceLookIds?: Id<'looks'>[];
+      context?: string;
+    }
+  ): Promise<
+    | { success: true; lookId: Id<'looks'>; message: string }
+    | { success: false; message: string }
+  > => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        message: 'Please sign in to create looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'User profile not found.',
+      };
+    }
+
+    if (args.itemIds.length < 2) {
+      return {
+        success: false,
+        message: 'Need at least 2 items to create a look.',
+      };
+    }
+
+    // Validate all items exist and are active
+    const validItems: Doc<'items'>[] = [];
+    for (const itemId of args.itemIds) {
+      const item = await ctx.db.get(itemId);
+      if (!item || !item.isActive) {
+        return {
+          success: false,
+          message: 'One or more items are no longer available.',
+        };
+      }
+      validItems.push(item);
+    }
+
+    // Calculate total price
+    let totalPrice = 0;
+    let currency = 'KES';
+    for (const item of validItems) {
+      totalPrice += item.price;
+      currency = item.currency;
+    }
+
+    // Generate look metadata
+    const now = Date.now();
+    const publicId = generatePublicId('look');
+    const styleTags = [...new Set(validItems.flatMap((item) => item.tags))].slice(0, 5);
+    const userGender = user.gender === 'prefer-not-to-say' ? 'unisex' : (user.gender || 'unisex');
+
+    // Generate name based on mix type
+    const lookName = args.mixType === 'remix' 
+      ? `${args.occasion || 'Remixed'} Look`
+      : `Custom Mix${args.occasion ? ` - ${args.occasion}` : ''}`;
+
+    // Generate Nima comment for mixed look
+    const nimaComment = args.mixType === 'remix'
+      ? `I've remixed this look with a ${args.context || 'fresh'} twist just for you! These pieces work beautifully together.`
+      : `I love this custom combination! You've got a great eye for mixing pieces. This look is uniquely you!`;
+
+    const lookId = await ctx.db.insert('looks', {
+      publicId,
+      itemIds: args.itemIds,
+      totalPrice,
+      currency,
+      name: lookName,
+      styleTags,
+      occasion: args.occasion,
+      nimaComment,
+      targetGender: userGender,
+      targetBudgetRange: user.budgetRange,
+      isActive: true,
+      isFeatured: false,
+      viewCount: 0,
+      saveCount: 0,
+      generationStatus: 'pending',
+      createdBy: 'user',
+      creatorUserId: user._id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      success: true,
+      lookId,
+      message: args.mixType === 'remix'
+        ? `I've created a fresh remix for you! Step into the fitting room to see yourself in this new combination.`
+        : `Your custom mix is ready! I combined the pieces you selected into a new look.`,
+    };
+  },
+});
+
+/**
+ * Create a remixed look based on an existing look with modifications
+ * Finds similar items to swap while keeping the overall vibe
+ */
+export const createRemixedLook = mutation({
+  args: {
+    sourceLookId: v.id('looks'),
+    twist: v.string(), // e.g., "more casual", "evening version", "work appropriate"
+    occasion: v.optional(v.string()),
+  },
+  returns: v.union(
+    v.object({
+      success: v.literal(true),
+      lookId: v.id('looks'),
+      message: v.string(),
+    }),
+    v.object({
+      success: v.literal(false),
+      message: v.string(),
+    })
+  ),
+  handler: async (
+    ctx: MutationCtx,
+    args: {
+      sourceLookId: Id<'looks'>;
+      twist: string;
+      occasion?: string;
+    }
+  ): Promise<
+    | { success: true; lookId: Id<'looks'>; message: string }
+    | { success: false; message: string }
+  > => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        message: 'Please sign in to create looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'User profile not found.',
+      };
+    }
+
+    // Get the source look
+    const sourceLook = await ctx.db.get(args.sourceLookId);
+    if (!sourceLook || !sourceLook.isActive) {
+      return {
+        success: false,
+        message: 'Source look not found.',
+      };
+    }
+
+    // Get source items
+    const sourceItems: Doc<'items'>[] = [];
+    for (const itemId of sourceLook.itemIds) {
+      const item = await ctx.db.get(itemId);
+      if (item && item.isActive) {
+        sourceItems.push(item);
+      }
+    }
+
+    if (sourceItems.length < 2) {
+      return {
+        success: false,
+        message: 'Not enough valid items in source look.',
+      };
+    }
+
+    // Determine which items to keep vs swap based on twist
+    const twistLower = args.twist.toLowerCase();
+    const swapCategories: string[] = [];
+    
+    // Simple heuristics for what to swap based on twist
+    if (twistLower.includes('casual') || twistLower.includes('relaxed')) {
+      swapCategories.push('shoes', 'bottom'); // Swap for more casual versions
+    } else if (twistLower.includes('formal') || twistLower.includes('dress')) {
+      swapCategories.push('shoes', 'top'); // Swap for more formal versions
+    } else if (twistLower.includes('evening') || twistLower.includes('night')) {
+      swapCategories.push('top', 'accessory');
+    } else {
+      // Default: swap one item randomly
+      const randomIndex = Math.floor(Math.random() * sourceItems.length);
+      swapCategories.push(sourceItems[randomIndex].category);
+    }
+
+    // Build new item list, finding alternatives for swap categories
+    const newItemIds: Id<'items'>[] = [];
+    const usedIds = new Set<string>();
+
+    for (const item of sourceItems) {
+      if (swapCategories.includes(item.category)) {
+        // Find an alternative item
+        const userGender = user.gender === 'prefer-not-to-say' ? undefined : user.gender;
+        
+        let alternatives: Doc<'items'>[] = [];
+        if (userGender) {
+          const genderItems = await ctx.db
+            .query('items')
+            .withIndex('by_gender_and_category', (q) =>
+              q.eq('gender', userGender).eq('category', item.category)
+            )
+            .take(20);
+          const unisexItems = await ctx.db
+            .query('items')
+            .withIndex('by_gender_and_category', (q) =>
+              q.eq('gender', 'unisex').eq('category', item.category)
+            )
+            .take(20);
+          alternatives = [...genderItems, ...unisexItems];
+        } else {
+          alternatives = await ctx.db
+            .query('items')
+            .withIndex('by_active_and_category', (q) =>
+              q.eq('isActive', true).eq('category', item.category)
+            )
+            .take(40);
+        }
+
+        // Filter out the original and already used items
+        const validAlternatives = alternatives.filter(
+          (alt) => alt.isActive && alt._id !== item._id && !usedIds.has(alt._id)
+        );
+
+        if (validAlternatives.length > 0) {
+          // Pick a random alternative (weighted towards similar price range)
+          const similar = validAlternatives
+            .filter((alt) => Math.abs(alt.price - item.price) < item.price * 0.5);
+          const selected = similar.length > 0
+            ? similar[Math.floor(Math.random() * similar.length)]
+            : validAlternatives[Math.floor(Math.random() * validAlternatives.length)];
+          
+          newItemIds.push(selected._id);
+          usedIds.add(selected._id);
+        } else {
+          // Keep original if no alternatives
+          newItemIds.push(item._id);
+          usedIds.add(item._id);
+        }
+      } else {
+        // Keep this item
+        newItemIds.push(item._id);
+        usedIds.add(item._id);
+      }
+    }
+
+    // Get new items for price calculation
+    const newItems: Doc<'items'>[] = [];
+    for (const itemId of newItemIds) {
+      const item = await ctx.db.get(itemId);
+      if (item) {
+        newItems.push(item);
+      }
+    }
+
+    // Calculate total price
+    let totalPrice = 0;
+    let currency = 'KES';
+    for (const item of newItems) {
+      totalPrice += item.price;
+      currency = item.currency;
+    }
+
+    // Generate look metadata
+    const now = Date.now();
+    const publicId = generatePublicId('look');
+    const styleTags = [...new Set(newItems.flatMap((item) => item.tags))].slice(0, 5);
+    const userGender = user.gender === 'prefer-not-to-say' ? 'unisex' : (user.gender || 'unisex');
+
+    const lookName = args.occasion 
+      ? `${args.occasion} Remix`
+      : `${sourceLook.name || 'Look'} - ${args.twist} version`;
+
+    const nimaComment = `I took your ${sourceLook.occasion || 'previous'} look and gave it a ${args.twist} spin! Some pieces are the same but I swapped a few to give you that new vibe.`;
+
+    const lookId = await ctx.db.insert('looks', {
+      publicId,
+      itemIds: newItemIds,
+      totalPrice,
+      currency,
+      name: lookName,
+      styleTags,
+      occasion: args.occasion || sourceLook.occasion,
+      nimaComment,
+      targetGender: userGender,
+      targetBudgetRange: user.budgetRange,
+      isActive: true,
+      isFeatured: false,
+      viewCount: 0,
+      saveCount: 0,
+      generationStatus: 'pending',
+      createdBy: 'user',
+      creatorUserId: user._id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      success: true,
+      lookId,
+      message: `I've remixed your look with a ${args.twist} twist! Step into the fitting room to see this fresh take.`,
+    };
+  },
+});

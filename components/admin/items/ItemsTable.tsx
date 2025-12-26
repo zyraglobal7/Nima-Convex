@@ -131,7 +131,9 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency.toUpperCase(),
-    }).format(price / 100);
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(price); // Display price as-is (no cents conversion)
   };
 
   if (!itemsResult) {

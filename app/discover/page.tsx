@@ -281,15 +281,33 @@ export default function DiscoverPage() {
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <Link href="/discover" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-serif font-semibold text-foreground">Nima</span>
-            </Link>
+            <div className="flex items-center">
+              <Link href="/discover" className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-primary-foreground" />
+                </div>
+                <span className="text-xl font-serif font-semibold text-foreground">Nima</span>
+              </Link>
 
-            {/* Page title - center */}
-            <h1 className="absolute left-1/2 -translate-x-1/2 text-lg font-medium text-foreground">
+              {/* Desktop Navigation - hidden on mobile */}
+              <nav className="hidden md:flex items-center gap-6 ml-8">
+                <Link href="/discover" className="text-sm font-medium text-primary">
+                  Discover
+                </Link>
+                <Link href="/ask" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                  Ask Nima
+                </Link>
+                <Link href="/lookbooks" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                  Lookbooks
+                </Link>
+                <Link href="/profile" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                  Profile
+                </Link>
+              </nav>
+            </div>
+
+            {/* Page title - center (mobile only) */}
+            <h1 className="md:hidden absolute left-1/2 -translate-x-1/2 text-lg font-medium text-foreground">
               Discover
             </h1>
 

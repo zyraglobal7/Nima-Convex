@@ -144,7 +144,7 @@ export const STYLE_OUTFIT_IMAGES = [
   { id: '4', url: '/Sporty, gym wear.png', tags: ['Sporty', 'Casual'] },
   { id: '5', url: '/Classic, Preppy.png', tags: ['Classic', 'Preppy'] },
   { id: '6', url: '/Vintage, Romantic, .png', tags: ['Vintage', 'Romantic'] },
-  { id: '7', url: '/Neutrals, classic.png', tags: ['Minimalist', 'Classic'] },
+  { id: '7', url: '/Neutrals, classic.png', tags: ['Neutrals','Classic']},
   { id: '8', url: '/Trendy, Casual.png', tags: ['Casual', 'Sporty'] },
 ];
 

@@ -417,6 +417,18 @@ export default defineSchema({
     role: v.union(v.literal('user'), v.literal('assistant')),
     content: v.string(),
 
+    // Message type for special rendering (fitting room cards, no-matches, etc.)
+    messageType: v.optional(
+      v.union(
+        v.literal('text'),           // Regular text message (default)
+        v.literal('fitting-ready'),  // Fitting room card with look IDs
+        v.literal('no-matches')      // No matches found, show explore card
+      )
+    ),
+
+    // Look IDs for fitting-ready messages
+    lookIds: v.optional(v.array(v.id('looks'))),
+
     // Rich content
     attachments: v.optional(
       v.array(

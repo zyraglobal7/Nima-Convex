@@ -133,9 +133,11 @@ export function ShareLookModal({
   };
 
   return (
+    <>
     <AnimatePresence>
       {isOpen && (
         <motion.div
+          key="share-look-modal"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -326,6 +328,7 @@ export function ShareLookModal({
           </motion.div>
         </motion.div>
       )}
+    </AnimatePresence>
 
       {/* Share via DM Modal */}
       <ShareLookViaDMModal
@@ -337,7 +340,7 @@ export function ShareLookModal({
         lookId={lookId}
        
       />
-    </AnimatePresence>
+    </>
   );
 }
 

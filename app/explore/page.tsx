@@ -56,10 +56,10 @@ export default function ExplorePage() {
           className="mb-6"
         >
           <h2 className="text-2xl md:text-3xl font-serif text-foreground">
-            Community Looks ✨
+            Explore ✨
           </h2>
           <p className="text-muted-foreground mt-1">
-            Discover outfits shared by our stylish community
+            Discover outfits shared by other people
           </p>
         </motion.div>
 
