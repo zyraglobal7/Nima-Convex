@@ -2,7 +2,16 @@
 
 import { motion } from 'framer-motion';
 import { MessageCircle } from 'lucide-react';
-import type { ChatMessage } from '@/lib/mock-chat-data';
+// Extended ChatMessage type with variant support
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'nima';
+  content: string;
+  timestamp?: Date | string | number;
+  type?: 'text' | 'searching' | 'fitting-ready';
+  sessionId?: string;
+  variant?: 'fresh' | 'remix';
+}
 import { SearchingCard } from './SearchingCard';
 import { FittingRoomCard } from './FittingRoomCard';
 
@@ -36,11 +45,15 @@ export function MessageBubble({
   }
 
   if (message.type === 'fitting-ready' && message.sessionId) {
+    // Calculate look count from sessionId (comma-separated look IDs)
+    const lookCount = message.sessionId.split(',').filter(Boolean).length;
     return (
       <FittingRoomCard
         sessionId={message.sessionId}
+        lookCount={lookCount}
         animate={animate}
         onClick={() => onFittingRoomClick?.(message.sessionId!)}
+        variant={message.variant || 'fresh'}
       />
     );
   }

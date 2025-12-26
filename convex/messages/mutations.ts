@@ -407,3 +407,131 @@ export const startConversation = mutation({
   },
 });
 
+/**
+ * Save a fitting-ready message with look IDs
+ * Called when looks are successfully created and images generated
+ */
+export const saveFittingReadyMessage = mutation({
+  args: {
+    threadId: v.id('threads'),
+    lookIds: v.array(v.id('looks')),
+    content: v.optional(v.string()),
+  },
+  returns: v.id('messages'),
+  handler: async (
+    ctx: MutationCtx,
+    args: {
+      threadId: Id<'threads'>;
+      lookIds: Id<'looks'>[];
+      content?: string;
+    }
+  ): Promise<Id<'messages'>> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error('Not authenticated');
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Verify thread access
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread || thread.userId !== user._id) {
+      throw new Error('Thread not found or access denied');
+    }
+
+    const messageId = await ctx.db.insert('messages', {
+      threadId: args.threadId,
+      userId: user._id,
+      role: 'assistant',
+      content: args.content || `Found ${args.lookIds.length} perfect looks for you!`,
+      messageType: 'fitting-ready',
+      lookIds: args.lookIds,
+      status: 'sent',
+      createdAt: Date.now(),
+    });
+
+    // Update thread metadata
+    await ctx.runMutation(internal.threads.mutations.updateThreadMetadata, {
+      threadId: args.threadId,
+      incrementMessageCount: true,
+    });
+
+    return messageId;
+  },
+});
+
+/**
+ * Save a no-matches message
+ * Called when no matching items are found for the user's request
+ */
+export const saveNoMatchesMessage = mutation({
+  args: {
+    threadId: v.id('threads'),
+    occasion: v.optional(v.string()),
+    content: v.optional(v.string()),
+  },
+  returns: v.id('messages'),
+  handler: async (
+    ctx: MutationCtx,
+    args: {
+      threadId: Id<'threads'>;
+      occasion?: string;
+      content?: string;
+    }
+  ): Promise<Id<'messages'>> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error('Not authenticated');
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Verify thread access
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread || thread.userId !== user._id) {
+      throw new Error('Thread not found or access denied');
+    }
+
+    const defaultContent = `Oops! I couldn't find enough items in our collection that match your request${args.occasion ? ` for "${args.occasion}"` : ''} right now. 😅
+
+Don't worry though! Here's what you can try:
+• Ask for a different occasion (like "casual brunch" or "office meeting")
+• Check out the Discover page - I've already created some looks for you there!
+• Try being more general (like "casual" instead of "outdoor camping")
+
+We're always adding new items, so check back soon! ✨`;
+
+    const messageId = await ctx.db.insert('messages', {
+      threadId: args.threadId,
+      userId: user._id,
+      role: 'assistant',
+      content: args.content || defaultContent,
+      messageType: 'no-matches',
+      status: 'sent',
+      createdAt: Date.now(),
+    });
+
+    // Update thread metadata
+    await ctx.runMutation(internal.threads.mutations.updateThreadMetadata, {
+      threadId: args.threadId,
+      incrementMessageCount: true,
+    });
+
+    return messageId;
+  },
+});
+

@@ -1,7 +1,8 @@
 'use client';
 
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, ArrowRight, MessageCircle, CheckCircle2 } from 'lucide-react';
+import { Sparkles, ArrowRight, MessageCircle, CheckCircle2, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
 interface FittingRoomCardProps {
@@ -10,6 +11,8 @@ interface FittingRoomCardProps {
   animate?: boolean;
   onClick?: () => void;
   className?: string;
+  /** Variant: 'fresh' for new looks, 'remix' for looks with remixed items */
+  variant?: 'fresh' | 'remix';
 }
 
 export function FittingRoomCard({
@@ -18,7 +21,39 @@ export function FittingRoomCard({
   animate = true,
   onClick,
   className = '',
+  variant = 'fresh',
 }: FittingRoomCardProps) {
+  // Log when card is displayed
+  useEffect(() => {
+    console.log('[Chat:UI] FittingRoomCard displayed', {
+      sessionId,
+      lookCount,
+      variant,
+      timestamp: Date.now(),
+    });
+  }, [sessionId, lookCount, variant]);
+
+  const handleClick = () => {
+    console.log('[Chat:UI] FittingRoomCard clicked', {
+      sessionId,
+      lookCount,
+      variant,
+      timestamp: Date.now(),
+    });
+    onClick?.();
+  };
+
+  // Customize messaging based on variant
+  const headerText = variant === 'remix'
+    ? `Found ${lookCount} looks with fresh remixes! ✨`
+    : `Found ${lookCount} perfect looks for you! ✨`;
+  
+  const subText = variant === 'remix'
+    ? 'Including some new twists on items you love'
+    : 'Your personalized outfits are ready';
+
+  const HeaderIcon = variant === 'remix' ? RefreshCw : CheckCircle2;
+
   return (
     <motion.div
       initial={animate ? { opacity: 0, y: 10, scale: 0.98 } : false}
@@ -33,24 +68,30 @@ export function FittingRoomCard({
         </div>
 
         {/* Card */}
-        <div className="flex-1 rounded-2xl rounded-bl-md border border-border/50 bg-surface overflow-hidden">
+        <div className="flex-1 rounded-2xl rounded-bl-md border border-border/50 bg-surface overflow-hidden relative">
           {/* Success header */}
-          <div className="px-5 py-4 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
+          <div className={`px-5 py-4 ${variant === 'remix' 
+            ? 'bg-gradient-to-r from-secondary/15 via-primary/10 to-secondary/15' 
+            : 'bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10'}`}>
             <div className="flex items-center gap-3">
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ duration: 0.4, delay: 0.2, type: 'spring' }}
-                className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center"
+                className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                  variant === 'remix'
+                    ? 'bg-gradient-to-br from-secondary to-primary'
+                    : 'bg-gradient-to-br from-primary to-secondary'
+                }`}
               >
-                <CheckCircle2 className="w-5 h-5 text-primary-foreground" />
+                <HeaderIcon className="w-5 h-5 text-primary-foreground" />
               </motion.div>
               <div>
                 <p className="text-sm font-medium text-foreground">
-                  Found {lookCount} perfect looks for you! ✨
+                  {headerText}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Your personalized outfits are ready
+                  {subText}
                 </p>
               </div>
             </div>
@@ -60,7 +101,7 @@ export function FittingRoomCard({
           <div className="px-5 py-4 border-t border-border/30">
             <Link
               href={`/fitting/${sessionId}`}
-              onClick={onClick}
+              onClick={handleClick}
               className="group flex items-center justify-between w-full"
             >
               <div className="flex items-center gap-3">
@@ -106,4 +147,3 @@ export function FittingRoomCard({
     </motion.div>
   );
 }
-

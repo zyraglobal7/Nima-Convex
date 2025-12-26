@@ -112,6 +112,11 @@ function LookbookOption({
   );
 }
 
+// Helper to detect if the ID is a public ID (starts with 'look_') or an internal Convex ID
+function isPublicId(id: string): boolean {
+  return id.startsWith('look_');
+}
+
 export default function LookDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -128,12 +133,24 @@ export default function LookDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
+  // Determine if we're dealing with a public ID or internal ID
+  const isPublic = lookId ? isPublicId(lookId) : false;
+
   // Fetch user's lookbooks
   const userLookbooks = useQuery(api.lookbooks.queries.listUserLookbooks, { includeArchived: false });
-  const lookData = useQuery(
+  
+  // Use the appropriate query based on ID type
+  const lookDataByInternalId = useQuery(
     api.looks.queries.getLookWithFullDetails,
-    lookId ? { lookId: lookId as Id<'looks'> } : 'skip'
+    lookId && !isPublic ? { lookId: lookId as Id<'looks'> } : 'skip'
   );
+  const lookDataByPublicId = useQuery(
+    api.looks.queries.getLookWithFullDetailsByPublicId,
+    lookId && isPublic ? { publicId: lookId } : 'skip'
+  );
+  
+  // Use whichever query returned data
+  const lookData = isPublic ? lookDataByPublicId : lookDataByInternalId;
   // Check which lookbooks this look is saved to
   const savedStatus = useQuery(
     api.lookbooks.queries.isItemSaved,
