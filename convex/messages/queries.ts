@@ -11,6 +11,16 @@ const messageValidator = v.object({
   userId: v.id('users'),
   role: v.union(v.literal('user'), v.literal('assistant')),
   content: v.string(),
+  // Message type for special rendering
+  messageType: v.optional(
+    v.union(
+      v.literal('text'),
+      v.literal('fitting-ready'),
+      v.literal('no-matches')
+    )
+  ),
+  // Look IDs for fitting-ready messages
+  lookIds: v.optional(v.array(v.id('looks'))),
   attachments: v.optional(
     v.array(
       v.object({

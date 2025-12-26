@@ -322,3 +322,113 @@ export const getRecommendedItemsForUser = query({
     return itemsWithImages;
   },
 });
+
+// Look summary validator for AI context
+const lookSummaryValidator = v.object({
+  _id: v.id('looks'),
+  name: v.optional(v.string()),
+  occasion: v.optional(v.string()),
+  styleTags: v.array(v.string()),
+  totalPrice: v.number(),
+  currency: v.string(),
+  createdAt: v.number(),
+  items: v.array(
+    v.object({
+      _id: v.id('items'),
+      name: v.string(),
+      category: v.string(),
+      brand: v.optional(v.string()),
+    })
+  ),
+});
+
+/**
+ * Get user's recent looks for AI context
+ * Returns summarized look info for mixing suggestions
+ */
+export const getUserRecentLooks = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(lookSummaryValidator),
+  handler: async (
+    ctx: QueryCtx,
+    args: { limit?: number }
+  ): Promise<
+    Array<{
+      _id: Id<'looks'>;
+      name?: string;
+      occasion?: string;
+      styleTags: string[];
+      totalPrice: number;
+      currency: string;
+      createdAt: number;
+      items: Array<{
+        _id: Id<'items'>;
+        name: string;
+        category: string;
+        brand?: string;
+      }>;
+    }>
+  > => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return [];
+    }
+
+    const limit = Math.min(args.limit ?? 15, 30);
+
+    // Get user's recent looks (using by_creator_and_status index, filtering by creatorUserId only)
+    const looks = await ctx.db
+      .query('looks')
+      .withIndex('by_creator_and_status', (q) => q.eq('creatorUserId', user._id))
+      .order('desc')
+      .take(limit);
+
+    // Fetch item details for each look
+    const looksWithItems = await Promise.all(
+      looks.map(async (look) => {
+        const items: Array<{
+          _id: Id<'items'>;
+          name: string;
+          category: string;
+          brand?: string;
+        }> = [];
+
+        for (const itemId of look.itemIds) {
+          const item = await ctx.db.get(itemId);
+          if (item && item.isActive) {
+            items.push({
+              _id: item._id,
+              name: item.name,
+              category: item.category,
+              brand: item.brand,
+            });
+          }
+        }
+
+        return {
+          _id: look._id,
+          name: look.name,
+          occasion: look.occasion,
+          styleTags: look.styleTags,
+          totalPrice: look.totalPrice,
+          currency: look.currency,
+          createdAt: look.createdAt,
+          items,
+        };
+      })
+    );
+
+    return looksWithItems;
+  },
+});

@@ -185,10 +185,10 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
         category: formData.category,
         subcategory: formData.subcategory.trim() || undefined,
         gender: formData.gender,
-        price: Math.round(parseFloat(formData.price) * 100), // Convert to cents
+        price: Math.round(parseFloat(formData.price)), // Store price as-is (no cents conversion)
         currency: formData.currency,
         originalPrice: formData.originalPrice
-          ? Math.round(parseFloat(formData.originalPrice) * 100)
+          ? Math.round(parseFloat(formData.originalPrice))
           : undefined,
         colors: formData.colors,
         sizes: formData.sizes,

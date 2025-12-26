@@ -276,16 +276,30 @@ export const startGenerateMoreLooks = mutation({
       };
     }
 
-    // Get existing item IDs to exclude from new looks
+    // Only exclude items from COMPLETED looks (not failed/pending ones)
+    // Failed looks should allow their items to be reused
+    const completedLooks = existingLooks.filter(
+      (l) => l.generationStatus === 'completed'
+    );
+    
     const existingItemIds = new Set<string>();
-    for (const look of existingLooks) {
+    for (const look of completedLooks) {
       for (const itemId of look.itemIds) {
         existingItemIds.add(itemId);
       }
     }
 
     console.log(`[WORKFLOW:GENERATE_MORE] Starting workflow for user ${user._id}`);
-    console.log(`[WORKFLOW:GENERATE_MORE] Excluding ${existingItemIds.size} items from previous looks`);
+    
+    // Diagnostic: show look count breakdown by status
+    const statusCounts = existingLooks.reduce((acc, l) => {
+      const status = l.generationStatus || 'unknown';
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.log(`[WORKFLOW:GENERATE_MORE] Total looks: ${existingLooks.length}, by status:`, statusCounts);
+    console.log(`[WORKFLOW:GENERATE_MORE] Completed looks: ${completedLooks.length}`);
+    console.log(`[WORKFLOW:GENERATE_MORE] Excluding ${existingItemIds.size} items from completed looks`);
 
     // Check if there are any items available after exclusions
     const userGender = user.gender === 'male' ? 'male' 
@@ -308,13 +322,25 @@ export const startGenerateMoreLooks = mutation({
         )
         .collect();
       const allItems = [...genderItems, ...unisexItems];
+      
+      // Diagnostic logging: show item counts before exclusion
+      console.log(`[WORKFLOW:GENERATE_MORE] Found ${genderItems.length} ${userGender} items`);
+      console.log(`[WORKFLOW:GENERATE_MORE] Found ${unisexItems.length} unisex items`);
+      console.log(`[WORKFLOW:GENERATE_MORE] Total items before exclusion: ${allItems.length}`);
+      
       availableItemsCount = allItems.filter((item) => !existingItemIds.has(item._id)).length;
+      console.log(`[WORKFLOW:GENERATE_MORE] Items after exclusion: ${availableItemsCount}`);
     } else {
       const allItems = await ctx.db
         .query('items')
         .filter((q) => q.eq(q.field('isActive'), true))
         .collect();
+      
+      // Diagnostic logging for non-gendered query
+      console.log(`[WORKFLOW:GENERATE_MORE] Found ${allItems.length} total active items (no gender filter)`);
+      
       availableItemsCount = allItems.filter((item) => !existingItemIds.has(item._id)).length;
+      console.log(`[WORKFLOW:GENERATE_MORE] Items after exclusion: ${availableItemsCount}`);
     }
 
     if (availableItemsCount === 0) {

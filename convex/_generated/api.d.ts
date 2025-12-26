@@ -10,6 +10,7 @@
 
 import type * as admin_aiActions from "../admin/aiActions.js";
 import type * as admin_items from "../admin/items.js";
+import type * as admin_migrations from "../admin/migrations.js";
 import type * as admin_queries from "../admin/queries.js";
 import type * as chat_actions from "../chat/actions.js";
 import type * as chat_mutations from "../chat/mutations.js";
@@ -56,6 +57,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   "admin/aiActions": typeof admin_aiActions;
   "admin/items": typeof admin_items;
+  "admin/migrations": typeof admin_migrations;
   "admin/queries": typeof admin_queries;
   "chat/actions": typeof chat_actions;
   "chat/mutations": typeof chat_mutations;

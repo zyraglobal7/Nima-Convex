@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
+import { useAuth } from '@workos-inc/authkit-nextjs/components';
 import { api } from '@/convex/_generated/api';
 
 // Local storage keys
@@ -80,7 +81,10 @@ export function useOnboardingCompletion() {
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
 
-  // Get current user
+  // Get the WorkOS user object which contains full profile data
+  const { user: workosUser } = useAuth();
+
+  // Get current user from Convex
   const user = useQuery(api.users.queries.getCurrentUser);
 
   // Mutations
@@ -101,7 +105,20 @@ export function useOnboardingCompletion() {
       // "not authenticated" vs "authenticated but no DB record"
       if (user === null) {
         try {
-          const createdUser = await getOrCreateUser();
+          // Extract profile data from WorkOS user object
+          // The WorkOS user object contains the full profile from Google/OAuth
+          const profileData = workosUser ? {
+            email: workosUser.email || undefined,
+            emailVerified: workosUser.emailVerified || false,
+            firstName: workosUser.firstName || undefined,
+            lastName: workosUser.lastName || undefined,
+            profileImageUrl: workosUser.profilePictureUrl || undefined,
+          } : {};
+
+          console.log('[ONBOARDING_COMPLETION] WorkOS user object:', JSON.stringify(workosUser, null, 2));
+          console.log('[ONBOARDING_COMPLETION] Passing profile data to getOrCreateUser:', JSON.stringify(profileData, null, 2));
+
+          const createdUser = await getOrCreateUser(profileData);
           console.log('[ONBOARDING_COMPLETION] Created user:', JSON.stringify(createdUser, null, 2));
           if (!createdUser) {
             // Truly not authenticated
@@ -208,7 +225,7 @@ export function useOnboardingCompletion() {
     }
 
     processOnboarding();
-  }, [user, getOrCreateUser, completeOnboarding, claimOnboardingImages]);
+  }, [user, workosUser, getOrCreateUser, completeOnboarding, claimOnboardingImages]);
 
   return {
     user,

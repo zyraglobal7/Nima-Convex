@@ -15,6 +15,20 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'images.unsplash.com',
       },
+      // Google profile pictures (from Google OAuth)
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+      },
+      // WorkOS profile pictures
+      {
+        protocol: 'https',
+        hostname: 'workos.imgix.net',
+      },
+      {
+        protocol: 'https',
+        hostname: 'workoscdn.com',
+      },
     ],
   },
 };

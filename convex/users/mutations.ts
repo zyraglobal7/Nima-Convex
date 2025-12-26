@@ -490,9 +490,21 @@ export const incrementTryOnCount = internalMutation({
 /**
  * Get or create user (used after auth callback)
  * Creates user if doesn't exist, returns existing user if it does
+ * 
+ * NOTE: The WorkOS JWT access token only contains minimal claims (subject, issuer, sid).
+ * User profile data (email, name, picture) must be passed from the client,
+ * which has access to the full WorkOS user object via useAuth().
  */
 export const getOrCreateUser = mutation({
-  args: {},
+  args: {
+    // User profile data from WorkOS client-side user object
+    // These are optional - if provided, they take precedence over JWT claims
+    email: v.optional(v.string()),
+    emailVerified: v.optional(v.boolean()),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    profileImageUrl: v.optional(v.string()),
+  },
   returns: v.union(
     v.object({
       _id: v.id('users'),
@@ -533,7 +545,13 @@ export const getOrCreateUser = mutation({
   ),
   handler: async (
     ctx: MutationCtx,
-    _args: Record<string, never>
+    args: {
+      email?: string;
+      emailVerified?: boolean;
+      firstName?: string;
+      lastName?: string;
+      profileImageUrl?: string;
+    }
   ): Promise<Doc<'users'> | null> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -541,22 +559,33 @@ export const getOrCreateUser = mutation({
     }
     console.log('[USER_CREATION] Identity object:', JSON.stringify(identity, null, 2));
     console.log('[USER_CREATION] Identity keys:', Object.keys(identity));
+    console.log('[USER_CREATION] Client-provided args:', JSON.stringify(args, null, 2));
 
     const workosUserId = identity.subject;
-    const email = identity.email ?? '';
-    const emailVerified = identity.emailVerified ?? false;
+    
+    // Prioritize client-provided data over JWT claims (which are often empty)
+    // The client has access to the full WorkOS user object via useAuth()
+    let email = args.email || identity.email || '';
+    let emailVerified = args.emailVerified ?? identity.emailVerified ?? false;
+    let firstName = args.firstName;
+    let lastName = args.lastName;
+    let profileImageUrl = args.profileImageUrl;
 
-    // Extract user profile from identity claims
-    // WorkOS may use different claim names, so we check multiple sources
+    // Fall back to identity claims if client data not provided
+    if (!firstName) {
+      firstName = identity.givenName as string | undefined;
+    }
+    if (!lastName) {
+      lastName = identity.familyName as string | undefined;
+    }
+    if (!profileImageUrl) {
+      profileImageUrl = identity.pictureUrl as string | undefined;
+    }
+
     // Cast identity to access potential custom claims from WorkOS
     const identityAny = identity as Record<string, unknown>;
     
-    // Try to get first/last name from multiple possible claim names
-    let firstName = identity.givenName as string | undefined;
-    let lastName = identity.familyName as string | undefined;
-    let profileImageUrl = identity.pictureUrl as string | undefined;
-
-    // WorkOS-specific claims (snake_case)
+    // WorkOS-specific claims (snake_case) as additional fallback
     if (!firstName && identityAny['first_name']) {
       firstName = identityAny['first_name'] as string;
     }
@@ -586,7 +615,7 @@ export const getOrCreateUser = mutation({
       firstName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1).toLowerCase();
     }
 
-    console.log('[USER_CREATION] Extracted - Email:', email, 'FirstName:', firstName, 'LastName:', lastName, 'Picture:', profileImageUrl);
+    console.log('[USER_CREATION] Final values - Email:', email, 'FirstName:', firstName, 'LastName:', lastName, 'Picture:', profileImageUrl);
 
     // Check if user exists
     let user = await ctx.db
@@ -595,7 +624,7 @@ export const getOrCreateUser = mutation({
       .unique();
 
     if (user) {
-      // Update existing user with any missing profile data
+      // Update existing user with any missing or changed profile data
       const updates: Partial<{
         email: string;
         emailVerified: boolean;
@@ -605,7 +634,7 @@ export const getOrCreateUser = mutation({
         updatedAt: number;
       }> = {};
 
-      // Only update fields that are missing in the database but available from identity
+      // Update fields that are missing in the database but available now
       if (!user.firstName && firstName) {
         updates.firstName = firstName;
       }
@@ -615,8 +644,8 @@ export const getOrCreateUser = mutation({
       if (!user.profileImageUrl && profileImageUrl) {
         updates.profileImageUrl = profileImageUrl;
       }
-      // Always update email if it changed
-      if (email && user.email !== email) {
+      // Always update email if it's now available and was empty or changed
+      if (email && (!user.email || user.email !== email)) {
         updates.email = email;
         updates.emailVerified = emailVerified;
       }
@@ -625,7 +654,7 @@ export const getOrCreateUser = mutation({
       if (Object.keys(updates).length > 0) {
         updates.updatedAt = Date.now();
         await ctx.db.patch(user._id, updates);
-        console.log('[USER_CREATION] Updated existing user with missing data:', Object.keys(updates));
+        console.log('[USER_CREATION] Updated existing user with profile data:', Object.keys(updates));
         user = await ctx.db.get(user._id);
       }
 
@@ -651,7 +680,7 @@ export const getOrCreateUser = mutation({
       updatedAt: now,
     });
 
-    console.log('[USER_CREATION] Created new user:', userId, 'with firstName:', firstName, 'lastName:', lastName);
+    console.log('[USER_CREATION] Created new user:', userId, 'with firstName:', firstName, 'lastName:', lastName, 'email:', email);
     user = await ctx.db.get(userId);
     return user;
   },

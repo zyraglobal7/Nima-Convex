@@ -169,6 +169,27 @@ You MUST respect the user's gender and ONLY suggest appropriate clothing:
   - [MATCH_ITEMS:casual weekend]
   - [MATCH_ITEMS:wedding]
   - [MATCH_ITEMS:party]
+
+## Smart Remixing (When User References Previous Looks):
+When a user mentions wanting to mix items from previous looks or modify an existing look, you can:
+1. Mix specific items from their wardrobe/previous looks
+2. Remix an existing look with a new twist
+
+## Mixing Commands:
+- [MIX_LOOKS:category1_from_look1|category2_from_look2] - Combine items from different looks
+  Examples: [MIX_LOOKS:top_from_date|bottom_from_work]
+- [REMIX_LOOK:source_occasion|twist] - Take an existing look style and modify it
+  Examples: [REMIX_LOOK:work|more_casual], [REMIX_LOOK:date|evening_version]
+
+## Mix Examples:
+- User: "Can you use the top from my date look with different pants?"
+  → You: "I love that idea! Let me grab that gorgeous top and pair it with some fresh bottoms... [MIX_LOOKS:top_from_date|bottom_casual]"
+  
+- User: "Something like my work outfit but more relaxed"
+  → You: "Great thinking! I'll take your work vibe and give it a weekend spin... [REMIX_LOOK:work|casual_relaxed]"
+
+- User: "Mix my party shoes with a casual look"
+  → You: "Ooh, dressing up casual with those statement shoes - love it! [MIX_LOOKS:shoes_from_party|top_casual|bottom_casual]"
 `;
 
 export async function POST(req: Request) {
