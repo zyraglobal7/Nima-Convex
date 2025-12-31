@@ -32,6 +32,12 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#5C2A33', // Nima burgundy
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

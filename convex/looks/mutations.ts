@@ -695,3 +695,131 @@ export const recreateLook = mutation({
   },
 });
 
+/**
+ * Create a look from user-selected items
+ * Public mutation called from the "Create a Look" flow
+ */
+export const createLookFromSelectedItems = mutation({
+  args: {
+    itemIds: v.array(v.id('items')),
+    occasion: v.optional(v.string()),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    lookId: v.optional(v.id('looks')),
+    publicId: v.optional(v.string()),
+    error: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: {
+      itemIds: Id<'items'>[];
+      occasion?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    lookId?: Id<'looks'>;
+    publicId?: string;
+    error?: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        error: 'Please sign in to create looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found.',
+      };
+    }
+
+    // Validate item count
+    if (args.itemIds.length < 2) {
+      return {
+        success: false,
+        error: 'Please select at least 2 items.',
+      };
+    }
+
+    if (args.itemIds.length > 6) {
+      return {
+        success: false,
+        error: 'Maximum 6 items per look.',
+      };
+    }
+
+    // Validate all items exist and are active, calculate total price
+    let totalPrice = 0;
+    let currency = 'USD';
+    const styleTags: string[] = [];
+    const categories: string[] = [];
+
+    for (const itemId of args.itemIds) {
+      const item = await ctx.db.get(itemId);
+      if (!item || !item.isActive) {
+        return {
+          success: false,
+          error: 'Some items are no longer available.',
+        };
+      }
+      totalPrice += item.price;
+      currency = item.currency;
+      categories.push(item.category);
+
+      // Collect unique tags
+      for (const tag of item.tags) {
+        if (!styleTags.includes(tag)) {
+          styleTags.push(tag);
+        }
+      }
+    }
+
+    // Create the look
+    const now = Date.now();
+    const publicId = generatePublicId('look');
+
+    const lookId = await ctx.db.insert('looks', {
+      publicId,
+      itemIds: args.itemIds,
+      totalPrice,
+      currency,
+      styleTags: styleTags.slice(0, 5), // Limit to 5 tags
+      occasion: args.occasion,
+      targetGender: (user.gender === 'male' || user.gender === 'female') ? user.gender : 'unisex',
+      targetBudgetRange: user.budgetRange,
+      isActive: true,
+      isFeatured: false,
+      isPublic: false,
+      sharedWithFriends: false,
+      viewCount: 0,
+      saveCount: 0,
+      generationStatus: 'pending',
+      createdBy: 'user',
+      creatorUserId: user._id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Trigger image generation workflow
+    await ctx.scheduler.runAfter(0, internal.workflows.actions.generateLookImage, {
+      lookId,
+      userId: user._id,
+    });
+
+    return {
+      success: true,
+      lookId,
+      publicId,
+    };
+  },
+});
+

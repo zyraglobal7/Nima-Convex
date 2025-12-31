@@ -3,13 +3,15 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { NimaChatBubble, LookGrid } from '@/components/discover';
+import { NimaChatBubble, LookGrid, ApparelGrid, CreateLookSheet } from '@/components/discover';
+import type { ApparelItem } from '@/components/discover/ApparelItemCard';
 import { discoverWelcomeMessage } from '@/lib/mock-data';
 import { Settings, Sparkles, User } from 'lucide-react';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import Link from 'next/link';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import type { Look, Product } from '@/lib/mock-data';
 
 type ViewState = 'loading' | 'generating' | 'ready';
@@ -93,7 +95,7 @@ function transformConvexLook(
   };
 }
 
-type FilterType = 'my_looks' | 'explore' | 'friends';
+type FilterType = 'my_looks' | 'explore' | 'friends' | 'apparel';
 
 export default function DiscoverPage() {
   const [viewState, setViewState] = useState<ViewState>('loading');
@@ -105,10 +107,20 @@ export default function DiscoverPage() {
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterType>('my_looks');
 
+  // Selection mode for Create a Look
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<Set<Id<'items'>>>(new Set());
+  const [showCreateLookSheet, setShowCreateLookSheet] = useState(false);
 
   // Convex queries and mutations
   const shouldStartWorkflow = useQuery(api.workflows.index.shouldStartOnboardingWorkflow);
   const workflowStatus = useQuery(api.workflows.index.getOnboardingWorkflowStatus);
+
+  // Items for Apparel tab
+  const itemsData = useQuery(
+    api.items.queries.listItemsWithImages,
+    activeFilter === 'apparel' ? { limit: 50 } : 'skip'
+  );
 
   const userGeneratedLooks = useQuery(
     api.looks.queries.getUserGeneratedLooks,
@@ -240,6 +252,37 @@ export default function DiscoverPage() {
       setLooks([]);
     }
   }, [userGeneratedLooks, publicLooks, friendsLooks, activeFilter]);
+
+  // Transform items data for Apparel grid
+  const apparelItems: ApparelItem[] = (itemsData?.items || []).map((item) => ({
+    _id: item._id,
+    publicId: item.publicId,
+    name: item.name,
+    brand: item.brand,
+    category: item.category,
+    price: item.price,
+    currency: item.currency,
+    originalPrice: item.originalPrice,
+    colors: item.colors,
+    primaryImageUrl: item.primaryImageUrl,
+    isFeatured: item.isFeatured,
+  }));
+
+  // Handle item selection for Create a Look
+  const handleItemSelect = (itemId: Id<'items'>) => {
+    setSelectedItems((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else if (newSet.size < 6) {
+        newSet.add(itemId);
+      }
+      return newSet;
+    });
+  };
+
+  // Get selected items for CreateLookSheet
+  const selectedItemsArray = apparelItems.filter((item) => selectedItems.has(item._id));
 
   // Handle loading completion for users who don't need workflow
   useEffect(() => {
@@ -373,6 +416,7 @@ export default function DiscoverPage() {
             { id: 'my_looks' as FilterType, label: 'My Looks' },
             { id: 'explore' as FilterType, label: 'Explore Looks' },
             { id: 'friends' as FilterType, label: 'Friends' },
+            { id: 'apparel' as FilterType, label: 'Apparel' },
           ].map((filter) => (
             <button
               key={filter.id}
@@ -389,15 +433,62 @@ export default function DiscoverPage() {
               {filter.label}
             </button>
           ))}
+
+          {/* Create a Look button */}
+          <button
+            onClick={() => {
+              if (isSelectionMode) {
+                setIsSelectionMode(false);
+                setSelectedItems(new Set());
+              } else {
+                setActiveFilter('apparel');
+                setIsSelectionMode(true);
+              }
+            }}
+            className={`
+              px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
+              transition-all duration-200 flex items-center gap-2
+              ${isSelectionMode
+                ? 'bg-destructive text-destructive-foreground'
+                : 'bg-secondary text-secondary-foreground hover:bg-secondary-hover'
+              }
+            `}
+          >
+            <Sparkles className="w-4 h-4" />
+            {isSelectionMode ? 'Cancel' : 'Create Look'}
+          </button>
         </motion.div>
 
-        {/* Looks grid */}
+        {/* Selection mode indicator */}
+        {isSelectionMode && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-primary/10 border border-primary/30 rounded-xl p-3 text-center mb-4"
+          >
+            <p className="text-sm text-primary font-medium">
+              Select 2-6 items to create your look
+              {selectedItems.size > 0 && ` (${selectedItems.size} selected)`}
+            </p>
+          </motion.div>
+        )}
+
+        {/* Looks grid / Apparel grid */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.5 }}
         >
-          {looks.length > 0 ? (
+          {activeFilter === 'apparel' ? (
+            // Apparel grid
+            <ApparelGrid
+              items={apparelItems}
+              isLoading={!itemsData}
+              isSelectionMode={isSelectionMode}
+              selectedItems={selectedItems}
+              onItemSelect={handleItemSelect}
+            />
+          ) : looks.length > 0 ? (
             <LookGrid looks={looks} showDateGroups={true} />
           ) : (
             <div className="text-center py-16">
@@ -512,6 +603,39 @@ export default function DiscoverPage() {
           </motion.div>
         )}
       </main>
+
+      {/* Floating "Try On Selected" button */}
+      <AnimatePresence>
+        {isSelectionMode && selectedItems.size >= 2 && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-24 md:bottom-8 left-0 right-0 z-40 px-4"
+          >
+            <div className="max-w-md mx-auto">
+              <button
+                onClick={() => setShowCreateLookSheet(true)}
+                className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-medium text-base shadow-lg hover:bg-primary-hover transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-5 h-5" />
+                <span>Try On Selected ({selectedItems.size})</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Create Look Sheet */}
+      <CreateLookSheet
+        isOpen={showCreateLookSheet}
+        onClose={() => setShowCreateLookSheet(false)}
+        selectedItems={selectedItemsArray}
+        onClearSelection={() => {
+          setSelectedItems(new Set());
+          setIsSelectionMode(false);
+        }}
+      />
 
       {/* Bottom navigation (mobile) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/50 py-2 px-4">

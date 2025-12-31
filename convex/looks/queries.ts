@@ -1638,3 +1638,80 @@ export const getMultipleLooksWithDetails = query({
     return results;
   },
 });
+
+/**
+ * Get the generation status of a look
+ * Used to poll for completion after creating a look
+ */
+export const getLookGenerationStatus = query({
+  args: {
+    lookId: v.id('looks'),
+  },
+  returns: v.union(
+    v.object({
+      status: v.union(
+        v.literal('pending'),
+        v.literal('processing'),
+        v.literal('completed'),
+        v.literal('failed')
+      ),
+      errorMessage: v.optional(v.string()),
+      imageUrl: v.optional(v.string()),
+    }),
+    v.null()
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { lookId: Id<'looks'> }
+  ): Promise<{
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    errorMessage?: string;
+    imageUrl?: string;
+  } | null> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return null;
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look || !look.isActive) {
+      return null;
+    }
+
+    // Get the look image for this user
+    const lookImage = await ctx.db
+      .query('look_images')
+      .withIndex('by_look_and_user', (q) =>
+        q.eq('lookId', args.lookId).eq('userId', user._id)
+      )
+      .first();
+
+    if (lookImage) {
+      let imageUrl: string | undefined;
+      if (lookImage.storageId) {
+        imageUrl = (await ctx.storage.getUrl(lookImage.storageId)) || undefined;
+      }
+
+      return {
+        status: lookImage.status,
+        errorMessage: lookImage.errorMessage,
+        imageUrl,
+      };
+    }
+
+    // If no look image yet, use the look's generation status
+    return {
+      status: look.generationStatus || 'pending',
+      errorMessage: undefined,
+    };
+  },
+});
