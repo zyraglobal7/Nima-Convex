@@ -1,16 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Sparkles, User, Camera, LogOut, ChevronRight, Save, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Sparkles, User, Camera, LogOut, ChevronRight, Save, Loader2, Users } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import { FriendsList } from '@/components/friends/FriendsList';
 import { AddFriendButton } from '@/components/friends/AddFriendButton';
+import { LookCard } from '@/components/discover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,7 +25,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import type { Look, Product } from '@/lib/mock-data';
 
 // Style options from onboarding
 const styleOptions = [
@@ -45,6 +56,14 @@ const shirtSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
 const waistSizes = ['24', '26', '28', '30', '32', '34', '36', '38', '40', '42', '44'];
 const currencies = ['USD', 'EUR', 'GBP', 'KES', 'NGN'];
 
+type MyLooksFilter = 'system' | 'user';
+
+// Extended Look type with generation status
+interface LookWithStatus extends Look {
+  isGenerating: boolean;
+  generationFailed: boolean;
+}
+
 export default function ProfilePage() {
   const currentUser = useQuery(api.users.queries.getCurrentUser);
   
@@ -60,6 +79,9 @@ export default function ProfilePage() {
   const [isSavingSize, setIsSavingSize] = useState(false);
   const [isSavingBudget, setIsSavingBudget] = useState(false);
 
+  // My Looks filter state
+  const [myLooksFilter, setMyLooksFilter] = useState<MyLooksFilter>('system');
+
   // Form states
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -72,6 +94,57 @@ export default function ProfilePage() {
   const [heightUnit, setHeightUnit] = useState<'cm' | 'ft'>('cm');
   const [budgetRange, setBudgetRange] = useState<'low' | 'mid' | 'premium'>('mid');
   const [currency, setCurrency] = useState('USD');
+
+  // Query for My Looks
+  const myLooksData = useQuery(api.looks.queries.getMyLooksByCreator, { createdBy: myLooksFilter, limit: 50 });
+
+  // Transform looks data
+  const [myLooks, setMyLooks] = useState<LookWithStatus[]>([]);
+
+  useEffect(() => {
+    if (myLooksData) {
+      const heights: Array<'short' | 'medium' | 'tall' | 'extra-tall'> = ['medium', 'tall', 'short', 'extra-tall'];
+      
+      const transformedLooks: LookWithStatus[] = myLooksData.map((lookData, index) => {
+        const products: Product[] = lookData.items.map((itemData) => ({
+          id: itemData.item._id,
+          name: itemData.item.name,
+          brand: itemData.item.brand || 'Unknown',
+          category: itemData.item.category as Product['category'],
+          price: itemData.item.price,
+          currency: itemData.item.currency,
+          imageUrl: itemData.primaryImageUrl || '',
+          storeUrl: '#',
+          storeName: itemData.item.brand || 'Store',
+          color: itemData.item.colors[0] || 'Mixed',
+        }));
+
+        const imageUrl = lookData.lookImage?.imageUrl || '';
+        const isGenerating = lookData.lookImage?.status === 'pending' || lookData.lookImage?.status === 'processing';
+        const generationFailed = lookData.lookImage?.status === 'failed';
+
+        return {
+          id: lookData.look._id,
+          imageUrl,
+          products,
+          totalPrice: lookData.look.totalPrice,
+          currency: lookData.look.currency,
+          styleTags: lookData.look.styleTags,
+          occasion: lookData.look.occasion || 'Everyday',
+          nimaNote: lookData.look.nimaComment || "A look curated just for you!",
+          createdAt: new Date(lookData.look._creationTime),
+          height: heights[index % heights.length],
+          isLiked: false,
+          isDisliked: false,
+          isGenerating,
+          generationFailed,
+        };
+      });
+      setMyLooks(transformedLooks);
+    } else {
+      setMyLooks([]);
+    }
+  }, [myLooksData]);
 
   // Initialize form from user data
   useState(() => {
@@ -244,22 +317,116 @@ export default function ProfilePage() {
           </div>
         </motion.div>
 
-        {/* Tabs */}
-        <Tabs defaultValue="style" className="w-full">
-          <TabsList className="w-full grid grid-cols-4 mb-6">
-            <TabsTrigger value="style">Style</TabsTrigger>
-            <TabsTrigger value="size">Size & Fit</TabsTrigger>
-            <TabsTrigger value="friends">Friends</TabsTrigger>
+        {/* Tabs - Restructured to 3 tabs */}
+        <Tabs defaultValue="my-looks" className="w-full">
+          <TabsList className="w-full grid grid-cols-3 mb-6">
+            <TabsTrigger value="my-looks">My Looks</TabsTrigger>
+            <TabsTrigger value="style-fit">Style & Fit</TabsTrigger>
             <TabsTrigger value="account">Account</TabsTrigger>
           </TabsList>
 
-          {/* Style Tab */}
-          <TabsContent value="style" className="space-y-6">
+          {/* My Looks Tab */}
+          <TabsContent value="my-looks" className="space-y-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-4"
+            >
+              {/* By Nima / By Me Pill Filter */}
+              <div className="flex justify-center">
+                <div className="relative bg-surface-alt rounded-full p-1 flex">
+                  {/* Sliding background */}
+                  <motion.div
+                    className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-primary rounded-full"
+                    initial={false}
+                    animate={{
+                      x: myLooksFilter === 'system' ? 0 : 'calc(100% + 4px)',
+                    }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                  />
+                  
+                  {/* Buttons */}
+                  <button
+                    onClick={() => setMyLooksFilter('system')}
+                    className={`
+                      relative z-10 px-6 py-2 rounded-full text-sm font-medium transition-colors duration-200
+                      ${myLooksFilter === 'system' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}
+                    `}
+                  >
+                    By Nima
+                  </button>
+                  <button
+                    onClick={() => setMyLooksFilter('user')}
+                    className={`
+                      relative z-10 px-6 py-2 rounded-full text-sm font-medium transition-colors duration-200
+                      ${myLooksFilter === 'user' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}
+                    `}
+                  >
+                    By Me
+                  </button>
+                </div>
+              </div>
+
+              {/* Looks Grid */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={myLooksFilter}
+                  initial={{ opacity: 0, x: myLooksFilter === 'system' ? -20 : 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: myLooksFilter === 'system' ? 20 : -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {myLooks.length > 0 ? (
+                    <div className="columns-2 md:columns-3 gap-4">
+                      {myLooks.map((look, index) => (
+                        <LookCard key={look.id} look={look} index={index} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-16">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-alt flex items-center justify-center">
+                        <Sparkles className="w-8 h-8 text-muted-foreground" />
+                      </div>
+                      <h3 className="text-lg font-medium text-foreground mb-2">
+                        {myLooksFilter === 'system' ? 'No looks from Nima yet' : 'No looks created yet'}
+                      </h3>
+                      <p className="text-muted-foreground max-w-md mx-auto">
+                        {myLooksFilter === 'system' 
+                          ? 'Complete your onboarding to get personalized looks curated by Nima.'
+                          : 'Create your own looks by selecting items from the Apparel tab in Discover.'
+                        }
+                      </p>
+                      {myLooksFilter === 'system' && (
+                        <Link 
+                          href="/onboarding" 
+                          className="inline-flex mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
+                        >
+                          Complete Onboarding
+                        </Link>
+                      )}
+                      {myLooksFilter === 'user' && (
+                        <Link 
+                          href="/discover" 
+                          className="inline-flex mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
+                        >
+                          Create Your First Look
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </motion.div>
+          </TabsContent>
+
+          {/* Style & Fit Tab (Merged) */}
+          <TabsContent value="style-fit" className="space-y-6">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="space-y-6"
             >
+              {/* Style Section */}
               <div>
                 <h3 className="text-lg font-medium text-foreground mb-2">Your Style Vibe</h3>
                 <p className="text-sm text-muted-foreground mb-4">
@@ -283,8 +450,17 @@ export default function ProfilePage() {
                     </button>
                   ))}
                 </div>
+                <Button onClick={handleSaveStyles} disabled={isSavingStyle} className="mt-4">
+                  {isSavingStyle ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Save Style Preferences
+                </Button>
               </div>
 
+              {/* Budget Section */}
               <div className="pt-4 border-t border-border">
                 <h3 className="text-lg font-medium text-foreground mb-2">Budget Range</h3>
                 <p className="text-sm text-muted-foreground mb-4">
@@ -326,153 +502,118 @@ export default function ProfilePage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <Button onClick={handleSaveBudget} disabled={isSavingBudget} className="mt-6">
+                    {isSavingBudget ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      'Save Budget'
+                    )}
+                  </Button>
                 </div>
               </div>
 
-              <div className="flex gap-3">
-                <Button onClick={handleSaveStyles} disabled={isSavingStyle} className="flex-1">
-                  {isSavingStyle ? (
+              {/* Size & Fit Section */}
+              <div className="pt-4 border-t border-border">
+                <h3 className="text-lg font-medium text-foreground mb-4">Size & Fit</h3>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="shirtSize">Shirt Size</Label>
+                    <Select value={shirtSize} onValueChange={setShirtSize}>
+                      <SelectTrigger id="shirtSize">
+                        <SelectValue placeholder="Select size" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {shirtSizes.map((size) => (
+                          <SelectItem key={size} value={size}>
+                            {size}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="waistSize">Waist Size</Label>
+                    <Select value={waistSize} onValueChange={setWaistSize}>
+                      <SelectTrigger id="waistSize">
+                        <SelectValue placeholder="Select size" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {waistSizes.map((size) => (
+                          <SelectItem key={size} value={size}>
+                            {size}{'"'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="height">Height</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="height"
+                        type="text"
+                        value={height}
+                        onChange={(e) => setHeight(e.target.value)}
+                        placeholder={heightUnit === 'cm' ? '175' : "5'9"}
+                        className="flex-1"
+                      />
+                      <Select
+                        value={heightUnit}
+                        onValueChange={(v) => setHeightUnit(v as 'cm' | 'ft')}
+                      >
+                        <SelectTrigger className="w-20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cm">cm</SelectItem>
+                          <SelectItem value="ft">ft</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="shoeSize">Shoe Size</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="shoeSize"
+                        type="text"
+                        value={shoeSize}
+                        onChange={(e) => setShoeSize(e.target.value)}
+                        placeholder="10"
+                        className="flex-1"
+                      />
+                      <Select
+                        value={shoeSizeUnit}
+                        onValueChange={(v) => setShoeSizeUnit(v as 'EU' | 'US' | 'UK')}
+                      >
+                        <SelectTrigger className="w-20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="US">US</SelectItem>
+                          <SelectItem value="EU">EU</SelectItem>
+                          <SelectItem value="UK">UK</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <Button onClick={handleSaveSizes} disabled={isSavingSize} className="w-full mt-4">
+                  {isSavingSize ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
                     <Save className="w-4 h-4 mr-2" />
                   )}
-                  Save Style Preferences
-                </Button>
-                <Button onClick={handleSaveBudget} disabled={isSavingBudget} variant="outline">
-                  {isSavingBudget ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    'Save Budget'
-                  )}
+                  Save Size Preferences
                 </Button>
               </div>
-            </motion.div>
-          </TabsContent>
-
-          {/* Size & Fit Tab */}
-          <TabsContent value="size" className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-6"
-            >
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="shirtSize">Shirt Size</Label>
-                  <Select value={shirtSize} onValueChange={setShirtSize}>
-                    <SelectTrigger id="shirtSize">
-                      <SelectValue placeholder="Select size" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {shirtSizes.map((size) => (
-                        <SelectItem key={size} value={size}>
-                          {size}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="waistSize">Waist Size</Label>
-                  <Select value={waistSize} onValueChange={setWaistSize}>
-                    <SelectTrigger id="waistSize">
-                      <SelectValue placeholder="Select size" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {waistSizes.map((size) => (
-                        <SelectItem key={size} value={size}>
-                          {size}{'"'}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="height">Height</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="height"
-                      type="text"
-                      value={height}
-                      onChange={(e) => setHeight(e.target.value)}
-                      placeholder={heightUnit === 'cm' ? '175' : "5'9"}
-                      className="flex-1"
-                    />
-                    <Select
-                      value={heightUnit}
-                      onValueChange={(v) => setHeightUnit(v as 'cm' | 'ft')}
-                    >
-                      <SelectTrigger className="w-20">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cm">cm</SelectItem>
-                        <SelectItem value="ft">ft</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="shoeSize">Shoe Size</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="shoeSize"
-                      type="text"
-                      value={shoeSize}
-                      onChange={(e) => setShoeSize(e.target.value)}
-                      placeholder="10"
-                      className="flex-1"
-                    />
-                    <Select
-                      value={shoeSizeUnit}
-                      onValueChange={(v) => setShoeSizeUnit(v as 'EU' | 'US' | 'UK')}
-                    >
-                      <SelectTrigger className="w-20">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="US">US</SelectItem>
-                        <SelectItem value="EU">EU</SelectItem>
-                        <SelectItem value="UK">UK</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              <Button onClick={handleSaveSizes} disabled={isSavingSize} className="w-full">
-                {isSavingSize ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                Save Size Preferences
-              </Button>
-            </motion.div>
-          </TabsContent>
-
-          {/* Friends Tab */}
-          <TabsContent value="friends" className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-6"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-medium text-foreground">Friends</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Connect with friends to see their shared looks
-                  </p>
-                </div>
-                <AddFriendButton />
-              </div>
-              <FriendsList />
             </motion.div>
           </TabsContent>
 
@@ -541,6 +682,38 @@ export default function ProfilePage() {
                   </div>
                 )}
               </div>
+
+              {/* Friends Section */}
+              <Dialog>
+                <DialogTrigger asChild>
+                  <div className="p-4 bg-surface rounded-xl border border-border hover:bg-surface-alt transition-colors cursor-pointer">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Users className="w-5 h-5 text-primary" />
+                        <div>
+                          <h3 className="font-medium text-foreground">Friends</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Manage your connections
+                          </p>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                  </div>
+                </DialogTrigger>
+                <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center justify-between">
+                      Friends
+                      <AddFriendButton />
+                    </DialogTitle>
+                    <DialogDescription>
+                      Connect with friends to see their shared looks
+                    </DialogDescription>
+                  </DialogHeader>
+                  <FriendsList />
+                </DialogContent>
+              </Dialog>
 
               {/* Subscription */}
               <div className="p-4 bg-surface rounded-xl border border-border">

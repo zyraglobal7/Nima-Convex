@@ -2,6 +2,7 @@ import { mutation, internalMutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id, Doc } from '../_generated/dataModel';
 import { isValidUsername, getStartOfDayUTC } from '../types';
+import { sanitizeName, sanitizeUsername, sanitizePhone, sanitizeText, sanitizeTags } from '../lib/sanitize';
 
 /**
  * Create a new user from WorkOS webhook
@@ -189,9 +190,9 @@ export const updateProfile = mutation({
       updatedAt: Date.now(),
     };
 
-    // Validate and set username
+    // Validate and set username with sanitization
     if (args.username !== undefined) {
-      const username = args.username.toLowerCase().trim();
+      const username = sanitizeUsername(args.username);
       
       if (!isValidUsername(username)) {
         throw new Error('Invalid username format');
@@ -210,9 +211,10 @@ export const updateProfile = mutation({
       updates.username = username;
     }
 
-    if (args.firstName !== undefined) updates.firstName = args.firstName;
-    if (args.lastName !== undefined) updates.lastName = args.lastName;
-    if (args.phoneNumber !== undefined) updates.phoneNumber = args.phoneNumber;
+    // Sanitize name fields
+    if (args.firstName !== undefined) updates.firstName = sanitizeName(args.firstName);
+    if (args.lastName !== undefined) updates.lastName = sanitizeName(args.lastName);
+    if (args.phoneNumber !== undefined) updates.phoneNumber = sanitizePhone(args.phoneNumber);
 
     await ctx.db.patch(user._id, updates);
     return user._id;
@@ -270,18 +272,19 @@ export const completeOnboarding = mutation({
       throw new Error('User not found');
     }
 
+    // Sanitize text inputs
     await ctx.db.patch(user._id, {
       gender: args.gender,
-      age: args.age,
-      stylePreferences: args.stylePreferences,
-      shirtSize: args.shirtSize,
-      waistSize: args.waistSize,
-      height: args.height,
+      age: sanitizeText(args.age, 10),
+      stylePreferences: sanitizeTags(args.stylePreferences),
+      shirtSize: sanitizeText(args.shirtSize, 10),
+      waistSize: sanitizeText(args.waistSize, 10),
+      height: sanitizeText(args.height, 10),
       heightUnit: args.heightUnit,
-      shoeSize: args.shoeSize,
+      shoeSize: sanitizeText(args.shoeSize, 10),
       shoeSizeUnit: args.shoeSizeUnit,
-      country: args.country,
-      currency: args.currency,
+      country: sanitizeText(args.country, 100),
+      currency: sanitizeText(args.currency, 10),
       budgetRange: args.budgetRange,
       onboardingCompleted: true,
       updatedAt: Date.now(),
@@ -319,7 +322,7 @@ export const updateStylePreferences = mutation({
     }
 
     await ctx.db.patch(user._id, {
-      stylePreferences: args.stylePreferences,
+      stylePreferences: sanitizeTags(args.stylePreferences),
       updatedAt: Date.now(),
     });
 
@@ -557,9 +560,6 @@ export const getOrCreateUser = mutation({
     if (!identity) {
       return null;
     }
-    console.log('[USER_CREATION] Identity object:', JSON.stringify(identity, null, 2));
-    console.log('[USER_CREATION] Identity keys:', Object.keys(identity));
-    console.log('[USER_CREATION] Client-provided args:', JSON.stringify(args, null, 2));
 
     const workosUserId = identity.subject;
     
@@ -615,8 +615,6 @@ export const getOrCreateUser = mutation({
       firstName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1).toLowerCase();
     }
 
-    console.log('[USER_CREATION] Final values - Email:', email, 'FirstName:', firstName, 'LastName:', lastName, 'Picture:', profileImageUrl);
-
     // Check if user exists
     let user = await ctx.db
       .query('users')
@@ -654,7 +652,6 @@ export const getOrCreateUser = mutation({
       if (Object.keys(updates).length > 0) {
         updates.updatedAt = Date.now();
         await ctx.db.patch(user._id, updates);
-        console.log('[USER_CREATION] Updated existing user with profile data:', Object.keys(updates));
         user = await ctx.db.get(user._id);
       }
 
@@ -680,7 +677,6 @@ export const getOrCreateUser = mutation({
       updatedAt: now,
     });
 
-    console.log('[USER_CREATION] Created new user:', userId, 'with firstName:', firstName, 'lastName:', lastName, 'email:', email);
     user = await ctx.db.get(userId);
     return user;
   },

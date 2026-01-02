@@ -1,9 +1,5 @@
 import { streamText, convertToModelMessages } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
-// #region agent log
-import * as fs from 'fs';
-const DEBUG_LOG_PATH = '/home/clint/WORK/Nima-Convex/.cursor/debug.log';
-// #endregion
 
 // Create OpenAI provider - with Vercel AI Gateway if available, otherwise direct OpenAI
 const getOpenAIProvider = () => {
@@ -193,27 +189,9 @@ When a user mentions wanting to mix items from previous looks or modify an exist
 `;
 
 export async function POST(req: Request) {
-  console.log('[API /api/chat] POST request received');
-  
-  // #region agent log
-  try { fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({location:'route.ts:POST',message:'API called',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})+'\n'); } catch {}
-  // #endregion
-  
   try {
     const body = await req.json();
     const { messages, userData } = body;
-    
-    console.log('[API /api/chat] Request body:', {
-      messageCount: messages?.length,
-      hasUserData: !!userData,
-      lastMessage: messages?.[messages.length - 1]?.content?.slice(0, 50),
-      // Log full message structure
-      messagesStructure: messages?.map((m: Record<string, unknown>) => ({ role: m.role, hasContent: !!m.content, hasParts: !!(m as {parts?: unknown}).parts, keys: Object.keys(m) })),
-    });
-    
-    // #region agent log
-    try { fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({location:'route.ts:body',message:'Request body parsed',data:{messageCount:messages?.length,hasUserData:!!userData,fullMessages:messages},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})+'\n'); } catch {}
-    // #endregion
 
     // Build the full system prompt with user context
     const userContext = buildUserContext(userData);
@@ -221,14 +199,11 @@ export async function POST(req: Request) {
 
     // Get the appropriate OpenAI provider
     const openai = getOpenAIProvider();
-    console.log('[API /api/chat] OpenAI provider created');
 
     // Convert UI messages to model messages (AI SDK v5 requirement)
     const modelMessages = convertToModelMessages(messages);
-    console.log('[API /api/chat] Converted to model messages:', modelMessages.length);
 
     // Stream the response for faster perceived response time
-    console.log('[API /api/chat] Calling streamText...');
     const result = await streamText({
       model: openai('gpt-4o-mini'),
       system: systemPrompt,
@@ -237,19 +212,10 @@ export async function POST(req: Request) {
       maxOutputTokens: 500,
     });
 
-    console.log('[API /api/chat] streamText returned, sending response');
-    // #region agent log
-    try { fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({location:'route.ts:success',message:'streamText success',data:{hasResult:!!result},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})+'\n'); } catch {}
-    // #endregion
     // Use toUIMessageStreamResponse for AI SDK v5 useChat compatibility (populates parts array)
     return result.toUIMessageStreamResponse();
   } catch (error) {
-    console.error('[API /api/chat] Error:', error);
-    // #region agent log
-    try { fs.appendFileSync(DEBUG_LOG_PATH, JSON.stringify({location:'route.ts:error',message:'API error',data:{error:String(error)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})+'\n'); } catch {}
-    // #endregion
-    
-    // Return a more descriptive error
+    // Return a more descriptive error - only include details in development
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
       JSON.stringify({ 

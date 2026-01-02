@@ -57,6 +57,9 @@ export default defineSchema({
     isActive: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
+
+    // Role-based access control
+    role: v.optional(v.union(v.literal('user'), v.literal('admin'))),
   })
     .index('by_workos_user_id', ['workosUserId'])
     .index('by_email', ['email'])

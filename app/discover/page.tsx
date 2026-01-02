@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { NimaChatBubble, LookGrid, ApparelGrid, CreateLookSheet } from '@/components/discover';
+import { NimaChatBubble, ApparelGrid, CreateLookSheet, LookCardWithCreator, useFloatingLoader } from '@/components/discover';
+import { DateGroupHeader } from '@/components/discover/DateGroupHeader';
 import type { ApparelItem } from '@/components/discover/ApparelItemCard';
 import { discoverWelcomeMessage } from '@/lib/mock-data';
 import { Settings, Sparkles, User } from 'lucide-react';
@@ -13,99 +14,35 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { Look, Product } from '@/lib/mock-data';
+import { trackDiscoverPageViewed } from '@/lib/analytics';
 
 type ViewState = 'loading' | 'generating' | 'ready';
 
-// Extended Look type with generation status
-interface LookWithStatus extends Look {
+// Extended Look type with creator info for Explore tab
+interface LookWithCreator extends Look {
   isGenerating: boolean;
   generationFailed: boolean;
+  creator?: {
+    _id: Id<'users'>;
+    firstName?: string;
+    username?: string;
+    profileImageUrl?: string;
+  } | null;
+  isFriend?: boolean;
+  hasPendingRequest?: boolean;
 }
 
-// Transform Convex look data to the Look format expected by components
-function transformConvexLook(
-  lookData: {
-    look: {
-      _id: string;
-      _creationTime: number;
-      totalPrice: number;
-      currency: string;
-      styleTags: string[];
-      occasion?: string;
-      nimaComment?: string;
-    };
-    lookImage: {
-      imageUrl: string | null;
-      status?: 'pending' | 'processing' | 'completed' | 'failed';
-    } | null;
-    items: Array<{
-      item: {
-        _id: string;
-        name: string;
-        brand?: string;
-        category: string;
-        price: number;
-        currency: string;
-        colors: string[];
-      };
-      primaryImageUrl: string | null;
-    }>;
-  },
-  index: number
-): LookWithStatus {
-  // Determine height based on index for masonry effect
-  const heights: Array<'short' | 'medium' | 'tall' | 'extra-tall'> = ['medium', 'tall', 'short', 'extra-tall'];
-  const height = heights[index % heights.length];
-
-  // Transform items to products - no placeholder images
-  const products: Product[] = lookData.items.map((itemData) => ({
-    id: itemData.item._id,
-    name: itemData.item.name,
-    brand: itemData.item.brand || 'Unknown',
-    category: itemData.item.category as Product['category'],
-    price: itemData.item.price,
-    currency: itemData.item.currency,
-    imageUrl: itemData.primaryImageUrl || '', // No placeholder
-    storeUrl: '#',
-    storeName: itemData.item.brand || 'Store',
-    color: itemData.item.colors[0] || 'Mixed',
-  }));
-
-  // Use the generated look image - no placeholder, track status
-  const imageUrl = lookData.lookImage?.imageUrl || '';
-  const isGenerating = lookData.lookImage?.status === 'pending' || lookData.lookImage?.status === 'processing';
-  const generationFailed = lookData.lookImage?.status === 'failed';
-
-
-  return {
-    id: lookData.look._id,
-    imageUrl,
-    products,
-    totalPrice: lookData.look.totalPrice,
-    currency: lookData.look.currency,
-    styleTags: lookData.look.styleTags,
-    occasion: lookData.look.occasion || 'Everyday',
-    nimaNote: lookData.look.nimaComment || "I curated this look just for you! The pieces work beautifully together.",
-    createdAt: new Date(lookData.look._creationTime),
-    height,
-    isLiked: false,
-    isDisliked: false,
-    isGenerating,
-    generationFailed,
-  };
-}
-
-type FilterType = 'my_looks' | 'explore' | 'friends' | 'apparel';
+type FilterType = 'explore' | 'apparel';
 
 export default function DiscoverPage() {
-  const [viewState, setViewState] = useState<ViewState>('loading');
+  const [viewState, setViewState] = useState<ViewState>('ready');
   const [showWelcome, setShowWelcome] = useState(true);
   const [workflowStarted, setWorkflowStarted] = useState(false);
-  const [looks, setLooks] = useState<LookWithStatus[]>([]);
+  const [exploreLooks, setExploreLooks] = useState<LookWithCreator[]>([]);
+  const [activeFilter, setActiveFilter] = useState<FilterType>('explore');
 
-  const [isGeneratingMore, setIsGeneratingMore] = useState(false);
-  const [generationError, setGenerationError] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<FilterType>('my_looks');
+  // Floating loader for non-blocking generation progress
+  const floatingLoader = useFloatingLoader();
 
   // Selection mode for Create a Look
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -122,55 +59,40 @@ export default function DiscoverPage() {
     activeFilter === 'apparel' ? { limit: 50 } : 'skip'
   );
 
-  const userGeneratedLooks = useQuery(
-    api.looks.queries.getUserGeneratedLooks,
-    activeFilter === 'my_looks' ? { limit: 50 } : 'skip'
-  );
+  // Explore tab now includes both public looks and friends' looks with friend status
   const publicLooks = useQuery(
     api.looks.queries.getPublicLooks,
     activeFilter === 'explore' ? { limit: 50 } : 'skip'
   );
-  const friendsLooks = useQuery(
-    api.looks.queries.getFriendsLooks,
-    activeFilter === 'friends' ? { limit: 50 } : 'skip'
-  );
 
   const startWorkflow = useMutation(api.workflows.index.startOnboardingWorkflow);
-  const generateMoreLooks = useMutation(api.workflows.index.startGenerateMoreLooks);
 
-  // Handle "Generate more looks" button click
-  const handleGenerateMore = async () => {
-    if (isGeneratingMore) return;
-    
-    setIsGeneratingMore(true);
-    setGenerationError(null);
-    try {
-      const result = await generateMoreLooks();
-      if (result.success) {
-        console.log('[DISCOVER] Generate more workflow started:', result.workflowId);
-      } else {
-        console.error('[DISCOVER] Failed to generate more looks:', result.error);
-        setGenerationError(result.error || 'Failed to generate more looks');
-      }
-    } catch (error) {
-      console.error('[DISCOVER] Error generating more looks:', error);
-      setGenerationError('Something went wrong. Please try again.');
-    } finally {
-      setIsGeneratingMore(false);
+  // Track discover page view
+  const hasTrackedPageView = useRef(false);
+  useEffect(() => {
+    if (!hasTrackedPageView.current) {
+      hasTrackedPageView.current = true;
+      trackDiscoverPageViewed({
+        has_workflow: shouldStartWorkflow?.shouldStart || false,
+        is_authenticated: true, // This page requires authentication
+      });
     }
-  };
+  }, [shouldStartWorkflow]);
 
-  // Start the workflow if needed
+  // Start the workflow if needed - use floating loader instead of blocking view
   useEffect(() => {
     if (shouldStartWorkflow?.shouldStart && !workflowStarted) {
       console.log('[DISCOVER] Starting onboarding workflow...');
       setWorkflowStarted(true);
-      setViewState('generating');
+      // Don't block the view - go straight to ready and show floating loader
+      setViewState('ready');
       
       startWorkflow()
         .then((result) => {
           if (result.success) {
             console.log('[DISCOVER] Workflow started:', result.workflowId);
+            // Show the floating loader in workflow mode - it will watch the workflow status
+            floatingLoader.startWorkflowLoading();
           } else {
             console.error('[DISCOVER] Failed to start workflow:', result.error);
           }
@@ -179,79 +101,80 @@ export default function DiscoverPage() {
           console.error('[DISCOVER] Error starting workflow:', error);
         });
     }
-  }, [shouldStartWorkflow, workflowStarted, startWorkflow]);
+  }, [shouldStartWorkflow, workflowStarted, startWorkflow, floatingLoader]);
 
-  // Check workflow status and transition to ready when complete
+  // Check workflow status and update floating loader when complete
   useEffect(() => {
     if (!workflowStatus) return;
 
     console.log('[DISCOVER] Workflow status:', workflowStatus);
 
     if (workflowStatus.isComplete && workflowStatus.completedCount > 0) {
-      console.log('[DISCOVER] Workflow complete! Transitioning to ready...');
+      console.log('[DISCOVER] Workflow complete!');
       setViewState('ready');
       // Hide welcome bubble after 8 seconds
       setTimeout(() => setShowWelcome(false), 8000);
+      // The floating loader will auto-update based on the workflow status
     } else if (workflowStatus.hasLooks && (workflowStatus.pendingCount > 0 || workflowStatus.processingCount > 0)) {
-      // Still generating
-      setViewState('generating');
+      // Still generating - view stays at ready, floating loader shows progress
+      if (viewState !== 'ready') {
+        setViewState('ready');
+      }
     } else if (workflowStatus.hasLooks && workflowStatus.completedCount > 0) {
       // Has some completed looks, can show them
       setViewState('ready');
       setTimeout(() => setShowWelcome(false), 8000);
     }
-  }, [workflowStatus]);
+  }, [workflowStatus, viewState]);
 
-  // Transform looks data when available based on active filter
+  // Transform explore looks data (includes creator info and friend status)
   useEffect(() => {
-    let looksData: Parameters<typeof transformConvexLook>[0][] = [];
+    if (activeFilter === 'explore' && publicLooks) {
+      const heights: Array<'short' | 'medium' | 'tall' | 'extra-tall'> = ['medium', 'tall', 'short', 'extra-tall'];
+      
+      const transformedExploreLooks: LookWithCreator[] = publicLooks.looks.map((lookData, index) => {
+        const products: Product[] = lookData.items.map((itemData) => ({
+          id: itemData.item._id,
+          name: itemData.item.name,
+          brand: itemData.item.brand || 'Unknown',
+          category: itemData.item.category as Product['category'],
+          price: itemData.item.price,
+          currency: itemData.item.currency,
+          imageUrl: itemData.primaryImageUrl || '',
+          storeUrl: '#',
+          storeName: itemData.item.brand || 'Store',
+          color: itemData.item.colors[0] || 'Mixed',
+        }));
 
-    if (activeFilter === 'my_looks' && userGeneratedLooks) {
-      looksData = userGeneratedLooks as Parameters<typeof transformConvexLook>[0][];
-    } else if (activeFilter === 'explore' && publicLooks) {
-      looksData = publicLooks.looks.map((look) => ({
-        look: look.look,
-        lookImage: look.lookImage
-          ? {
-              _id: look.lookImage._id,
-              storageId: look.lookImage.storageId,
-              imageUrl: look.lookImage.imageUrl,
-              status: look.lookImage.status,
-            }
-          : null,
-        items: look.items.map((item) => ({
-          item: item.item,
-          primaryImageUrl: item.primaryImageUrl,
-        })),
-      })) as Parameters<typeof transformConvexLook>[0][];
-    } else if (activeFilter === 'friends' && friendsLooks) {
-      looksData = friendsLooks.map((look) => ({
-        look: look.look,
-        lookImage: look.lookImage
-          ? {
-              _id: look.lookImage._id,
-              storageId: look.lookImage.storageId,
-              imageUrl: look.lookImage.imageUrl,
-              status: look.lookImage.status,
-            }
-          : null,
-        items: look.items.map((item) => ({
-          item: item.item,
-          primaryImageUrl: item.primaryImageUrl,
-        })),
-      })) as Parameters<typeof transformConvexLook>[0][];
-    }
+        const imageUrl = lookData.lookImage?.imageUrl || '';
+        const isGenerating = lookData.lookImage?.status === 'pending' || lookData.lookImage?.status === 'processing';
+        const generationFailed = lookData.lookImage?.status === 'failed';
 
-    if (looksData.length > 0) {
-      const transformedLooks = looksData.map((lookData, index) => 
-        transformConvexLook(lookData, index)
-      );
-      setLooks(transformedLooks);
-    } else {
-      // Clear looks if no data
-      setLooks([]);
+        return {
+          id: lookData.look._id,
+          imageUrl,
+          products,
+          totalPrice: lookData.look.totalPrice,
+          currency: lookData.look.currency,
+          styleTags: lookData.look.styleTags,
+          occasion: lookData.look.occasion || 'Everyday',
+          nimaNote: lookData.look.nimaComment || "A beautifully curated look!",
+          createdAt: new Date(lookData.look._creationTime),
+          height: heights[index % heights.length],
+          isLiked: false,
+          isDisliked: false,
+          isGenerating,
+          generationFailed,
+          creator: lookData.creator,
+          isFriend: lookData.isFriend,
+          hasPendingRequest: lookData.hasPendingRequest,
+        };
+      });
+      setExploreLooks(transformedExploreLooks);
+    } else if (activeFilter === 'explore') {
+      setExploreLooks([]);
     }
-  }, [userGeneratedLooks, publicLooks, friendsLooks, activeFilter]);
+  }, [publicLooks, activeFilter]);
 
   // Transform items data for Apparel grid
   const apparelItems: ApparelItem[] = (itemsData?.items || []).map((item) => ({
@@ -284,34 +207,23 @@ export default function DiscoverPage() {
   // Get selected items for CreateLookSheet
   const selectedItemsArray = apparelItems.filter((item) => selectedItems.has(item._id));
 
-  // Handle loading completion for users who don't need workflow
+  // Handle welcome message dismissal for users who already have looks
   useEffect(() => {
     if (shouldStartWorkflow && !shouldStartWorkflow.shouldStart) {
-      if (shouldStartWorkflow.reason === 'Looks already generated' && userGeneratedLooks && userGeneratedLooks.length > 0) {
-        // User already has looks, show them
-        setViewState('ready');
+      // Hide welcome after 8 seconds if user has looks
+      if (shouldStartWorkflow.reason === 'Looks already generated' || 
+          shouldStartWorkflow.completedCount > 0) {
         setTimeout(() => setShowWelcome(false), 8000);
-      } else if (shouldStartWorkflow.reason === 'No photos uploaded') {
-        // User needs to upload photos first - could redirect to onboarding
-        console.log('[DISCOVER] User needs to upload photos');
-        // For now, still show ready state with empty looks
-        setViewState('ready');
       }
     }
-  }, [shouldStartWorkflow, userGeneratedLooks]);
+  }, [shouldStartWorkflow]);
 
-  // Loading screen - shown during initial load or generation
-  if (viewState === 'loading' || viewState === 'generating') {
-    const generationProgress = workflowStatus ? {
-      pending: workflowStatus.pendingCount,
-      processing: workflowStatus.processingCount,
-      completed: workflowStatus.completedCount,
-      total: workflowStatus.totalCount,
-    } : null;
-
+  // Loading screen - only shown during initial load (not during generation)
+  // Generation progress is now shown in the floating loader
+  if (viewState === 'loading') {
     return (
       <GeneratingScreen 
-        generationProgress={generationProgress}
+        generationProgress={null}
         viewState={viewState}
       />
     );
@@ -395,12 +307,17 @@ export default function DiscoverPage() {
           className="mb-6"
         >
           <h2 className="text-2xl md:text-3xl font-serif text-foreground">
-            Your curated looks ✨
+            {activeFilter === 'explore' 
+              ? 'Discover new styles ✨'
+              : 'Shop the collection ✨'
+            }
           </h2>
           <p className="text-muted-foreground mt-1">
-            {looks.length > 0 
-              ? `${looks.length} looks created just for you`
-              : 'Fresh looks curated just for you'
+            {activeFilter === 'explore'
+              ? exploreLooks.length > 0 
+                ? `${exploreLooks.length} looks from the community`
+                : 'Explore looks shared by others'
+              : 'Browse apparel items'
             }
           </p>
         </motion.div>
@@ -413,9 +330,7 @@ export default function DiscoverPage() {
           className="mb-8 flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
         >
           {[
-            { id: 'my_looks' as FilterType, label: 'My Looks' },
-            { id: 'explore' as FilterType, label: 'Explore Looks' },
-            { id: 'friends' as FilterType, label: 'Friends' },
+            { id: 'explore' as FilterType, label: 'Explore' },
             { id: 'apparel' as FilterType, label: 'Apparel' },
           ].map((filter) => (
             <button
@@ -488,120 +403,29 @@ export default function DiscoverPage() {
               selectedItems={selectedItems}
               onItemSelect={handleItemSelect}
             />
-          ) : looks.length > 0 ? (
-            <LookGrid looks={looks} showDateGroups={true} />
           ) : (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-alt flex items-center justify-center">
-                <Sparkles className="w-8 h-8 text-muted-foreground" />
+            // Explore grid with creator info
+            exploreLooks.length > 0 ? (
+              <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
+                {exploreLooks.map((look, index) => (
+                  <LookCardWithCreator key={look.id} look={look} index={index} />
+                ))}
               </div>
-              <h3 className="text-lg font-medium text-foreground mb-2">
-                {activeFilter === 'my_looks' 
-                  ? 'No looks yet'
-                  : activeFilter === 'explore'
-                  ? 'No public looks yet'
-                  : 'No friends\' looks yet'
-                }
-              </h3>
-              <p className="text-muted-foreground max-w-md mx-auto">
-                {activeFilter === 'my_looks' 
-                  ? 'Complete your onboarding and upload photos to get personalized looks curated by Nima.'
-                  : activeFilter === 'explore'
-                  ? 'Looks shared publicly by other users will appear here. Share your own looks to help others discover new styles!'
-                  : 'Looks shared by your friends will appear here. Add friends to see their shared looks!'
-                }
-              </p>
-              {activeFilter === 'my_looks' && (
-                <Link 
-                  href="/onboarding" 
-                  className="inline-flex mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
-                >
-                  Complete Onboarding
-                </Link>
-              )}
-            </div>
+            ) : (
+              <div className="text-center py-16">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-alt flex items-center justify-center">
+                  <Sparkles className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-medium text-foreground mb-2">
+                  No looks to explore yet
+                </h3>
+                <p className="text-muted-foreground max-w-md mx-auto">
+                  Looks shared by other users and friends will appear here. Share your own looks to help others discover new styles!
+                </p>
+              </div>
+            )
           )}
         </motion.div>
-
-        {/* Load more / Generate more looks */}
-        {looks.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 1 }}
-            className="py-12"
-          >
-            {/* Show generating indicator when workflow is active */}
-            <AnimatePresence mode="wait">
-              {workflowStatus && (workflowStatus.pendingCount > 0 || workflowStatus.processingCount > 0) ? (
-                <GeneratingMoreIndicator 
-                  key="generating"
-                  workflowStatus={workflowStatus} 
-                />
-              ) : generationError ? (
-                <motion.div
-                  key="error"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="text-center max-w-md mx-auto"
-                >
-                  {/* Error message card */}
-                  <div className="bg-surface/80 backdrop-blur-md border border-border/50 rounded-2xl px-5 py-4 mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                        <Sparkles className="w-5 h-5 text-primary-foreground" />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-xs text-muted-foreground mb-0.5">Nima</p>
-                        <p className="text-sm text-foreground">{generationError}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setGenerationError(null)}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Dismiss
-                  </button>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="idle"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="text-center"
-                >
-                  <p className="text-muted-foreground text-sm mb-4">
-                    {isGeneratingMore 
-                      ? 'Starting generation...' 
-                      : "You've seen all your looks for now"}
-                  </p>
-                  <button 
-                    onClick={handleGenerateMore}
-                    disabled={isGeneratingMore}
-                    className={`
-                      px-6 py-3 rounded-full text-sm font-medium transition-all duration-200
-                      ${isGeneratingMore 
-                        ? 'bg-primary/50 text-primary-foreground cursor-not-allowed' 
-                        : 'bg-surface hover:bg-surface-alt border border-border/50 hover:border-primary/30'}
-                    `}
-                  >
-                    {isGeneratingMore ? (
-                      <span className="flex items-center gap-2">
-                        <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                        Starting...
-                      </span>
-                    ) : (
-                      'Generate more looks'
-                    )}
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        )}
       </main>
 
       {/* Floating "Try On Selected" button */}
@@ -938,148 +762,5 @@ function GeneratingScreen({
         </div>
       </div>
     </div>
-  );
-}
-
-// Inline indicator for "Generate more looks" progress
-function GeneratingMoreIndicator({ 
-  workflowStatus,
-}: { 
-  workflowStatus: { 
-    pendingCount: number; 
-    processingCount: number; 
-    completedCount: number; 
-    totalCount: number;
-  };
-}) {
-  const [messageIndex, setMessageIndex] = useState(0);
-  const [key, setKey] = useState(0);
-
-  // Messages that cycle during generation
-  const loadingMessages = [
-    "Curating new looks for you...",
-    "Finding fresh outfit combinations...",
-    "Matching pieces to your style...",
-    "Generating try-on images...",
-    "Almost ready, gorgeous...",
-  ];
-
-  // Cycle through messages
-  useEffect(() => {
-    const messageInterval = setInterval(() => {
-      setMessageIndex((prev) => (prev + 1) % loadingMessages.length);
-      setKey((prev) => prev + 1);
-    }, 3500);
-
-    return () => clearInterval(messageInterval);
-  }, [loadingMessages.length]);
-
-  // Calculate how many new looks are being generated
-  const newLooksCount = workflowStatus.pendingCount + workflowStatus.processingCount;
-  const totalNewLooks = newLooksCount > 0 ? newLooksCount : 3; // Assume 3 if we don't know yet
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className="py-8"
-    >
-      <div className="max-w-md mx-auto">
-        {/* Chat bubble with status */}
-        <div className="relative mb-6">
-          <div className="bg-surface/90 backdrop-blur-md border border-border/50 rounded-2xl px-5 py-4 shadow-lg">
-            <div className="flex items-center gap-4">
-              {/* Avatar with pulse animation */}
-              <div className="relative flex-shrink-0">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-primary-foreground" />
-                </div>
-                {/* Pulse ring */}
-                <span className="absolute inset-0 rounded-full animate-ping bg-primary/20" />
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-muted-foreground mb-1">Nima</p>
-                <AnimatePresence mode="wait">
-                  <motion.p
-                    key={key}
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    transition={{ duration: 0.3 }}
-                    className="text-foreground font-medium text-sm"
-                  >
-                    {loadingMessages[messageIndex]}
-                  </motion.p>
-                </AnimatePresence>
-              </div>
-            </div>
-          </div>
-          {/* Bubble tail */}
-          <div className="absolute -bottom-2 left-8 w-4 h-4 bg-surface/90 border-b border-r border-border/50 transform rotate-45" />
-        </div>
-
-        {/* Progress info */}
-        <div className="text-center mb-4">
-          <p className="text-sm text-muted-foreground">
-            {workflowStatus.processingCount > 0 
-              ? `Generating image ${workflowStatus.completedCount + 1} of ${workflowStatus.totalCount}...`
-              : workflowStatus.pendingCount > 0
-                ? `Preparing ${workflowStatus.pendingCount} new look${workflowStatus.pendingCount > 1 ? 's' : ''}...`
-                : 'Starting generation...'
-            }
-          </p>
-        </div>
-
-        {/* Mini look cards showing progress */}
-        <div className="flex justify-center gap-2">
-          {[...Array(totalNewLooks)].map((_, i) => {
-            // First card shows processing state, others show pending
-            const isProcessing = i === 0 && workflowStatus.processingCount > 0;
-            
-            return (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: i * 0.1 }}
-                className={`w-12 h-16 rounded-lg overflow-hidden border ${
-                  isProcessing 
-                    ? 'bg-secondary/20 border-secondary/50' 
-                    : 'bg-surface-alt border-border/50'
-                }`}
-              >
-                {isProcessing ? (
-                  <div className="w-full h-full animate-pulse bg-gradient-to-b from-secondary/30 to-secondary/10 flex items-center justify-center">
-                    <span className="w-3 h-3 border-2 border-secondary/30 border-t-secondary rounded-full animate-spin" />
-                  </div>
-                ) : (
-                  <div className="w-full h-full animate-shimmer" />
-                )}
-              </motion.div>
-            );
-          })}
-        </div>
-
-        {/* Subtle progress bar */}
-        <div className="mt-4 px-8">
-          <div className="h-1 bg-surface-alt rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-gradient-to-r from-primary to-secondary rounded-full"
-              initial={{ width: '5%' }}
-              animate={{ 
-                width: workflowStatus.processingCount > 0 
-                  ? '60%' 
-                  : workflowStatus.pendingCount > 0 
-                    ? '30%' 
-                    : '10%' 
-              }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
-            />
-          </div>
-        </div>
-      </div>
-    </motion.div>
   );
 }

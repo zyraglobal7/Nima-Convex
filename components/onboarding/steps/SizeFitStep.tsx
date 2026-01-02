@@ -6,6 +6,7 @@ import { Slider } from '@/components/ui/slider';
 import { StepProps, SIZE_OPTIONS, ShoeSizeUnit, convertShoeSize } from '../types';
 import { ArrowLeft, MessageCircle, Ruler, Footprints, Shirt } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { trackStepCompleted, trackBackClicked, ONBOARDING_STEPS } from '@/lib/analytics';
 
 // Size slider configurations
 const SHIRT_SIZES = SIZE_OPTIONS.shirt;
@@ -130,7 +131,10 @@ export function SizeFitStep({ formData, updateFormData, onNext, onBack }: StepPr
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-4 mb-6">
             <button
-              onClick={onBack}
+              onClick={() => {
+                trackBackClicked(ONBOARDING_STEPS.SIZE_FIT);
+                onBack?.();
+              }}
               className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors duration-200"
               aria-label="Go back"
             >
@@ -394,7 +398,17 @@ export function SizeFitStep({ formData, updateFormData, onNext, onBack }: StepPr
       <div className="sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border/50 p-4">
         <div className="max-w-md mx-auto">
           <Button
-            onClick={onNext}
+            onClick={() => {
+              trackStepCompleted(ONBOARDING_STEPS.SIZE_FIT, {
+                shirt_size: formData.shirtSize,
+                waist_size: formData.waistSize,
+                height: formData.height,
+                height_unit: formData.heightUnit,
+                shoe_size: formData.shoeSize,
+                shoe_size_unit: formData.shoeSizeUnit,
+              });
+              onNext();
+            }}
             disabled={!isComplete}
             size="lg"
             className="w-full h-14 text-base font-medium tracking-wide rounded-full bg-primary hover:bg-primary-hover text-primary-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.01] hover:shadow-lg"

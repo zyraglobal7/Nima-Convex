@@ -25,6 +25,8 @@ import type * as itemTryOns_mutations from "../itemTryOns/mutations.js";
 import type * as itemTryOns_queries from "../itemTryOns/queries.js";
 import type * as items_mutations from "../items/mutations.js";
 import type * as items_queries from "../items/queries.js";
+import type * as lib_rateLimiter from "../lib/rateLimiter.js";
+import type * as lib_sanitize from "../lib/sanitize.js";
 import type * as lookbooks_mutations from "../lookbooks/mutations.js";
 import type * as lookbooks_queries from "../lookbooks/queries.js";
 import type * as looks_mutations from "../looks/mutations.js";
@@ -75,6 +77,8 @@ declare const fullApi: ApiFromModules<{
   "itemTryOns/queries": typeof itemTryOns_queries;
   "items/mutations": typeof items_mutations;
   "items/queries": typeof items_queries;
+  "lib/rateLimiter": typeof lib_rateLimiter;
+  "lib/sanitize": typeof lib_sanitize;
   "lookbooks/mutations": typeof lookbooks_mutations;
   "lookbooks/queries": typeof lookbooks_queries;
   "looks/mutations": typeof looks_mutations;

@@ -3,6 +3,8 @@ import { Cormorant_Garamond, DM_Sans, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { ConvexClientProvider } from '@/components/ConvexClientProvider';
 import { ThemeProvider } from '@/components/theme-provider';
+import { FloatingLoaderWrapper } from '@/components/FloatingLoaderWrapper';
+import { PostHogProvider } from '@/components/PostHogProvider';
 
 const cormorantGaramond = Cormorant_Garamond({
   variable: '--font-serif',
@@ -54,7 +56,11 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          <ConvexClientProvider>{children}</ConvexClientProvider>
+          <PostHogProvider>
+            <ConvexClientProvider>
+              <FloatingLoaderWrapper>{children}</FloatingLoaderWrapper>
+            </ConvexClientProvider>
+          </PostHogProvider>
         </ThemeProvider>
       </body>
     </html>

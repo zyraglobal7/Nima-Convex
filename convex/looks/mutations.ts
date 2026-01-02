@@ -742,6 +742,27 @@ export const createLookFromSelectedItems = mutation({
       };
     }
 
+    // Rate limiting: Check if user has created too many looks recently
+    const rateLimitTimestamp = Date.now();
+    const oneHour = 60 * 60 * 1000;
+    const lastHourLooks = await ctx.db
+      .query('looks')
+      .withIndex('by_creator_and_status', (q) => q.eq('creatorUserId', user._id))
+      .filter((q) => 
+        q.and(
+          q.eq(q.field('createdBy'), 'user'),
+          q.gt(q.field('createdAt'), rateLimitTimestamp - oneHour)
+        )
+      )
+      .collect();
+
+    if (lastHourLooks.length >= 10) {
+      return {
+        success: false,
+        error: 'Rate limit exceeded. You can create up to 10 looks per hour. Please try again later.',
+      };
+    }
+
     // Validate item count
     if (args.itemIds.length < 2) {
       return {
@@ -819,6 +840,77 @@ export const createLookFromSelectedItems = mutation({
       success: true,
       lookId,
       publicId,
+    };
+  },
+});
+
+/**
+ * Update look visibility (public/friends/private)
+ * Users can only update their own looks
+ */
+export const updateLookVisibility = mutation({
+  args: {
+    lookId: v.id('looks'),
+    isPublic: v.boolean(),
+    sharedWithFriends: v.boolean(),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    error: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: {
+      lookId: Id<'looks'>;
+      isPublic: boolean;
+      sharedWithFriends: boolean;
+    }
+  ): Promise<{ success: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        error: 'Not authenticated',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found',
+      };
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look) {
+      return {
+        success: false,
+        error: 'Look not found',
+      };
+    }
+
+    // Users can only update their own looks
+    if (look.creatorUserId !== user._id) {
+      return {
+        success: false,
+        error: 'You can only update your own looks',
+      };
+    }
+
+    // Update the look
+    await ctx.db.patch(args.lookId, {
+      isPublic: args.isPublic,
+      sharedWithFriends: args.sharedWithFriends,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
     };
   },
 });
