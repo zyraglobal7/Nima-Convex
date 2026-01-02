@@ -2,8 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
-import { useAuth } from '@workos-inc/authkit-nextjs/components';
 import { api } from '@/convex/_generated/api';
+
+// Type for WorkOS user object passed from component
+interface WorkOSUser {
+  email?: string | null;
+  emailVerified?: boolean;
+  firstName?: string | null;
+  lastName?: string | null;
+  profilePictureUrl?: string | null;
+}
 
 // Local storage keys
 const ONBOARDING_STORAGE_KEY = 'nima-onboarding-data';
@@ -75,14 +83,14 @@ function clearStoredOnboardingData(): void {
  * 3. If onboarding is not complete, submits the stored data
  * 4. Claims any uploaded onboarding images and links them to the user
  * 5. Clears localStorage after successful submission
+ * 
+ * @param workosUser - The WorkOS user object from useAuth(), passed from component level
+ *                     to avoid calling useAuth inside this hook (which requires AuthKitProvider)
  */
-export function useOnboardingCompletion() {
+export function useOnboardingCompletion(workosUser?: WorkOSUser | null) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
-
-  // Get the WorkOS user object which contains full profile data
-  const { user: workosUser } = useAuth();
 
   // Get current user from Convex
   const user = useQuery(api.users.queries.getCurrentUser);
