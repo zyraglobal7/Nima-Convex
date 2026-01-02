@@ -57,6 +57,9 @@ export default defineSchema({
     isActive: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
+
+    // Role-based access control
+    role: v.optional(v.union(v.literal('user'), v.literal('admin'))),
   })
     .index('by_workos_user_id', ['workosUserId'])
     .index('by_email', ['email'])
@@ -584,5 +587,42 @@ export default defineSchema({
     .index('by_recipient_and_read', ['recipientId', 'isRead'])
     .index('by_users', ['senderId', 'recipientId']) // For conversation lookup
     .index('by_recipient_and_created', ['recipientId', 'createdAt']), // For sorting conversations
+
+  // ============================================
+  // ITEM TRY-ONS (Single Item Virtual Try-On)
+  // ============================================
+
+  /**
+   * item_try_ons - AI-generated try-on images for individual items
+   * Cached images showing a user wearing a specific single item
+   */
+  item_try_ons: defineTable({
+    itemId: v.id('items'),
+    userId: v.id('users'),
+    storageId: v.optional(v.id('_storage')), // Optional until generation completes
+
+    // Source info
+    userImageId: v.id('user_images'), // Which user photo was used
+
+    // Generation details
+    status: v.union(
+      v.literal('pending'),
+      v.literal('processing'),
+      v.literal('completed'),
+      v.literal('failed')
+    ),
+    generationProvider: v.optional(v.string()), // "google-gemini", etc.
+    generationJobId: v.optional(v.string()), // External job ID
+    errorMessage: v.optional(v.string()),
+
+    // Expiry (for cache management)
+    expiresAt: v.optional(v.number()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_item_and_user', ['itemId', 'userId'])
+    .index('by_user', ['userId'])
+    .index('by_status', ['status']),
 
 });

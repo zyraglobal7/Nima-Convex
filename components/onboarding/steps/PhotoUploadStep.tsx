@@ -8,6 +8,7 @@ import { StepProps, UploadedImage } from '../types';
 import { ArrowLeft, Upload, X, Camera, Shield, Loader2, AlertCircle } from 'lucide-react';
 import type { Id } from '@/convex/_generated/dataModel';
 import Image from 'next/image';
+import { trackStepCompleted, trackBackClicked, trackPhotoUploaded, trackPhotoRemoved, ONBOARDING_STEPS } from '@/lib/analytics';
 
 // Constants for validation
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -159,6 +160,8 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
 
       // Update form data with successfully uploaded images
       if (uploadedResults.length > 0) {
+        const newTotal = formData.uploadedImages.length + uploadedResults.length;
+        trackPhotoUploaded(newTotal);
         updateFormData({
           uploadedImages: [...formData.uploadedImages, ...uploadedResults],
         });
@@ -203,6 +206,8 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
         URL.revokeObjectURL(image.previewUrl);
       }
 
+      const remainingCount = formData.uploadedImages.length - 1;
+      trackPhotoRemoved(remainingCount);
       updateFormData({
         uploadedImages: formData.uploadedImages.filter((img) => img.imageId !== imageId),
       });
@@ -262,7 +267,10 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-4 mb-6">
             <button
-              onClick={onBack}
+              onClick={() => {
+                trackBackClicked(ONBOARDING_STEPS.PHOTO_UPLOAD);
+                onBack?.();
+              }}
               className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors duration-200"
               aria-label="Go back"
               disabled={hasUploading}
@@ -469,7 +477,12 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
       <div className="sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border/50 p-4">
         <div className="max-w-md mx-auto space-y-3">
           <Button
-            onClick={onNext}
+            onClick={() => {
+              trackStepCompleted(ONBOARDING_STEPS.PHOTO_UPLOAD, {
+                photo_count: formData.uploadedImages.length,
+              });
+              onNext();
+            }}
             disabled={hasUploading || !hasPhotos}
             size="lg"
             className="w-full h-14 text-base font-medium tracking-wide rounded-full bg-primary hover:bg-primary-hover text-primary-foreground transition-all duration-300 hover:scale-[1.01] hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"

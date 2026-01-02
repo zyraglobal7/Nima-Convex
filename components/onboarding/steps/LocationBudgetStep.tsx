@@ -11,6 +11,7 @@ import {
 import { StepProps, COUNTRIES, BUDGET_OPTIONS, BudgetRange } from '../types';
 import { ArrowLeft, Check, MapPin, MessageCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { trackStepCompleted, trackBackClicked, ONBOARDING_STEPS } from '@/lib/analytics';
 
 export function LocationBudgetStep({ formData, updateFormData, onNext, onBack }: StepProps) {
   const isComplete = formData.country && formData.budgetRange;
@@ -35,7 +36,10 @@ export function LocationBudgetStep({ formData, updateFormData, onNext, onBack }:
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-4 mb-6">
             <button
-              onClick={onBack}
+              onClick={() => {
+                trackBackClicked(ONBOARDING_STEPS.LOCATION_BUDGET);
+                onBack?.();
+              }}
               className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors duration-200"
               aria-label="Go back"
             >
@@ -208,7 +212,14 @@ export function LocationBudgetStep({ formData, updateFormData, onNext, onBack }:
       <div className="sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border/50 p-4">
         <div className="max-w-md mx-auto">
           <Button
-            onClick={onNext}
+            onClick={() => {
+              trackStepCompleted(ONBOARDING_STEPS.LOCATION_BUDGET, {
+                country: formData.country,
+                currency: formData.currency,
+                budget_range: formData.budgetRange,
+              });
+              onNext();
+            }}
             disabled={!isComplete}
             size="lg"
             className="w-full h-14 text-base font-medium tracking-wide rounded-full bg-primary hover:bg-primary-hover text-primary-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.01] hover:shadow-lg"

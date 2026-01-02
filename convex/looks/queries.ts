@@ -841,8 +841,158 @@ export const getUserGeneratedLooks = query({
 });
 
 /**
+ * Get user's looks filtered by who created them (system or user)
+ * Used on the Profile page My Looks tab with "By Nima" / "By Me" filter
+ */
+export const getMyLooksByCreator = query({
+  args: {
+    createdBy: v.union(v.literal('system'), v.literal('user')),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(
+    v.object({
+      look: lookValidator,
+      lookImage: v.union(
+        v.object({
+          _id: v.id('look_images'),
+          storageId: v.optional(v.id('_storage')),
+          imageUrl: v.union(v.string(), v.null()),
+          status: v.union(
+            v.literal('pending'),
+            v.literal('processing'),
+            v.literal('completed'),
+            v.literal('failed')
+          ),
+        }),
+        v.null()
+      ),
+      items: v.array(
+        v.object({
+          item: itemValidator,
+          primaryImageUrl: v.union(v.string(), v.null()),
+        })
+      ),
+    })
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { createdBy: 'system' | 'user'; limit?: number }
+  ): Promise<
+    Array<{
+      look: Doc<'looks'>;
+      lookImage: {
+        _id: Id<'look_images'>;
+        storageId?: Id<'_storage'>;
+        imageUrl: string | null;
+        status: 'pending' | 'processing' | 'completed' | 'failed';
+      } | null;
+      items: Array<{
+        item: Doc<'items'>;
+        primaryImageUrl: string | null;
+      }>;
+    }>
+  > => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    // Get user
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return [];
+    }
+
+    const limit = Math.min(args.limit ?? 50, MAX_PAGE_SIZE);
+
+    // Get looks for this user filtered by createdBy
+    const userLooks = await ctx.db
+      .query('looks')
+      .withIndex('by_creator_and_status', (q) =>
+        q.eq('creatorUserId', user._id)
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('createdBy'), args.createdBy),
+          q.neq(q.field('generationStatus'), 'failed')
+        )
+      )
+      .order('desc')
+      .take(limit);
+
+    // Fetch look images and items for each look
+    const looksWithDetails = await Promise.all(
+      userLooks.map(async (look) => {
+        // Get look image for this user
+        const lookImage = await ctx.db
+          .query('look_images')
+          .withIndex('by_look_and_user', (q) => q.eq('lookId', look._id).eq('userId', user._id))
+          .first();
+
+        let imageUrl: string | null = null;
+        if (lookImage?.storageId) {
+          imageUrl = await ctx.storage.getUrl(lookImage.storageId);
+        }
+
+        // Get items with their images
+        const items = await Promise.all(
+          look.itemIds.map(async (itemId) => {
+            const item = await ctx.db.get(itemId);
+            if (!item || !item.isActive) {
+              return null;
+            }
+
+            // Get primary image
+            const primaryImage = await ctx.db
+              .query('item_images')
+              .withIndex('by_item_and_primary', (q) => q.eq('itemId', itemId).eq('isPrimary', true))
+              .unique();
+
+            let primaryImageUrl: string | null = null;
+            if (primaryImage) {
+              if (primaryImage.storageId) {
+                primaryImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+              } else if (primaryImage.externalUrl) {
+                primaryImageUrl = primaryImage.externalUrl;
+              }
+            }
+
+            return { item, primaryImageUrl };
+          })
+        );
+
+        // Filter out null items
+        const validItems = items.filter(
+          (i): i is { item: Doc<'items'>; primaryImageUrl: string | null } => i !== null
+        );
+
+        return {
+          look,
+          lookImage: lookImage
+            ? {
+                _id: lookImage._id,
+                storageId: lookImage.storageId,
+                imageUrl,
+                status: lookImage.status,
+              }
+            : null,
+          items: validItems,
+        };
+      })
+    );
+
+    return looksWithDetails;
+  },
+});
+
+/**
  * Get public looks from all users for the /explore page
  * Returns looks that users have chosen to share publicly
+ * Also includes isFriend status and hasPendingRequest for the add friend button
  */
 export const getPublicLooks = query({
   args: {
@@ -883,6 +1033,8 @@ export const getPublicLooks = query({
           })
         ),
         itemCount: v.number(),
+        isFriend: v.boolean(),
+        hasPendingRequest: v.boolean(),
       })
     ),
     nextCursor: v.union(v.string(), v.null()),
@@ -914,15 +1066,20 @@ export const getPublicLooks = query({
         primaryImageUrl: string | null;
       }>;
       itemCount: number;
+      isFriend: boolean;
+      hasPendingRequest: boolean;
     }>;
     nextCursor: string | null;
     hasMore: boolean;
   }> => {
     const limit = Math.min(args.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
 
-    // Get current user to exclude their own looks
+    // Get current user to exclude their own looks and check friendships
     const identity = await ctx.auth.getUserIdentity();
     let currentUserId: Id<'users'> | null = null;
+    const friendIds = new Set<string>();
+    const pendingRequestIds = new Set<string>();
+
     if (identity) {
       const user = await ctx.db
         .query('users')
@@ -930,22 +1087,76 @@ export const getPublicLooks = query({
         .unique();
       if (user) {
         currentUserId = user._id;
+
+        // Get all friends (accepted status)
+        const asRequester = await ctx.db
+          .query('friendships')
+          .withIndex('by_requester', (q) => q.eq('requesterId', user._id))
+          .filter((q) => q.eq(q.field('status'), 'accepted'))
+          .collect();
+
+        const asAddressee = await ctx.db
+          .query('friendships')
+          .withIndex('by_addressee', (q) => q.eq('addresseeId', user._id))
+          .filter((q) => q.eq(q.field('status'), 'accepted'))
+          .collect();
+
+        asRequester.forEach((f) => friendIds.add(f.addresseeId));
+        asAddressee.forEach((f) => friendIds.add(f.requesterId));
+
+        // Get pending requests sent by current user
+        const pendingRequests = await ctx.db
+          .query('friendships')
+          .withIndex('by_requester', (q) => q.eq('requesterId', user._id))
+          .filter((q) => q.eq(q.field('status'), 'pending'))
+          .collect();
+
+        pendingRequests.forEach((f) => pendingRequestIds.add(f.addresseeId));
       }
     }
 
     // Get public, active looks, excluding current user's own looks
-    const allResults = await ctx.db
+    // Also include friends' looks that are shared with friends
+    const publicLooks = await ctx.db
       .query('looks')
       .withIndex('by_public_and_active', (q) => q.eq('isPublic', true).eq('isActive', true))
       .order('desc')
       .collect();
 
-    // Filter out current user's looks
-    const filteredResults = currentUserId
-      ? allResults.filter((look) => look.creatorUserId !== currentUserId)
-      : allResults;
+    // Also get friends' looks that are shared with friends (but not necessarily public)
+    const friendsLooks: Doc<'looks'>[] = [];
+    if (currentUserId && friendIds.size > 0) {
+      for (const friendId of friendIds) {
+        const friendLooks = await ctx.db
+          .query('looks')
+          .withIndex('by_creator_and_status', (q) => q.eq('creatorUserId', friendId as Id<'users'>))
+          .filter((q) =>
+            q.and(
+              q.eq(q.field('isActive'), true),
+              q.eq(q.field('sharedWithFriends'), true),
+              q.neq(q.field('isPublic'), true) // Only get non-public ones to avoid duplicates
+            )
+          )
+          .collect();
 
-    const results = filteredResults.slice(0, limit + 1);
+        friendsLooks.push(...friendLooks);
+      }
+    }
+
+    // Combine and dedupe looks
+    const allLooksMap = new Map<string, Doc<'looks'>>();
+    [...publicLooks, ...friendsLooks].forEach((look) => {
+      if (!allLooksMap.has(look._id)) {
+        allLooksMap.set(look._id, look);
+      }
+    });
+
+    // Filter out current user's looks and sort by creation time
+    const allResults = Array.from(allLooksMap.values())
+      .filter((look) => !currentUserId || look.creatorUserId !== currentUserId)
+      .sort((a, b) => b.createdAt - a.createdAt);
+
+    const results = allResults.slice(0, limit + 1);
 
     const hasMore = results.length > limit;
     const looks = results.slice(0, limit);
@@ -966,6 +1177,9 @@ export const getPublicLooks = query({
 
         // Get creator info
         let creator = null;
+        let isFriend = false;
+        let hasPendingRequest = false;
+
         if (look.creatorUserId) {
           const user = await ctx.db.get(look.creatorUserId);
           if (user) {
@@ -982,6 +1196,10 @@ export const getPublicLooks = query({
               username: user.username,
               profileImageUrl,
             };
+
+            // Check if creator is a friend
+            isFriend = friendIds.has(look.creatorUserId);
+            hasPendingRequest = pendingRequestIds.has(look.creatorUserId);
           }
         }
 
@@ -1030,6 +1248,8 @@ export const getPublicLooks = query({
           creator,
           items: validItems,
           itemCount: validItems.length,
+          isFriend,
+          hasPendingRequest,
         };
       })
     );
@@ -1636,5 +1856,82 @@ export const getMultipleLooksWithDetails = query({
     );
 
     return results;
+  },
+});
+
+/**
+ * Get the generation status of a look
+ * Used to poll for completion after creating a look
+ */
+export const getLookGenerationStatus = query({
+  args: {
+    lookId: v.id('looks'),
+  },
+  returns: v.union(
+    v.object({
+      status: v.union(
+        v.literal('pending'),
+        v.literal('processing'),
+        v.literal('completed'),
+        v.literal('failed')
+      ),
+      errorMessage: v.optional(v.string()),
+      imageUrl: v.optional(v.string()),
+    }),
+    v.null()
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { lookId: Id<'looks'> }
+  ): Promise<{
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    errorMessage?: string;
+    imageUrl?: string;
+  } | null> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return null;
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look || !look.isActive) {
+      return null;
+    }
+
+    // Get the look image for this user
+    const lookImage = await ctx.db
+      .query('look_images')
+      .withIndex('by_look_and_user', (q) =>
+        q.eq('lookId', args.lookId).eq('userId', user._id)
+      )
+      .first();
+
+    if (lookImage) {
+      let imageUrl: string | undefined;
+      if (lookImage.storageId) {
+        imageUrl = (await ctx.storage.getUrl(lookImage.storageId)) || undefined;
+      }
+
+      return {
+        status: lookImage.status,
+        errorMessage: lookImage.errorMessage,
+        imageUrl,
+      };
+    }
+
+    // If no look image yet, use the look's generation status
+    return {
+      status: look.generationStatus || 'pending',
+      errorMessage: undefined,
+    };
   },
 });

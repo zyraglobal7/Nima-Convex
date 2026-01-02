@@ -50,6 +50,22 @@ export const sendFriendRequest = mutation({
       };
     }
 
+    // Rate limiting: max 20 friend requests per day
+    const rateLimitTimestamp = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const recentRequests = await ctx.db
+      .query('friendships')
+      .withIndex('by_requester', (q) => q.eq('requesterId', requester._id))
+      .filter((q) => q.gt(q.field('createdAt'), rateLimitTimestamp - oneDay))
+      .collect();
+
+    if (recentRequests.length >= 20) {
+      return {
+        success: false,
+        error: 'Rate limit exceeded. You can send up to 20 friend requests per day.',
+      };
+    }
+
     // Check if addressee exists
     const addressee = await ctx.db.get(args.addresseeId);
     if (!addressee) {

@@ -695,3 +695,223 @@ export const recreateLook = mutation({
   },
 });
 
+/**
+ * Create a look from user-selected items
+ * Public mutation called from the "Create a Look" flow
+ */
+export const createLookFromSelectedItems = mutation({
+  args: {
+    itemIds: v.array(v.id('items')),
+    occasion: v.optional(v.string()),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    lookId: v.optional(v.id('looks')),
+    publicId: v.optional(v.string()),
+    error: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: {
+      itemIds: Id<'items'>[];
+      occasion?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    lookId?: Id<'looks'>;
+    publicId?: string;
+    error?: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        error: 'Please sign in to create looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found.',
+      };
+    }
+
+    // Rate limiting: Check if user has created too many looks recently
+    const rateLimitTimestamp = Date.now();
+    const oneHour = 60 * 60 * 1000;
+    const lastHourLooks = await ctx.db
+      .query('looks')
+      .withIndex('by_creator_and_status', (q) => q.eq('creatorUserId', user._id))
+      .filter((q) => 
+        q.and(
+          q.eq(q.field('createdBy'), 'user'),
+          q.gt(q.field('createdAt'), rateLimitTimestamp - oneHour)
+        )
+      )
+      .collect();
+
+    if (lastHourLooks.length >= 10) {
+      return {
+        success: false,
+        error: 'Rate limit exceeded. You can create up to 10 looks per hour. Please try again later.',
+      };
+    }
+
+    // Validate item count
+    if (args.itemIds.length < 2) {
+      return {
+        success: false,
+        error: 'Please select at least 2 items.',
+      };
+    }
+
+    if (args.itemIds.length > 6) {
+      return {
+        success: false,
+        error: 'Maximum 6 items per look.',
+      };
+    }
+
+    // Validate all items exist and are active, calculate total price
+    let totalPrice = 0;
+    let currency = 'USD';
+    const styleTags: string[] = [];
+    const categories: string[] = [];
+
+    for (const itemId of args.itemIds) {
+      const item = await ctx.db.get(itemId);
+      if (!item || !item.isActive) {
+        return {
+          success: false,
+          error: 'Some items are no longer available.',
+        };
+      }
+      totalPrice += item.price;
+      currency = item.currency;
+      categories.push(item.category);
+
+      // Collect unique tags
+      for (const tag of item.tags) {
+        if (!styleTags.includes(tag)) {
+          styleTags.push(tag);
+        }
+      }
+    }
+
+    // Create the look
+    const now = Date.now();
+    const publicId = generatePublicId('look');
+
+    const lookId = await ctx.db.insert('looks', {
+      publicId,
+      itemIds: args.itemIds,
+      totalPrice,
+      currency,
+      styleTags: styleTags.slice(0, 5), // Limit to 5 tags
+      occasion: args.occasion,
+      targetGender: (user.gender === 'male' || user.gender === 'female') ? user.gender : 'unisex',
+      targetBudgetRange: user.budgetRange,
+      isActive: true,
+      isFeatured: false,
+      isPublic: false,
+      sharedWithFriends: false,
+      viewCount: 0,
+      saveCount: 0,
+      generationStatus: 'pending',
+      createdBy: 'user',
+      creatorUserId: user._id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Trigger image generation workflow
+    await ctx.scheduler.runAfter(0, internal.workflows.actions.generateLookImage, {
+      lookId,
+      userId: user._id,
+    });
+
+    return {
+      success: true,
+      lookId,
+      publicId,
+    };
+  },
+});
+
+/**
+ * Update look visibility (public/friends/private)
+ * Users can only update their own looks
+ */
+export const updateLookVisibility = mutation({
+  args: {
+    lookId: v.id('looks'),
+    isPublic: v.boolean(),
+    sharedWithFriends: v.boolean(),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    error: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: {
+      lookId: Id<'looks'>;
+      isPublic: boolean;
+      sharedWithFriends: boolean;
+    }
+  ): Promise<{ success: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        error: 'Not authenticated',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found',
+      };
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look) {
+      return {
+        success: false,
+        error: 'Look not found',
+      };
+    }
+
+    // Users can only update their own looks
+    if (look.creatorUserId !== user._id) {
+      return {
+        success: false,
+        error: 'You can only update your own looks',
+      };
+    }
+
+    // Update the look
+    await ctx.db.patch(args.lookId, {
+      isPublic: args.isPublic,
+      sharedWithFriends: args.sharedWithFriends,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+    };
+  },
+});
+

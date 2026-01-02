@@ -526,6 +526,104 @@ export const getAllItemsForAI = internalQuery({
   },
 });
 
+// ============================================
+// SINGLE ITEM QUERIES
+// ============================================
+
+/**
+ * Get an item with its primary image for try-on
+ */
+export const getItemWithPrimaryImage = internalQuery({
+  args: {
+    itemId: v.id('items'),
+  },
+  returns: v.union(
+    v.object({
+      item: v.object({
+        _id: v.id('items'),
+        name: v.string(),
+        brand: v.optional(v.string()),
+        description: v.optional(v.string()),
+        category: v.union(
+          v.literal('top'),
+          v.literal('bottom'),
+          v.literal('dress'),
+          v.literal('outfit'),
+          v.literal('outerwear'),
+          v.literal('shoes'),
+          v.literal('accessory'),
+          v.literal('bag'),
+          v.literal('jewelry')
+        ),
+        colors: v.array(v.string()),
+        price: v.number(),
+        currency: v.string(),
+      }),
+      primaryImageUrl: v.union(v.string(), v.null()),
+    }),
+    v.null()
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { itemId: Id<'items'> }
+  ): Promise<{
+    item: {
+      _id: Id<'items'>;
+      name: string;
+      brand?: string;
+      description?: string;
+      category:
+        | 'top'
+        | 'bottom'
+        | 'dress'
+        | 'outfit'
+        | 'outerwear'
+        | 'shoes'
+        | 'accessory'
+        | 'bag'
+        | 'jewelry';
+      colors: string[];
+      price: number;
+      currency: string;
+    };
+    primaryImageUrl: string | null;
+  } | null> => {
+    const item = await ctx.db.get(args.itemId);
+    if (!item || !item.isActive) {
+      return null;
+    }
+
+    // Get primary image for the item
+    const primaryImage = await ctx.db
+      .query('item_images')
+      .withIndex('by_item_and_primary', (q) => q.eq('itemId', args.itemId).eq('isPrimary', true))
+      .unique();
+
+    let primaryImageUrl: string | null = null;
+    if (primaryImage) {
+      if (primaryImage.storageId) {
+        primaryImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+      } else if (primaryImage.externalUrl) {
+        primaryImageUrl = primaryImage.externalUrl;
+      }
+    }
+
+    return {
+      item: {
+        _id: item._id,
+        name: item.name,
+        brand: item.brand,
+        description: item.description,
+        category: item.category,
+        colors: item.colors,
+        price: item.price,
+        currency: item.currency,
+      },
+      primaryImageUrl,
+    };
+  },
+});
+
 // Note: Image data is fetched in actions using ctx.storage.getUrl() and fetch()
 // The getUserPrimaryImage query returns the URL which actions can use to fetch the image
 

@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { StepProps, GENDER_OPTIONS, Gender } from '../types';
 import { ArrowLeft, Check, MessageCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { trackStepCompleted, trackBackClicked, trackGenderSelected, ONBOARDING_STEPS } from '@/lib/analytics';
 
 export function GenderAgeStep({ formData, updateFormData, onNext, onBack }: StepProps) {
   const isComplete = formData.gender !== '';
@@ -16,7 +17,10 @@ export function GenderAgeStep({ formData, updateFormData, onNext, onBack }: Step
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-4 mb-6">
             <button
-              onClick={onBack}
+              onClick={() => {
+                trackBackClicked(ONBOARDING_STEPS.GENDER_AGE);
+                onBack?.();
+              }}
               className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors duration-200"
               aria-label="Go back"
             >
@@ -72,7 +76,10 @@ export function GenderAgeStep({ formData, updateFormData, onNext, onBack }: Step
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: index * 0.1 }}
-                    onClick={() => updateFormData({ gender: option.value as Gender })}
+                    onClick={() => {
+                      trackGenderSelected(option.value);
+                      updateFormData({ gender: option.value as Gender });
+                    }}
                     className={`
                       relative p-4 rounded-xl border-2 text-left
                       transition-all duration-300 ease-out
@@ -150,7 +157,13 @@ export function GenderAgeStep({ formData, updateFormData, onNext, onBack }: Step
       <div className="sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border/50 p-4">
         <div className="max-w-md mx-auto">
           <Button
-            onClick={onNext}
+            onClick={() => {
+              trackStepCompleted(ONBOARDING_STEPS.GENDER_AGE, {
+                gender: formData.gender,
+                age: formData.age || undefined,
+              });
+              onNext();
+            }}
             disabled={!isComplete}
             size="lg"
             className="w-full h-14 text-base font-medium tracking-wide rounded-full bg-primary hover:bg-primary-hover text-primary-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.01] hover:shadow-lg"

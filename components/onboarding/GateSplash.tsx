@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle } from 'lucide-react';
+import { trackGetStarted, trackSignInLinkClicked } from '@/lib/analytics';
 
 interface GateSplashProps {
   onGetStarted: () => void;
@@ -219,7 +220,10 @@ export function GateSplash({ onGetStarted }: GateSplashProps) {
             className="w-full max-w-xs"
           >
             <Button
-              onClick={onGetStarted}
+              onClick={() => {
+                trackGetStarted();
+                onGetStarted();
+              }}
               size="lg"
               className="w-full h-14 text-base font-medium tracking-wide rounded-full bg-primary hover:bg-primary/90 text-primary-foreground transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
             >
@@ -238,6 +242,7 @@ export function GateSplash({ onGetStarted }: GateSplashProps) {
               Already a member?{' '}
               <a
                 href="/sign-in"
+                onClick={() => trackSignInLinkClicked()}
                 className="text-secondary hover:opacity-80 underline underline-offset-4 transition-colors duration-200"
               >
                 Sign in

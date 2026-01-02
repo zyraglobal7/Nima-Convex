@@ -4,6 +4,44 @@ import { internal } from './_generated/api';
 
 const http = httpRouter();
 
+// Allowed origins for CORS
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'https://www.shopnima.ai',
+  'https://shopnima.ai',
+];
+
+/**
+ * Helper to add CORS headers to responses
+ */
+function addCorsHeaders(response: Response, origin: string | null): Response {
+  const headers = new Headers(response.headers);
+  
+  // Check if origin is allowed
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    headers.set('Access-Control-Allow-Origin', origin);
+  }
+  
+  headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  headers.set('Access-Control-Max-Age', '86400');
+  
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+/**
+ * Helper to validate origin
+ */
+function isOriginAllowed(origin: string | null): boolean {
+  if (!origin) return false;
+  return ALLOWED_ORIGINS.includes(origin);
+}
+
 /**
  * WorkOS Webhook Handler
  * Receives webhook events from WorkOS and processes them
@@ -21,6 +59,8 @@ http.route({
   path: '/webhooks/workos',
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get('Origin');
+    
     // Get the raw body
     const body = await request.text();
 
@@ -39,13 +79,11 @@ http.route({
 
     try {
       payload = JSON.parse(body);
-    } catch (error) {
-      console.error('Failed to parse webhook payload:', error);
-      return new Response('Invalid JSON', { status: 400 });
+    } catch {
+      return addCorsHeaders(new Response('Invalid JSON', { status: 400 }), origin);
     }
 
     const { event, data } = payload;
-    console.log(`Processing WorkOS webhook: ${event}`);
 
     try {
       switch (event) {
@@ -81,14 +119,13 @@ http.route({
         }
 
         default:
-          console.log(`Unhandled WorkOS event: ${event}`);
+          // Unhandled event type - still acknowledge receipt
       }
 
       // Respond with 200 OK to acknowledge receipt
-      return new Response('OK', { status: 200 });
-    } catch (error) {
-      console.error(`Error processing webhook ${event}:`, error);
-      return new Response('Internal error', { status: 500 });
+      return addCorsHeaders(new Response('OK', { status: 200 }), origin);
+    } catch {
+      return addCorsHeaders(new Response('Internal error', { status: 500 }), origin);
     }
   }),
 });
@@ -99,15 +136,47 @@ http.route({
 http.route({
   path: '/health',
   method: 'GET',
-  handler: httpAction(async () => {
-    return new Response(JSON.stringify({ status: 'ok', timestamp: Date.now() }), {
+  handler: httpAction(async (_, request) => {
+    const origin = request.headers.get('Origin');
+    const response = new Response(JSON.stringify({ status: 'ok', timestamp: Date.now() }), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
       },
     });
+    return addCorsHeaders(response, origin);
+  }),
+});
+
+/**
+ * CORS preflight handler for all routes
+ */
+http.route({
+  path: '/webhooks/workos',
+  method: 'OPTIONS',
+  handler: httpAction(async (_, request) => {
+    const origin = request.headers.get('Origin');
+    
+    if (!isOriginAllowed(origin)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    
+    return addCorsHeaders(new Response(null, { status: 204 }), origin);
+  }),
+});
+
+http.route({
+  path: '/health',
+  method: 'OPTIONS',
+  handler: httpAction(async (_, request) => {
+    const origin = request.headers.get('Origin');
+    
+    if (!isOriginAllowed(origin)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    
+    return addCorsHeaders(new Response(null, { status: 204 }), origin);
   }),
 });
 
 export default http;
-

@@ -1,20 +1,31 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Heart, Sparkles, AlertCircle } from 'lucide-react';
+import { Heart, Sparkles, AlertCircle, UserPlus, Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useMutation } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import type { Look } from '@/lib/mock-data';
-import { formatPrice } from '@/lib/utils/format';
 
-// Extended look type with generation status
-interface LookWithStatus extends Look {
+// Extended look type with generation status and creator info
+interface LookWithCreator extends Look {
   isGenerating?: boolean;
   generationFailed?: boolean;
+  creator?: {
+    _id: Id<'users'>;
+    firstName?: string;
+    username?: string;
+    profileImageUrl?: string;
+  } | null;
+  isFriend?: boolean;
+  hasPendingRequest?: boolean;
 }
 
-interface LookCardProps {
-  look: LookWithStatus;
+interface LookCardWithCreatorProps {
+  look: LookWithCreator;
   index: number;
 }
 
@@ -25,25 +36,115 @@ const heightClasses = {
   'extra-tall': 'h-[400px]',
 };
 
-export function LookCard({ look, index }: LookCardProps) {
+export function LookCardWithCreator({ look, index }: LookCardWithCreatorProps) {
   const hasImage = look.imageUrl && look.imageUrl.length > 0;
   const isGenerating = look.isGenerating || (!hasImage && !look.generationFailed);
   const generationFailed = look.generationFailed;
+
+  const [isSendingRequest, setIsSendingRequest] = useState(false);
+  const [requestSent, setRequestSent] = useState(look.hasPendingRequest || false);
+  const sendFriendRequest = useMutation(api.friends.mutations.sendFriendRequest);
+
+  const handleAddFriend = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!look.creator || look.isFriend || requestSent || isSendingRequest) return;
+
+    setIsSendingRequest(true);
+    try {
+      await sendFriendRequest({ addresseeId: look.creator._id });
+      setRequestSent(true);
+    } catch (error) {
+      console.error('Failed to send friend request:', error);
+    } finally {
+      setIsSendingRequest(false);
+    }
+  };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ 
-        duration: 0.5, 
+      transition={{
+        duration: 0.5,
         delay: index * 0.05,
-        ease: [0.25, 0.46, 0.45, 0.94]
+        ease: [0.25, 0.46, 0.45, 0.94],
       }}
       className="break-inside-avoid mb-4"
     >
-      <Link href={`/look/${look.id}`}>
-        <div className="group relative overflow-hidden rounded-2xl bg-surface border border-border/30 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-          {/* Image or Generating State */}
+      <div className="group relative overflow-hidden rounded-2xl bg-surface border border-border/30 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+        {/* Creator info header - Instagram-style */}
+        {look.creator && (
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border/30">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary overflow-hidden relative flex-shrink-0">
+                {look.creator.profileImageUrl ? (
+                  <Image
+                    src={look.creator.profileImageUrl}
+                    alt={look.creator.firstName || 'User'}
+                    fill
+                    sizes="32px"
+                    unoptimized={
+                      look.creator.profileImageUrl.includes('convex.cloud') ||
+                      look.creator.profileImageUrl.includes('convex.site') ||
+                      look.creator.profileImageUrl.includes('workoscdn.com')
+                    }
+                    className="object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <span className="text-xs font-medium text-primary-foreground">
+                      {(look.creator.firstName || look.creator.username || 'U').charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">
+                  {look.creator.firstName || look.creator.username || 'User'}
+                </p>
+                {look.isFriend && (
+                  <p className="text-xs text-muted-foreground">Friend</p>
+                )}
+              </div>
+            </div>
+
+            {/* Add Friend button - only show if not already friends */}
+            {!look.isFriend && (
+              <button
+                onClick={handleAddFriend}
+                disabled={isSendingRequest || requestSent}
+                className={`
+                  flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium
+                  transition-all duration-200
+                  ${
+                    requestSent
+                      ? 'bg-surface-alt text-muted-foreground cursor-default'
+                      : 'bg-primary/10 text-primary hover:bg-primary/20'
+                  }
+                `}
+              >
+                {isSendingRequest ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : requestSent ? (
+                  <>
+                    <Check className="w-3 h-3" />
+                    <span>Requested</span>
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-3 h-3" />
+                    <span>Add</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Image or Generating State */}
+        <Link href={`/look/${look.id}`}>
           <div className={`relative ${heightClasses[look.height]} overflow-hidden`}>
             {hasImage ? (
               <>
@@ -61,7 +162,7 @@ export function LookCard({ look, index }: LookCardProps) {
                   }
                   className="object-cover transition-transform duration-500 group-hover:scale-105"
                 />
-                
+
                 {/* Gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               </>
@@ -101,7 +202,7 @@ export function LookCard({ look, index }: LookCardProps) {
                           fill
                           sizes="48px"
                           unoptimized={
-                            product.imageUrl.includes('convex.cloud') || 
+                            product.imageUrl.includes('convex.cloud') ||
                             product.imageUrl.includes('convex.site') ||
                             product.imageUrl.includes('workoscdn.com')
                           }
@@ -118,14 +219,7 @@ export function LookCard({ look, index }: LookCardProps) {
                 <p className="text-xs text-muted-foreground">{look.products.length} items</p>
               </div>
             )}
-            
-            {/* Price badge - always show */}
-            <div className="absolute top-3 right-3 px-3 py-1.5 bg-background/90 backdrop-blur-sm rounded-full border border-border/50">
-              <span className="text-xs font-medium text-foreground">
-                {formatPrice(look.totalPrice, look.currency)}
-              </span>
-            </div>
-            
+
             {/* Quick like button - shows on hover (only when image is ready) */}
             {hasImage && (
               <motion.button
@@ -137,7 +231,9 @@ export function LookCard({ look, index }: LookCardProps) {
                   // Handle like
                 }}
               >
-                <Heart className={`w-4 h-4 ${look.isLiked ? 'fill-destructive text-destructive' : 'text-foreground'}`} />
+                <Heart
+                  className={`w-4 h-4 ${look.isLiked ? 'fill-destructive text-destructive' : 'text-foreground'}`}
+                />
               </motion.button>
             )}
 
@@ -155,15 +251,15 @@ export function LookCard({ look, index }: LookCardProps) {
               </div>
             )}
           </div>
+        </Link>
 
-          {/* Card footer - minimal info */}
-          <div className="p-3">
-            <p className="text-xs text-muted-foreground">
-              {look.occasion} • {look.products.length} items
-            </p>
-          </div>
+        {/* Card footer - minimal info */}
+        <div className="p-3">
+          <p className="text-xs text-muted-foreground">
+            {look.occasion} • {look.products.length} items
+          </p>
         </div>
-      </Link>
+      </div>
     </motion.div>
   );
 }

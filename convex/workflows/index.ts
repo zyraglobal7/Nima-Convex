@@ -383,6 +383,141 @@ export const startGenerateMoreLooks = mutation({
 });
 
 /**
+ * Start a single-item try-on generation
+ * Generates a try-on image for a single item
+ */
+export const startItemTryOn = mutation({
+  args: {
+    itemId: v.id('items'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    tryOnId: v.optional(v.id('item_try_ons')),
+    error: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { itemId: Id<'items'> }
+  ): Promise<{
+    success: boolean;
+    tryOnId?: Id<'item_try_ons'>;
+    error?: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        error: 'Not authenticated',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found',
+      };
+    }
+
+    // Check if item exists
+    const item = await ctx.db.get(args.itemId);
+    if (!item || !item.isActive) {
+      return {
+        success: false,
+        error: 'Item not found or inactive',
+      };
+    }
+
+    // Get user's primary image
+    const userImage = await ctx.db
+      .query('user_images')
+      .withIndex('by_user_and_primary', (q) => q.eq('userId', user._id).eq('isPrimary', true))
+      .unique();
+
+    if (!userImage) {
+      return {
+        success: false,
+        error: 'Please upload a photo first to try on items',
+      };
+    }
+
+    // Check if a try-on already exists
+    const existingTryOn = await ctx.db
+      .query('item_try_ons')
+      .withIndex('by_item_and_user', (q) => q.eq('itemId', args.itemId).eq('userId', user._id))
+      .first();
+
+    if (existingTryOn) {
+      // If completed, return existing
+      if (existingTryOn.status === 'completed') {
+        return {
+          success: true,
+          tryOnId: existingTryOn._id,
+        };
+      }
+
+      // If processing, tell user to wait
+      if (existingTryOn.status === 'processing') {
+        return {
+          success: true,
+          tryOnId: existingTryOn._id,
+        };
+      }
+
+      // If pending or failed, update to pending and trigger generation
+      const now = Date.now();
+      await ctx.db.patch(existingTryOn._id, {
+        status: 'pending',
+        errorMessage: undefined,
+        userImageId: userImage._id,
+        updatedAt: now,
+      });
+
+      // Schedule the generation action
+      await ctx.scheduler.runAfter(0, internal.workflows.actions.generateItemTryOnImage, {
+        tryOnId: existingTryOn._id,
+        itemId: args.itemId,
+        userId: user._id,
+      });
+
+      return {
+        success: true,
+        tryOnId: existingTryOn._id,
+      };
+    }
+
+    // Create new try-on record
+    const now = Date.now();
+    const tryOnId = await ctx.db.insert('item_try_ons', {
+      itemId: args.itemId,
+      userId: user._id,
+      userImageId: userImage._id,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    console.log(`[WORKFLOW:ITEM_TRYON] Starting try-on for item ${args.itemId}, tryOnId: ${tryOnId}`);
+
+    // Schedule the generation action
+    await ctx.scheduler.runAfter(0, internal.workflows.actions.generateItemTryOnImage, {
+      tryOnId,
+      itemId: args.itemId,
+      userId: user._id,
+    });
+
+    return {
+      success: true,
+      tryOnId,
+    };
+  },
+});
+
+/**
  * Get workflow status for the current user
  */
 export const getOnboardingWorkflowStatus = query({

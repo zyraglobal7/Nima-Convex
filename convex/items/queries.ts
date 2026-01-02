@@ -370,3 +370,145 @@ export const getItemImages = query({
   },
 });
 
+/**
+ * List items with their primary images for the Apparel grid
+ * Returns items with image URLs for efficient grid rendering
+ */
+export const listItemsWithImages = query({
+  args: {
+    category: v.optional(categoryValidator),
+    gender: v.optional(genderValidator),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+  },
+  returns: v.object({
+    items: v.array(
+      v.object({
+        _id: v.id('items'),
+        _creationTime: v.number(),
+        publicId: v.string(),
+        name: v.string(),
+        brand: v.optional(v.string()),
+        description: v.optional(v.string()),
+        category: categoryValidator,
+        gender: genderValidator,
+        price: v.number(),
+        currency: v.string(),
+        originalPrice: v.optional(v.number()),
+        colors: v.array(v.string()),
+        sizes: v.array(v.string()),
+        tags: v.array(v.string()),
+        inStock: v.boolean(),
+        isFeatured: v.optional(v.boolean()),
+        primaryImageUrl: v.union(v.string(), v.null()),
+      })
+    ),
+    nextCursor: v.union(v.string(), v.null()),
+    hasMore: v.boolean(),
+  }),
+  handler: async (
+    ctx: QueryCtx,
+    args: {
+      category?: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+      gender?: 'male' | 'female' | 'unisex';
+      limit?: number;
+      cursor?: string;
+    }
+  ): Promise<{
+    items: Array<{
+      _id: Id<'items'>;
+      _creationTime: number;
+      publicId: string;
+      name: string;
+      brand?: string;
+      description?: string;
+      category: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+      gender: 'male' | 'female' | 'unisex';
+      price: number;
+      currency: string;
+      originalPrice?: number;
+      colors: string[];
+      sizes: string[];
+      tags: string[];
+      inStock: boolean;
+      isFeatured?: boolean;
+      primaryImageUrl: string | null;
+    }>;
+    nextCursor: string | null;
+    hasMore: boolean;
+  }> => {
+    const limit = Math.min(args.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
+    let query;
+    if (args.gender && args.category) {
+      query = ctx.db
+        .query('items')
+        .withIndex('by_gender_and_category', (q) =>
+          q.eq('gender', args.gender!).eq('category', args.category!)
+        );
+    } else if (args.category) {
+      query = ctx.db
+        .query('items')
+        .withIndex('by_active_and_category', (q) =>
+          q.eq('isActive', true).eq('category', args.category!)
+        );
+    } else if (args.gender) {
+      query = ctx.db
+        .query('items')
+        .withIndex('by_active_and_gender', (q) => q.eq('isActive', true).eq('gender', args.gender!));
+    } else {
+      query = ctx.db.query('items').withIndex('by_active_and_category', (q) => q.eq('isActive', true));
+    }
+
+    const results = await query.order('desc').take(limit + 1);
+    const activeItems = results.filter((item) => item.isActive);
+    const hasMore = activeItems.length > limit;
+    const items = activeItems.slice(0, limit);
+
+    // Fetch primary images for all items in parallel
+    const itemsWithImages = await Promise.all(
+      items.map(async (item) => {
+        const primaryImage = await ctx.db
+          .query('item_images')
+          .withIndex('by_item_and_primary', (q) => q.eq('itemId', item._id).eq('isPrimary', true))
+          .unique();
+
+        let primaryImageUrl: string | null = null;
+        if (primaryImage) {
+          if (primaryImage.storageId) {
+            primaryImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+          } else if (primaryImage.externalUrl) {
+            primaryImageUrl = primaryImage.externalUrl;
+          }
+        }
+
+        return {
+          _id: item._id,
+          _creationTime: item._creationTime,
+          publicId: item.publicId,
+          name: item.name,
+          brand: item.brand,
+          description: item.description,
+          category: item.category,
+          gender: item.gender,
+          price: item.price,
+          currency: item.currency,
+          originalPrice: item.originalPrice,
+          colors: item.colors,
+          sizes: item.sizes,
+          tags: item.tags,
+          inStock: item.inStock,
+          isFeatured: item.isFeatured,
+          primaryImageUrl,
+        };
+      })
+    );
+
+    return {
+      items: itemsWithImages,
+      nextCursor: hasMore && items.length > 0 ? items[items.length - 1]._id : null,
+      hasMore,
+    };
+  },
+});
+
