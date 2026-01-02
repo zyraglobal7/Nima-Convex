@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Authenticated, Unauthenticated, useQuery } from 'convex/react';
 import { GateSplash, OnboardingWizard } from '@/components/onboarding';
 import { useOnboardingCompletion } from '@/lib/hooks/useOnboardingCompletion';
+import { useAuth } from '@workos-inc/authkit-nextjs/components';
 import { api } from '@/convex/_generated/api';
 import { Loader2 } from 'lucide-react';
 
@@ -11,6 +12,11 @@ type View = 'gate' | 'onboarding' | 'app';
 
 export default function Home() {
   const [view, setView] = useState<View>('gate');
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const handleGetStarted = () => {
     setView('onboarding');
@@ -26,6 +32,17 @@ export default function Home() {
     // the AuthenticatedContent component will handle the rest
     setView('app');
   };
+
+  // Show loading during SSR/initial hydration before AuthKitProvider is mounted
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
+        <div className="max-w-md text-center space-y-6">
+          <Loader2 className="w-12 h-12 mx-auto text-primary animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -48,7 +65,9 @@ export default function Home() {
  * Handles onboarding completion and redirects to main feed
  */
 function AuthenticatedContent() {
-  const { user, isProcessing, error, needsOnboarding } = useOnboardingCompletion();
+  // Get WorkOS user and pass to hook (useAuth is safe here since we're after mount check)
+  const { user: workosUser } = useAuth();
+  const { user, isProcessing, error, needsOnboarding } = useOnboardingCompletion(workosUser);
 
   // Show loading while processing onboarding
   if (isProcessing || user === undefined) {
