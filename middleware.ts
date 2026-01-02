@@ -16,6 +16,7 @@ export default authkitMiddleware({
     unauthenticatedPaths: [
       // Home page (gate splash & onboarding)
       '/',
+      '/onboarding',
       // Auth routes
       '/sign-in',
       '/sign-up',
