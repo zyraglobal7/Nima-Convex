@@ -541,6 +541,7 @@ export const getOrCreateUser = mutation({
       dailyTryOnResetAt: v.number(),
       onboardingCompleted: v.boolean(),
       isActive: v.boolean(),
+      role: v.optional(v.union(v.literal('user'), v.literal('admin'))),
       createdAt: v.number(),
       updatedAt: v.number(),
     }),
