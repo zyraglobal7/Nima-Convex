@@ -6,6 +6,7 @@ import { StepProps, OnboardingFormData } from '../types';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import { trackStepCompleted, trackBackClicked, trackSignupInitiated, trackSignInClicked, trackCompleteProfileClicked, ONBOARDING_STEPS } from '@/lib/analytics';
 
 // Local storage key for onboarding data
 const ONBOARDING_STORAGE_KEY = 'nima-onboarding-data';
@@ -78,6 +79,11 @@ export function AccountStep({ formData, onNext, onBack }: StepProps) {
       setIsLoading(true);
       setError(null);
 
+      trackCompleteProfileClicked();
+      trackStepCompleted(ONBOARDING_STEPS.ACCOUNT, {
+        method: 'complete_profile',
+      });
+
       // Save the current form data to localStorage
       saveOnboardingData(formData);
 
@@ -99,6 +105,11 @@ export function AccountStep({ formData, onNext, onBack }: StepProps) {
       setIsLoading(true);
       setError(null);
 
+      trackSignupInitiated('email');
+      trackStepCompleted(ONBOARDING_STEPS.ACCOUNT, {
+        method: 'signup',
+      });
+
       // Save the current form data to localStorage
       saveOnboardingData(formData);
 
@@ -116,6 +127,8 @@ export function AccountStep({ formData, onNext, onBack }: StepProps) {
     try {
       setIsLoading(true);
       setError(null);
+
+      trackSignInClicked();
 
       // Save the current form data to localStorage
       saveOnboardingData(formData);
@@ -136,7 +149,10 @@ export function AccountStep({ formData, onNext, onBack }: StepProps) {
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-4 mb-6">
             <button
-              onClick={onBack}
+              onClick={() => {
+                trackBackClicked(ONBOARDING_STEPS.ACCOUNT);
+                onBack?.();
+              }}
               className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors duration-200"
               aria-label="Go back"
               disabled={isLoading}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { StepProps } from '../types';
 import { Sparkles, Check } from 'lucide-react';
+import { trackOnboardingCompleted, trackStartExploringClicked } from '@/lib/analytics';
 
 export function SuccessStep({ formData }: StepProps) {
   const router = useRouter();
@@ -12,6 +13,16 @@ export function SuccessStep({ formData }: StepProps) {
   const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
+    // Track onboarding completion
+    trackOnboardingCompleted({
+      gender: formData.gender || undefined,
+      age: formData.age || undefined,
+      style_count: formData.stylePreferences.length,
+      country: formData.country || undefined,
+      budget_range: formData.budgetRange || undefined,
+      photo_count: formData.uploadedImages?.length || formData.photos?.length || 0,
+    });
+
     // Staggered animation
     const timer1 = setTimeout(() => setShowContent(true), 300);
     const timer2 = setTimeout(() => setShowDetails(true), 800);
@@ -19,9 +30,10 @@ export function SuccessStep({ formData }: StepProps) {
       clearTimeout(timer1);
       clearTimeout(timer2);
     };
-  }, []);
+  }, [formData]);
 
   const handleStartExploring = () => {
+    trackStartExploringClicked();
     // Redirect to discover page
     router.push('/discover');
   };

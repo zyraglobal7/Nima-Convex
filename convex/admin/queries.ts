@@ -291,6 +291,31 @@ export const getItemForAdmin = query({
 });
 
 /**
+ * Check if the current user is an admin
+ */
+export const isCurrentUserAdmin = query({
+  args: {},
+  returns: v.boolean(),
+  handler: async (ctx: QueryCtx): Promise<boolean> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return false;
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return false;
+    }
+
+    return user.role === 'admin';
+  },
+});
+
+/**
  * Get admin dashboard stats
  */
 export const getDashboardStats = query({

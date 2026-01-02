@@ -12,6 +12,7 @@ import { AccountStep } from './steps/AccountStep';
 import { SuccessStep } from './steps/SuccessStep';
 import { OnboardingFormData, TOTAL_STEPS } from './types';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { trackStepViewed, ONBOARDING_STEPS, OnboardingStep } from '@/lib/analytics';
 
 interface OnboardingWizardProps {
   onComplete: () => void;
@@ -73,6 +74,24 @@ export function OnboardingWizard({ onComplete, onBack }: OnboardingWizardProps) 
     const token = getOrCreateOnboardingToken();
     setFormData((prev) => ({ ...prev, onboardingToken: token }));
   }, []);
+
+  // Track step views when step changes
+  useEffect(() => {
+    const stepNames: OnboardingStep[] = [
+      ONBOARDING_STEPS.WELCOME,
+      ONBOARDING_STEPS.GENDER_AGE,
+      ONBOARDING_STEPS.STYLE_VIBE,
+      ONBOARDING_STEPS.SIZE_FIT,
+      ONBOARDING_STEPS.LOCATION_BUDGET,
+      ONBOARDING_STEPS.PHOTO_UPLOAD,
+      ONBOARDING_STEPS.ACCOUNT,
+      ONBOARDING_STEPS.SUCCESS,
+    ];
+    const stepName = stepNames[currentStep];
+    if (stepName) {
+      trackStepViewed(stepName);
+    }
+  }, [currentStep]);
 
   const updateFormData = useCallback((data: Partial<OnboardingFormData>) => {
     setFormData((prev) => ({ ...prev, ...data }));

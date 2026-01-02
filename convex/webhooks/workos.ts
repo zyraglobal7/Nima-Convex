@@ -101,7 +101,7 @@ export const handleUserUpdated = internalMutation({
       .unique();
 
     if (!user) {
-      console.log(`User not found for WorkOS ID: ${args.workosUserId}`);
+      // User not found - this is expected for new sign-ups
       return null;
     }
 
@@ -139,7 +139,7 @@ export const handleUserDeleted = internalMutation({
       .unique();
 
     if (!user) {
-      console.log(`User not found for WorkOS ID: ${args.workosUserId}`);
+      // User not found - already deleted or never existed
       return null;
     }
 

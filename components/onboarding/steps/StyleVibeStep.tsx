@@ -4,13 +4,24 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { StepProps, STYLE_OUTFIT_IMAGES } from '../types';
 import { ArrowLeft, Heart, Check } from 'lucide-react';
+import { trackStepCompleted, trackBackClicked, trackStylePreferenceToggled, ONBOARDING_STEPS } from '@/lib/analytics';
 
 export function StyleVibeStep({ updateFormData, onNext, onBack }: StepProps) {
   const [selectedOutfits, setSelectedOutfits] = useState<string[]>([]);
 
   const toggleOutfit = (outfitId: string) => {
+    const isCurrentlySelected = selectedOutfits.includes(outfitId);
+    const outfit = STYLE_OUTFIT_IMAGES.find((o) => o.id === outfitId);
+    
+    // Track style preference toggle
+    if (outfit) {
+      outfit.tags.forEach((tag) => {
+        trackStylePreferenceToggled(tag, !isCurrentlySelected);
+      });
+    }
+    
     setSelectedOutfits((prev) =>
-      prev.includes(outfitId)
+      isCurrentlySelected
         ? prev.filter((id) => id !== outfitId)
         : [...prev, outfitId]
     );
@@ -23,7 +34,15 @@ export function StyleVibeStep({ updateFormData, onNext, onBack }: StepProps) {
       const outfit = STYLE_OUTFIT_IMAGES.find((o) => o.id === outfitId);
       outfit?.tags.forEach((tag) => selectedTags.add(tag));
     });
-    updateFormData({ stylePreferences: Array.from(selectedTags) });
+    const stylePreferences = Array.from(selectedTags);
+    
+    trackStepCompleted(ONBOARDING_STEPS.STYLE_VIBE, {
+      style_count: stylePreferences.length,
+      styles: stylePreferences,
+      outfits_selected: selectedOutfits.length,
+    });
+    
+    updateFormData({ stylePreferences });
     onNext();
   };
 
@@ -34,7 +53,10 @@ export function StyleVibeStep({ updateFormData, onNext, onBack }: StepProps) {
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center gap-4 mb-4">
             <button
-              onClick={onBack}
+              onClick={() => {
+                trackBackClicked(ONBOARDING_STEPS.STYLE_VIBE);
+                onBack?.();
+              }}
               className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors duration-200"
               aria-label="Go back"
             >

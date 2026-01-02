@@ -824,3 +824,249 @@ Make it look like a high-end fashion editorial photo with clean background and n
     }
   },
 });
+
+// ============================================
+// SINGLE ITEM TRY-ON IMAGE GENERATION
+// ============================================
+
+/**
+ * Generate a try-on image for a single item
+ * Shows the user wearing ONLY that specific item
+ */
+export const generateItemTryOnImage = internalAction({
+  args: {
+    tryOnId: v.id('item_try_ons'),
+    itemId: v.id('items'),
+    userId: v.id('users'),
+  },
+  returns: v.union(
+    v.object({
+      success: v.literal(true),
+      storageId: v.id('_storage'),
+    }),
+    v.object({
+      success: v.literal(false),
+      error: v.string(),
+    })
+  ),
+  handler: async (
+    ctx: ActionCtx,
+    args: { tryOnId: Id<'item_try_ons'>; itemId: Id<'items'>; userId: Id<'users'> }
+  ): Promise<
+    | { success: true; storageId: Id<'_storage'> }
+    | { success: false; error: string }
+  > => {
+    console.log(`[WORKFLOW:ITEM_TRYON] Generating image for item ${args.itemId}`);
+    const startTime = Date.now();
+
+    try {
+      // Mark try-on as processing
+      await ctx.runMutation(internal.itemTryOns.mutations.updateItemTryOnStatus, {
+        itemTryOnId: args.tryOnId,
+        status: 'processing',
+      });
+
+      // Get user's primary image
+      const userImage = await ctx.runQuery(internal.workflows.queries.getUserPrimaryImage, {
+        userId: args.userId,
+      });
+
+      if (!userImage || !userImage.url) {
+        throw new Error('User does not have a primary image for try-on');
+      }
+
+      // Get item with its primary image
+      const itemData = await ctx.runQuery(internal.workflows.queries.getItemWithPrimaryImage, {
+        itemId: args.itemId,
+      });
+
+      if (!itemData) {
+        throw new Error(`Item not found: ${args.itemId}`);
+      }
+
+      console.log(`[WORKFLOW:ITEM_TRYON] Item: ${itemData.item.name}`);
+
+      // Fetch user image and item image in parallel
+      console.log(`[WORKFLOW:ITEM_TRYON] Fetching images...`);
+      const fetchStartTime = Date.now();
+
+      const [userImageBase64, itemImageBase64] = await Promise.all([
+        fetch(userImage.url)
+          .then((res) => res.arrayBuffer())
+          .then((buffer) => Buffer.from(buffer).toString('base64')),
+        itemData.primaryImageUrl
+          ? fetch(itemData.primaryImageUrl)
+              .then((res) => res.arrayBuffer())
+              .then((buffer) => Buffer.from(buffer).toString('base64'))
+          : null,
+      ]);
+
+      const fetchTime = Date.now() - fetchStartTime;
+      console.log(`[WORKFLOW:ITEM_TRYON] Fetched images in ${fetchTime}ms`);
+
+      // Build item description
+      const colorStr = itemData.item.colors.length > 0 ? itemData.item.colors.join('/') : '';
+      const itemDescription = `${colorStr} ${itemData.item.name}${itemData.item.brand ? ` by ${itemData.item.brand}` : ''}`.trim();
+
+      // Generate the prompt
+      const promptResult = await generateText({
+        model: openai('gpt-4o'),
+        prompt: `You are a fashion photography director. Write a detailed image generation prompt for a virtual try-on photo.
+
+The person in the reference photo should be shown wearing this single item:
+${itemDescription}
+
+Category: ${itemData.item.category}
+${itemData.item.description ? `Description: ${itemData.item.description}` : ''}
+
+Create a prompt that:
+1. Shows the person wearing ONLY this single item naturally
+2. Maintains the person's identity, face, and body from the reference
+3. Results in a high-quality, professional fashion photography style image
+4. Specifies natural lighting and a clean background
+5. Shows the item clearly and prominently
+6. For tops: show from waist up; for bottoms: show full body; for shoes: focus on lower body; for accessories: show appropriately
+
+Keep the prompt concise but detailed (under 400 characters). Do not include any markdown formatting.`,
+        temperature: 0.7,
+      });
+
+      const generatedPrompt = promptResult.text.trim();
+      console.log(`[WORKFLOW:ITEM_TRYON] Generated prompt: ${generatedPrompt.slice(0, 150)}...`);
+
+      // Build content array for Google GenAI
+      const contents: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+
+      const fullPrompt = `Virtual try-on fashion photo: Create an image of this person (shown in the first reference image) wearing the clothing item shown in the second reference image.
+
+Reference Image 1: Photo of the person who should be wearing the item
+Reference Image 2: ${itemDescription}
+
+${generatedPrompt}
+
+Important:
+- Keep the person's face, body type, and identity exactly as shown in Reference Image 1
+- Dress them in the item from Reference Image 2
+- Show ONLY this single item - no other clothing items or outfits
+- Make it look like a professional fashion photograph
+- The person should look natural and confident wearing this item`;
+
+      contents.push({ text: fullPrompt });
+
+      // Add user image as first reference
+      contents.push({
+        inlineData: {
+          mimeType: 'image/jpeg',
+          data: userImageBase64,
+        },
+      });
+
+      // Add item image as second reference (if available)
+      if (itemImageBase64) {
+        contents.push({
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: itemImageBase64,
+          },
+        });
+      }
+
+      console.log(`[WORKFLOW:ITEM_TRYON] Calling Gemini image generation...`);
+
+      // Call Google GenAI
+      const response = await genAI.models.generateContent({
+        model: 'gemini-3-pro-image-preview',
+        contents: contents,
+        config: {
+          responseModalities: ['TEXT', 'IMAGE'],
+        },
+      });
+
+      // Check if we got an image back
+      const parts = response.candidates?.[0]?.content?.parts;
+      let generatedImageBase64: string | null = null;
+
+      if (parts) {
+        for (const part of parts) {
+          if (part.inlineData && part.inlineData.data) {
+            generatedImageBase64 = part.inlineData.data;
+            console.log(`[WORKFLOW:ITEM_TRYON] Successfully generated image!`);
+            break;
+          }
+        }
+      }
+
+      // If no image generated, try with simpler approach
+      if (!generatedImageBase64) {
+        console.warn(`[WORKFLOW:ITEM_TRYON] No image from first attempt, trying simpler approach...`);
+
+        const simpleResponse = await genAI.models.generateContent({
+          model: 'gemini-3-pro-image-preview',
+          contents: [
+            {
+              text: `Generate a professional fashion photograph of a person wearing: ${itemDescription}. 
+Make it look like a high-end fashion editorial photo with clean background and natural lighting.
+Show ONLY this single item prominently.`,
+            },
+          ],
+          config: {
+            responseModalities: ['TEXT', 'IMAGE'],
+          },
+        });
+
+        const simpleParts = simpleResponse.candidates?.[0]?.content?.parts;
+        if (simpleParts) {
+          for (const part of simpleParts) {
+            if (part.inlineData && part.inlineData.data) {
+              generatedImageBase64 = part.inlineData.data;
+              console.log(`[WORKFLOW:ITEM_TRYON] Generated image with simpler approach`);
+              break;
+            }
+          }
+        }
+      }
+
+      if (!generatedImageBase64) {
+        throw new Error('Image generation failed - model did not return an image.');
+      }
+
+      // Store the generated image
+      console.log(`[WORKFLOW:ITEM_TRYON] Storing generated image...`);
+      const imageBytes = Buffer.from(generatedImageBase64, 'base64');
+      const imageBlob = new Blob([imageBytes], { type: 'image/png' });
+      const storageId: Id<'_storage'> = await ctx.storage.store(imageBlob);
+      console.log(`[WORKFLOW:ITEM_TRYON] Stored image with storageId ${storageId}`);
+
+      // Update try-on status to completed
+      await ctx.runMutation(internal.itemTryOns.mutations.updateItemTryOnStatus, {
+        itemTryOnId: args.tryOnId,
+        status: 'completed',
+        storageId,
+        generationProvider: 'google-gemini',
+      });
+
+      const elapsed = Date.now() - startTime;
+      console.log(`[WORKFLOW:ITEM_TRYON] Image generation complete in ${elapsed}ms`);
+
+      return {
+        success: true as const,
+        storageId,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[WORKFLOW:ITEM_TRYON] Image generation failed:`, errorMessage);
+
+      // Update try-on status to failed
+      await ctx.runMutation(internal.itemTryOns.mutations.updateItemTryOnStatus, {
+        itemTryOnId: args.tryOnId,
+        status: 'failed',
+        errorMessage,
+      });
+
+      return {
+        success: false as const,
+        error: errorMessage,
+      };
+    }
+  },
+});

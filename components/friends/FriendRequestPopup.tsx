@@ -2,12 +2,13 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, UserPlus } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import Image from 'next/image';
+import { playSoftNotificationSound } from '@/lib/utils/notifications';
 
 interface FriendRequestPopupProps {
   isOpen: boolean;
@@ -29,8 +30,20 @@ export function FriendRequestPopup({
 }: FriendRequestPopupProps) {
   const [isSending, setIsSending] = useState(false);
   const sendFriendRequest = useMutation(api.friends.mutations.sendFriendRequest);
+  const hasPlayedSoundRef = useRef(false);
 
   const displayName = sharedBy.firstName || sharedBy.username || 'Someone';
+
+  // Play notification sound when popup opens
+  useEffect(() => {
+    if (isOpen && !hasPlayedSoundRef.current) {
+      playSoftNotificationSound();
+      hasPlayedSoundRef.current = true;
+    }
+    if (!isOpen) {
+      hasPlayedSoundRef.current = false;
+    }
+  }, [isOpen]);
 
   const handleAddFriend = async () => {
     setIsSending(true);
@@ -99,6 +112,12 @@ export function FriendRequestPopup({
                       src={sharedBy.profileImageUrl}
                       alt={displayName}
                       fill
+                      sizes="64px"
+                      unoptimized={
+                        sharedBy.profileImageUrl.includes('convex.cloud') ||
+                        sharedBy.profileImageUrl.includes('convex.site') ||
+                        sharedBy.profileImageUrl.includes('workoscdn.com')
+                      }
                       className="object-cover"
                     />
                   ) : (

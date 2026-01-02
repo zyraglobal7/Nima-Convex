@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { StepProps } from '../types';
 import { ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { trackStepCompleted, trackBackClicked, ONBOARDING_STEPS } from '@/lib/analytics';
 
 export function WelcomeStep({ onNext, onBack }: StepProps) {
   const steps = [
@@ -18,7 +19,10 @@ export function WelcomeStep({ onNext, onBack }: StepProps) {
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative">
       {/* Back button */}
       <button
-        onClick={onBack}
+        onClick={() => {
+          trackBackClicked(ONBOARDING_STEPS.WELCOME);
+          onBack?.();
+        }}
         className="absolute top-6 left-6 p-2 rounded-full hover:bg-surface transition-colors duration-200"
         aria-label="Go back"
       >
@@ -62,7 +66,7 @@ export function WelcomeStep({ onNext, onBack }: StepProps) {
           </h1>
           <p className="text-lg text-muted-foreground leading-relaxed">
             I&apos;m <span className="text-primary font-medium">Nima</span>, your personal AI stylist. 
-            Let&apos;s get you set up so I can show you <em>your</em> best looks.
+            This is what i&apos;ll need from you to get started.
           </p>
         </motion.div>
 
@@ -107,7 +111,10 @@ export function WelcomeStep({ onNext, onBack }: StepProps) {
           transition={{ duration: 0.5, delay: 1 }}
         >
           <Button
-            onClick={onNext}
+            onClick={() => {
+              trackStepCompleted(ONBOARDING_STEPS.WELCOME);
+              onNext();
+            }}
             size="lg"
             className="w-full max-w-xs h-14 text-base font-medium tracking-wide rounded-full bg-primary hover:bg-primary-hover text-primary-foreground transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
           >
