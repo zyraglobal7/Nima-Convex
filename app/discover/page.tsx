@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { NimaChatBubble, ApparelGrid, CreateLookSheet, LookCardWithCreator, useFloatingLoader } from '@/components/discover';
+import { NimaChatBubble, ApparelGrid, CreateLookSheet, LookCardWithCreator, LookCard, useFloatingLoader } from '@/components/discover';
 import { DateGroupHeader } from '@/components/discover/DateGroupHeader';
 import type { ApparelItem } from '@/components/discover/ApparelItemCard';
 import { discoverWelcomeMessage } from '@/lib/mock-data';
-import { Settings, Sparkles, User } from 'lucide-react';
+import { Settings, Sparkles, User, Shirt } from 'lucide-react';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import Link from 'next/link';
 import { useQuery, useMutation } from 'convex/react';
@@ -32,17 +32,42 @@ interface LookWithCreator extends Look {
   hasPendingRequest?: boolean;
 }
 
-type FilterType = 'explore' | 'apparel';
+type FilterType = 'my-look' | 'explore' | 'apparel';
+type MyLooksFilter = 'system' | 'user';
+
+// Extended Look type with generation status for My Looks
+interface LookWithStatus extends Look {
+  isGenerating: boolean;
+  generationFailed: boolean;
+}
 
 export default function DiscoverPage() {
   const [viewState, setViewState] = useState<ViewState>('ready');
   const [showWelcome, setShowWelcome] = useState(true);
   const [workflowStarted, setWorkflowStarted] = useState(false);
-  const [exploreLooks, setExploreLooks] = useState<LookWithCreator[]>([]);
-  const [activeFilter, setActiveFilter] = useState<FilterType>('explore');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('my-look');
+  
+  // My Looks filter state (By Nima / By Me)
+  const [myLooksFilter, setMyLooksFilter] = useState<MyLooksFilter>('system');
 
   // Floating loader for non-blocking generation progress
   const floatingLoader = useFloatingLoader();
+  // Store floatingLoader methods in ref for stable reference in effects
+  const floatingLoaderRef = useRef(floatingLoader);
+  floatingLoaderRef.current = floatingLoader;
+
+  // Debug: Track renders (only in development, log every 10 renders to reduce noise)
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+  if (process.env.NODE_ENV === 'development' && renderCountRef.current % 10 === 1) {
+    console.log('[DISCOVER] Render count:', renderCountRef.current);
+  }
+
+  // Track if welcome dismiss timeout has been scheduled (prevents duplicate timeouts)
+  const hasScheduledWelcomeDismiss = useRef(false);
+  
+  // Track previous workflow status to prevent effect from running on same data
+  const prevWorkflowStatusRef = useRef<{ isComplete: boolean; completedCount: number } | null>(null);
 
   // Selection mode for Create a Look
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -65,34 +90,46 @@ export default function DiscoverPage() {
     activeFilter === 'explore' ? { limit: 50 } : 'skip'
   );
 
+  // My Looks query (for My Look tab)
+  const myLooksData = useQuery(
+    api.looks.queries.getMyLooksByCreator,
+    activeFilter === 'my-look' ? { createdBy: myLooksFilter, limit: 50 } : 'skip'
+  );
+
   const startWorkflow = useMutation(api.workflows.index.startOnboardingWorkflow);
 
-  // Track discover page view
+  // Track discover page view - only once on mount
   const hasTrackedPageView = useRef(false);
   useEffect(() => {
     if (!hasTrackedPageView.current) {
       hasTrackedPageView.current = true;
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[DISCOVER] Tracking page view (once)');
+      }
       trackDiscoverPageViewed({
-        has_workflow: shouldStartWorkflow?.shouldStart || false,
-        is_authenticated: true, // This page requires authentication
+        has_workflow: false, // Don't wait for query - track immediately
+        is_authenticated: true,
       });
     }
-  }, [shouldStartWorkflow]);
+    // Empty deps - only run once on mount
+  }, []);
 
   // Start the workflow if needed - use floating loader instead of blocking view
   useEffect(() => {
     if (shouldStartWorkflow?.shouldStart && !workflowStarted) {
-      console.log('[DISCOVER] Starting onboarding workflow...');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[DISCOVER] Starting onboarding workflow...');
+      }
       setWorkflowStarted(true);
-      // Don't block the view - go straight to ready and show floating loader
-      setViewState('ready');
       
       startWorkflow()
         .then((result) => {
           if (result.success) {
-            console.log('[DISCOVER] Workflow started:', result.workflowId);
-            // Show the floating loader in workflow mode - it will watch the workflow status
-            floatingLoader.startWorkflowLoading();
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[DISCOVER] Workflow started:', result.workflowId);
+            }
+            // Show the floating loader in workflow mode - use ref for stable reference
+            floatingLoaderRef.current.startWorkflowLoading();
           } else {
             console.error('[DISCOVER] Failed to start workflow:', result.error);
           }
@@ -101,80 +138,141 @@ export default function DiscoverPage() {
           console.error('[DISCOVER] Error starting workflow:', error);
         });
     }
-  }, [shouldStartWorkflow, workflowStarted, startWorkflow, floatingLoader]);
+    // Note: floatingLoader excluded - using ref for stable reference
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldStartWorkflow, workflowStarted, startWorkflow]);
 
   // Check workflow status and update floating loader when complete
+  // Uses value comparison to prevent effect from running when data hasn't actually changed
   useEffect(() => {
     if (!workflowStatus) return;
 
-    console.log('[DISCOVER] Workflow status:', workflowStatus);
+    // Compare with previous values to prevent duplicate runs
+    const currentKey = `${workflowStatus.isComplete}-${workflowStatus.completedCount}`;
+    const prevKey = prevWorkflowStatusRef.current 
+      ? `${prevWorkflowStatusRef.current.isComplete}-${prevWorkflowStatusRef.current.completedCount}` 
+      : null;
+    
+    if (currentKey === prevKey) return; // No actual change in values
+    
+    // Update the ref with current values
+    prevWorkflowStatusRef.current = {
+      isComplete: workflowStatus.isComplete,
+      completedCount: workflowStatus.completedCount,
+    };
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[DISCOVER] Workflow status changed:', workflowStatus);
+    }
 
     if (workflowStatus.isComplete && workflowStatus.completedCount > 0) {
-      console.log('[DISCOVER] Workflow complete!');
-      setViewState('ready');
-      // Hide welcome bubble after 8 seconds
-      setTimeout(() => setShowWelcome(false), 8000);
-      // The floating loader will auto-update based on the workflow status
-    } else if (workflowStatus.hasLooks && (workflowStatus.pendingCount > 0 || workflowStatus.processingCount > 0)) {
-      // Still generating - view stays at ready, floating loader shows progress
-      if (viewState !== 'ready') {
-        setViewState('ready');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[DISCOVER] Workflow complete!');
+      }
+      // Only schedule welcome dismiss timeout once
+      if (!hasScheduledWelcomeDismiss.current) {
+        hasScheduledWelcomeDismiss.current = true;
+        setTimeout(() => setShowWelcome(false), 8000);
       }
     } else if (workflowStatus.hasLooks && workflowStatus.completedCount > 0) {
-      // Has some completed looks, can show them
-      setViewState('ready');
-      setTimeout(() => setShowWelcome(false), 8000);
+      // Has some completed looks - schedule welcome dismiss if not already done
+      if (!hasScheduledWelcomeDismiss.current) {
+        hasScheduledWelcomeDismiss.current = true;
+        setTimeout(() => setShowWelcome(false), 8000);
+      }
     }
-  }, [workflowStatus, viewState]);
+  }, [workflowStatus]);
 
   // Transform explore looks data (includes creator info and friend status)
-  useEffect(() => {
-    if (activeFilter === 'explore' && publicLooks) {
-      const heights: Array<'short' | 'medium' | 'tall' | 'extra-tall'> = ['medium', 'tall', 'short', 'extra-tall'];
-      
-      const transformedExploreLooks: LookWithCreator[] = publicLooks.looks.map((lookData, index) => {
-        const products: Product[] = lookData.items.map((itemData) => ({
-          id: itemData.item._id,
-          name: itemData.item.name,
-          brand: itemData.item.brand || 'Unknown',
-          category: itemData.item.category as Product['category'],
-          price: itemData.item.price,
-          currency: itemData.item.currency,
-          imageUrl: itemData.primaryImageUrl || '',
-          storeUrl: '#',
-          storeName: itemData.item.brand || 'Store',
-          color: itemData.item.colors[0] || 'Mixed',
-        }));
+  // Using useMemo to prevent re-renders from Convex subscription updates
+  const exploreLooks = useMemo((): LookWithCreator[] => {
+    if (activeFilter !== 'explore' || !publicLooks) return [];
+    
+    const heights: Array<'short' | 'medium' | 'tall' | 'extra-tall'> = ['medium', 'tall', 'short', 'extra-tall'];
+    
+    return publicLooks.looks.map((lookData, index) => {
+      const products: Product[] = lookData.items.map((itemData) => ({
+        id: itemData.item._id,
+        name: itemData.item.name,
+        brand: itemData.item.brand || 'Unknown',
+        category: itemData.item.category as Product['category'],
+        price: itemData.item.price,
+        currency: itemData.item.currency,
+        imageUrl: itemData.primaryImageUrl || '',
+        storeUrl: '#',
+        storeName: itemData.item.brand || 'Store',
+        color: itemData.item.colors[0] || 'Mixed',
+      }));
 
-        const imageUrl = lookData.lookImage?.imageUrl || '';
-        const isGenerating = lookData.lookImage?.status === 'pending' || lookData.lookImage?.status === 'processing';
-        const generationFailed = lookData.lookImage?.status === 'failed';
+      const imageUrl = lookData.lookImage?.imageUrl || '';
+      const isGenerating = lookData.lookImage?.status === 'pending' || lookData.lookImage?.status === 'processing';
+      const generationFailed = lookData.lookImage?.status === 'failed';
 
-        return {
-          id: lookData.look._id,
-          imageUrl,
-          products,
-          totalPrice: lookData.look.totalPrice,
-          currency: lookData.look.currency,
-          styleTags: lookData.look.styleTags,
-          occasion: lookData.look.occasion || 'Everyday',
-          nimaNote: lookData.look.nimaComment || "A beautifully curated look!",
-          createdAt: new Date(lookData.look._creationTime),
-          height: heights[index % heights.length],
-          isLiked: false,
-          isDisliked: false,
-          isGenerating,
-          generationFailed,
-          creator: lookData.creator,
-          isFriend: lookData.isFriend,
-          hasPendingRequest: lookData.hasPendingRequest,
-        };
-      });
-      setExploreLooks(transformedExploreLooks);
-    } else if (activeFilter === 'explore') {
-      setExploreLooks([]);
-    }
+      return {
+        id: lookData.look._id,
+        imageUrl,
+        products,
+        totalPrice: lookData.look.totalPrice,
+        currency: lookData.look.currency,
+        styleTags: lookData.look.styleTags,
+        occasion: lookData.look.occasion || 'Everyday',
+        nimaNote: lookData.look.nimaComment || "A beautifully curated look!",
+        createdAt: new Date(lookData.look._creationTime),
+        height: heights[index % heights.length],
+        isLiked: false,
+        isDisliked: false,
+        isGenerating,
+        generationFailed,
+        creator: lookData.creator,
+        isFriend: lookData.isFriend,
+        hasPendingRequest: lookData.hasPendingRequest,
+      };
+    });
   }, [publicLooks, activeFilter]);
+
+  // Transform My Looks data
+  // Using useMemo to prevent re-renders from Convex subscription updates
+  const myLooks = useMemo((): LookWithStatus[] => {
+    if (activeFilter !== 'my-look' || !myLooksData) return [];
+    
+    const heights: Array<'short' | 'medium' | 'tall' | 'extra-tall'> = ['medium', 'tall', 'short', 'extra-tall'];
+    
+    return myLooksData.map((lookData, index) => {
+      const products: Product[] = lookData.items.map((itemData) => ({
+        id: itemData.item._id,
+        name: itemData.item.name,
+        brand: itemData.item.brand || 'Unknown',
+        category: itemData.item.category as Product['category'],
+        price: itemData.item.price,
+        currency: itemData.item.currency,
+        imageUrl: itemData.primaryImageUrl || '',
+        storeUrl: '#',
+        storeName: itemData.item.brand || 'Store',
+        color: itemData.item.colors[0] || 'Mixed',
+      }));
+
+      const imageUrl = lookData.lookImage?.imageUrl || '';
+      const isGenerating = lookData.lookImage?.status === 'pending' || lookData.lookImage?.status === 'processing';
+      const generationFailed = lookData.lookImage?.status === 'failed';
+
+      return {
+        id: lookData.look._id,
+        imageUrl,
+        products,
+        totalPrice: lookData.look.totalPrice,
+        currency: lookData.look.currency,
+        styleTags: lookData.look.styleTags,
+        occasion: lookData.look.occasion || 'Everyday',
+        nimaNote: lookData.look.nimaComment || "A look curated just for you!",
+        createdAt: new Date(lookData.look._creationTime),
+        height: heights[index % heights.length],
+        isLiked: false,
+        isDisliked: false,
+        isGenerating,
+        generationFailed,
+      };
+    });
+  }, [myLooksData, activeFilter]);
 
   // Transform items data for Apparel grid
   const apparelItems: ApparelItem[] = (itemsData?.items || []).map((item) => ({
@@ -307,35 +405,51 @@ export default function DiscoverPage() {
           className="mb-6"
         >
           <h2 className="text-2xl md:text-3xl font-serif text-foreground">
-            {activeFilter === 'explore' 
-              ? 'Discover new styles ✨'
-              : 'Shop the collection ✨'
+            {activeFilter === 'my-look' 
+              ? 'Your curated looks ✨'
+              : activeFilter === 'explore' 
+                ? 'Discover new styles ✨'
+                : 'Shop the collection ✨'
             }
           </h2>
           <p className="text-muted-foreground mt-1">
-            {activeFilter === 'explore'
-              ? exploreLooks.length > 0 
-                ? `${exploreLooks.length} looks from the community`
-                : 'Explore looks shared by others'
-              : 'Browse apparel items'
+            {activeFilter === 'my-look'
+              ? myLooks.length > 0 
+                ? `${myLooks.length} looks ${myLooksFilter === 'system' ? 'curated by Nima' : 'created by you'}`
+                : myLooksFilter === 'system' 
+                  ? 'Looks curated by Nima for you'
+                  : 'Looks you\'ve created'
+              : activeFilter === 'explore'
+                ? exploreLooks.length > 0 
+                  ? `${exploreLooks.length} looks from the community`
+                  : 'Explore looks shared by others'
+                : 'Browse apparel items'
             }
           </p>
         </motion.div>
 
-        {/* Filter tabs */}
+        {/* Filter tabs - 3 main pills */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.4 }}
-          className="mb-8 flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
+          className="mb-4 flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
         >
           {[
-            { id: 'explore' as FilterType, label: 'Explore' },
-            { id: 'apparel' as FilterType, label: 'Apparel' },
+            { id: 'my-look' as FilterType, label: 'My Look', icon: Sparkles },
+            { id: 'explore' as FilterType, label: 'Explore', icon: User },
+            { id: 'apparel' as FilterType, label: 'Apparel', icon: Shirt },
           ].map((filter) => (
             <button
               key={filter.id}
-              onClick={() => setActiveFilter(filter.id)}
+              onClick={() => {
+                setActiveFilter(filter.id);
+                // Reset selection mode when switching tabs
+                if (filter.id !== 'apparel' && isSelectionMode) {
+                  setIsSelectionMode(false);
+                  setSelectedItems(new Set());
+                }
+              }}
               className={`
                 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
                 transition-all duration-200
@@ -348,34 +462,91 @@ export default function DiscoverPage() {
               {filter.label}
             </button>
           ))}
-
-          {/* Create a Look button */}
-          <button
-            onClick={() => {
-              if (isSelectionMode) {
-                setIsSelectionMode(false);
-                setSelectedItems(new Set());
-              } else {
-                setActiveFilter('apparel');
-                setIsSelectionMode(true);
-              }
-            }}
-            className={`
-              px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
-              transition-all duration-200 flex items-center gap-2
-              ${isSelectionMode
-                ? 'bg-destructive text-destructive-foreground'
-                : 'bg-secondary text-secondary-foreground hover:bg-secondary-hover'
-              }
-            `}
-          >
-            <Sparkles className="w-4 h-4" />
-            {isSelectionMode ? 'Cancel' : 'Create Look'}
-          </button>
         </motion.div>
 
+        {/* Sub-elements under each tab */}
+        <AnimatePresence mode="wait">
+          {/* By Nima / By Me toggle - shown under My Look tab */}
+          {activeFilter === 'my-look' && (
+            <motion.div
+              key="my-look-toggle"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="mb-6 flex justify-center"
+            >
+              <div className="relative bg-surface-alt rounded-full p-1 flex">
+                {/* Sliding background */}
+                <motion.div
+                  className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-primary rounded-full"
+                  initial={false}
+                  animate={{
+                    x: myLooksFilter === 'system' ? 0 : 'calc(100% + 4px)',
+                  }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                />
+                
+                {/* Buttons */}
+                <button
+                  onClick={() => setMyLooksFilter('system')}
+                  className={`
+                    relative z-10 px-6 py-2 rounded-full text-sm font-medium transition-colors duration-200
+                    ${myLooksFilter === 'system' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}
+                  `}
+                >
+                  By Nima
+                </button>
+                <button
+                  onClick={() => setMyLooksFilter('user')}
+                  className={`
+                    relative z-10 px-6 py-2 rounded-full text-sm font-medium transition-colors duration-200
+                    ${myLooksFilter === 'user' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}
+                  `}
+                >
+                  By Me
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Create a Look button - shown under Apparel tab */}
+          {activeFilter === 'apparel' && (
+            <motion.div
+              key="apparel-create"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="mb-6 flex justify-center"
+            >
+              <button
+                onClick={() => {
+                  if (isSelectionMode) {
+                    setIsSelectionMode(false);
+                    setSelectedItems(new Set());
+                  } else {
+                    setIsSelectionMode(true);
+                  }
+                }}
+                className={`
+                  px-6 py-2 rounded-full text-sm font-medium whitespace-nowrap
+                  transition-all duration-200 flex items-center gap-2
+                  ${isSelectionMode
+                    ? 'bg-destructive text-destructive-foreground'
+                    : 'bg-secondary text-secondary-foreground hover:bg-secondary-hover'
+                  }
+                `}
+              >
+                <Sparkles className="w-4 h-4" />
+                {isSelectionMode ? 'Cancel Selection' : 'Create a Look'}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Selection mode indicator */}
-        {isSelectionMode && (
+        {isSelectionMode && activeFilter === 'apparel' && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -403,9 +574,92 @@ export default function DiscoverPage() {
               selectedItems={selectedItems}
               onItemSelect={handleItemSelect}
             />
+          ) : activeFilter === 'my-look' ? (
+            // My Looks grid
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={myLooksFilter}
+                initial={{ opacity: 0, x: myLooksFilter === 'system' ? -20 : 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: myLooksFilter === 'system' ? 20 : -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                {myLooksData === undefined ? (
+                  // Loading skeleton
+                  <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
+                    {[...Array(8)].map((_, i) => (
+                      <div key={i} className="break-inside-avoid mb-4">
+                        <div className="rounded-2xl bg-surface-alt border border-border/30 overflow-hidden animate-pulse">
+                          <div className="aspect-[3/4] bg-surface" />
+                          <div className="p-3 space-y-2">
+                            <div className="h-3 bg-surface rounded w-1/3" />
+                            <div className="h-4 bg-surface rounded w-2/3" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : myLooks.length > 0 ? (
+                  <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
+                    {myLooks.map((look, index) => (
+                      <LookCard key={look.id} look={look} index={index} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-16">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-alt flex items-center justify-center">
+                      <Sparkles className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-medium text-foreground mb-2">
+                      {myLooksFilter === 'system' ? 'No looks from Nima yet' : 'No looks created yet'}
+                    </h3>
+                    <p className="text-muted-foreground max-w-md mx-auto">
+                      {myLooksFilter === 'system' 
+                        ? 'Complete your onboarding to get personalized looks curated by Nima.'
+                        : 'Create your own looks by selecting items from the Apparel tab.'
+                      }
+                    </p>
+                    {myLooksFilter === 'system' && (
+                      <Link 
+                        href="/onboarding" 
+                        className="inline-flex mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
+                      >
+                        Complete Onboarding
+                      </Link>
+                    )}
+                    {myLooksFilter === 'user' && (
+                      <button
+                        onClick={() => {
+                          setActiveFilter('apparel');
+                          setIsSelectionMode(true);
+                        }}
+                        className="inline-flex mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
+                      >
+                        Create Your First Look
+                      </button>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
           ) : (
             // Explore grid with creator info
-            exploreLooks.length > 0 ? (
+            publicLooks === undefined ? (
+              // Loading skeleton
+              <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="break-inside-avoid mb-4">
+                    <div className="rounded-2xl bg-surface-alt border border-border/30 overflow-hidden animate-pulse">
+                      <div className="aspect-[3/4] bg-surface" />
+                      <div className="p-3 space-y-2">
+                        <div className="h-3 bg-surface rounded w-1/3" />
+                        <div className="h-4 bg-surface rounded w-2/3" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : exploreLooks.length > 0 ? (
               <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
                 {exploreLooks.map((look, index) => (
                   <LookCardWithCreator key={look.id} look={look} index={index} />
