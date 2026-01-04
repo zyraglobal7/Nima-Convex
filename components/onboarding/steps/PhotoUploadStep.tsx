@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { StepProps, UploadedImage } from '../types';
 import { ArrowLeft, Upload, X, Camera, Shield, Loader2, AlertCircle } from 'lucide-react';
 import type { Id } from '@/convex/_generated/dataModel';
-import Image from 'next/image';
 import { trackStepCompleted, trackBackClicked, trackPhotoUploaded, trackPhotoRemoved, ONBOARDING_STEPS } from '@/lib/analytics';
 
 // Constants for validation
@@ -303,46 +302,55 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
           {/* Photo previews */}
           {(formData.uploadedImages.length > 0 || uploadingFiles.length > 0) && (
             <div className="grid grid-cols-2 gap-3">
-              {/* Successfully uploaded images */}
+              {/* Successfully uploaded images - use native img for blob URLs */}
               {formData.uploadedImages.map((image) => (
                 <div
                   key={image.imageId}
                   className="relative aspect-[3/4] rounded-xl overflow-hidden bg-surface animate-in fade-in zoom-in duration-300"
                 >
-                  <Image
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
                     src={image.previewUrl}
                     alt={image.filename}
-                    priority={true}
-                    fill
-                   
-                    className="object-cover"
+                    className="absolute inset-0 w-full h-full object-cover"
+                    onError={(e) => {
+                      // If blob URL fails, show placeholder
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent && !parent.querySelector('.fallback-placeholder')) {
+                        const placeholder = document.createElement('div');
+                        placeholder.className = 'fallback-placeholder absolute inset-0 flex items-center justify-center bg-surface-alt';
+                        placeholder.innerHTML = '<span class="text-muted-foreground text-sm">Image uploaded ✓</span>';
+                        parent.appendChild(placeholder);
+                      }
+                    }}
                   />
                   <button
                     onClick={() => removePhoto(image.imageId)}
-                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-colors"
+                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-colors z-10"
                     aria-label="Remove photo"
                   >
                     <X className="w-4 h-4 text-white" />
                   </button>
                   {/* Success indicator */}
-                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-green-500/90 rounded-full">
+                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-green-500/90 rounded-full z-10">
                     <span className="text-xs text-white font-medium">✓ Uploaded</span>
                   </div>
                 </div>
               ))}
 
-              {/* Uploading/failed images */}
+              {/* Uploading/failed images - use native img for blob URLs */}
               {uploadingFiles.map((file) => (
                 <div
                   key={file.id}
                   className="relative aspect-[3/4] rounded-xl overflow-hidden bg-surface animate-in fade-in zoom-in duration-300"
                 >
-                  <Image
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
                     src={file.previewUrl}
                     alt={file.file.name}
-                    fill
-                  
-                    className={`object-cover ${file.status === 'uploading' ? 'opacity-50' : ''}`}
+                    className={`absolute inset-0 w-full h-full object-cover ${file.status === 'uploading' ? 'opacity-50' : ''}`}
                   />
                   
                   {file.status === 'uploading' && (
@@ -376,7 +384,7 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
                     <button
                       onClick={() => removeFailedUpload(file.id)}
                       disabled={file.status === 'uploading'}
-                      className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-colors disabled:opacity-50"
+                      className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-colors disabled:opacity-50 z-10"
                       aria-label="Remove photo"
                     >
                       <X className="w-4 h-4 text-white" />

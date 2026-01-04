@@ -28,15 +28,24 @@ export const handleUserCreated = internalMutation({
       profileImageUrl?: string;
     }
   ): Promise<Id<'users'>> => {
-    // Check if user already exists
-    const existingUser = await ctx.db
+    // Check if user exists by email FIRST (prevents duplicates)
+    let existingUser = await ctx.db
       .query('users')
-      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', args.workosUserId))
-      .unique();
+      .withIndex('by_email', (q) => q.eq('email', args.email))
+      .first();
+
+    if (!existingUser) {
+      // No user with this email - check by workosUserId as fallback
+      existingUser = await ctx.db
+        .query('users')
+        .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', args.workosUserId))
+        .unique();
+    }
 
     if (existingUser) {
-      // Update existing user with latest info
+      // Update existing user - link the new WorkOS identity if different
       await ctx.db.patch(existingUser._id, {
+        workosUserId: args.workosUserId, // Link new auth identity
         email: args.email,
         emailVerified: args.emailVerified,
         firstName: args.firstName,

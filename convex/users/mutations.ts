@@ -29,15 +29,24 @@ export const createUser = internalMutation({
       profileImageUrl?: string;
     }
   ): Promise<Id<'users'>> => {
-    // Check if user already exists
-    const existingUser = await ctx.db
+    // Check if user exists by email FIRST (prevents duplicates)
+    let existingUser = await ctx.db
       .query('users')
-      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', args.workosUserId))
-      .unique();
+      .withIndex('by_email', (q) => q.eq('email', args.email))
+      .first();
+
+    if (!existingUser) {
+      // No user with this email - check by workosUserId as fallback
+      existingUser = await ctx.db
+        .query('users')
+        .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', args.workosUserId))
+        .unique();
+    }
 
     if (existingUser) {
-      // Update existing user with latest info from WorkOS
+      // Update existing user - link the new WorkOS identity if different
       await ctx.db.patch(existingUser._id, {
+        workosUserId: args.workosUserId, // Link new auth identity
         email: args.email,
         emailVerified: args.emailVerified,
         firstName: args.firstName,
@@ -616,15 +625,26 @@ export const getOrCreateUser = mutation({
       firstName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1).toLowerCase();
     }
 
-    // Check if user exists
-    let user = await ctx.db
-      .query('users')
-      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', workosUserId))
-      .unique();
+    // Check if user exists by email FIRST (prevents duplicates)
+    let user = email
+      ? await ctx.db
+          .query('users')
+          .withIndex('by_email', (q) => q.eq('email', email))
+          .first()
+      : null;
+
+    if (!user) {
+      // No user with this email - check by workosUserId as fallback
+      user = await ctx.db
+        .query('users')
+        .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', workosUserId))
+        .unique();
+    }
 
     if (user) {
       // Update existing user with any missing or changed profile data
       const updates: Partial<{
+        workosUserId: string;
         email: string;
         emailVerified: boolean;
         firstName: string;
@@ -632,6 +652,11 @@ export const getOrCreateUser = mutation({
         profileImageUrl: string;
         updatedAt: number;
       }> = {};
+
+      // Link the new WorkOS identity if different
+      if (user.workosUserId !== workosUserId) {
+        updates.workosUserId = workosUserId;
+      }
 
       // Update fields that are missing in the database but available now
       if (!user.firstName && firstName) {
@@ -680,6 +705,278 @@ export const getOrCreateUser = mutation({
 
     user = await ctx.db.get(userId);
     return user;
+  },
+});
+
+/**
+ * Find and merge duplicate users (same email, different records)
+ * Keeps the oldest user by _creationTime, migrates all data to it, deletes duplicates
+ * 
+ * This is a cleanup script meant to be run once to fix existing duplicates.
+ * Run via Convex dashboard: npx convex run users/mutations:mergeDuplicateUsers
+ */
+export const mergeDuplicateUsers = internalMutation({
+  args: {
+    dryRun: v.optional(v.boolean()), // If true, only logs what would happen
+  },
+  returns: v.object({
+    duplicateEmailsFound: v.number(),
+    usersMerged: v.number(),
+    usersDeleted: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { dryRun?: boolean }
+  ): Promise<{
+    duplicateEmailsFound: number;
+    usersMerged: number;
+    usersDeleted: number;
+    errors: Array<string>;
+  }> => {
+    const dryRun = args.dryRun ?? true; // Default to dry run for safety
+    const errors: Array<string> = [];
+    let usersMerged = 0;
+    let usersDeleted = 0;
+
+    // Get all users
+    const allUsers = await ctx.db.query('users').collect();
+    
+    // Group users by email (lowercase for case-insensitive matching)
+    const emailToUsers = new Map<string, Array<Doc<'users'>>>();
+    for (const user of allUsers) {
+      const email = user.email.toLowerCase();
+      const existing = emailToUsers.get(email) || [];
+      existing.push(user);
+      emailToUsers.set(email, existing);
+    }
+
+    // Find emails with duplicates
+    const duplicateEmails: Array<string> = [];
+    for (const [email, users] of emailToUsers) {
+      if (users.length > 1) {
+        duplicateEmails.push(email);
+      }
+    }
+
+    console.log(`Found ${duplicateEmails.length} emails with duplicate accounts`);
+
+    // Process each duplicate group
+    for (const email of duplicateEmails) {
+      const users = emailToUsers.get(email)!;
+      
+      // Sort by _creationTime ascending - oldest first
+      users.sort((a, b) => a._creationTime - b._creationTime);
+      
+      const primaryUser = users[0];
+      const duplicates = users.slice(1);
+
+      console.log(`Processing email "${email}": keeping user ${primaryUser._id}, merging ${duplicates.length} duplicates`);
+
+      for (const dupUser of duplicates) {
+        try {
+          // Migrate all related data from duplicate to primary user
+          if (!dryRun) {
+            // user_images
+            const userImages = await ctx.db
+              .query('user_images')
+              .withIndex('by_user', (q) => q.eq('userId', dupUser._id))
+              .collect();
+            for (const img of userImages) {
+              await ctx.db.patch(img._id, { userId: primaryUser._id });
+            }
+
+            // lookbooks
+            const lookbooks = await ctx.db
+              .query('lookbooks')
+              .withIndex('by_user', (q) => q.eq('userId', dupUser._id))
+              .collect();
+            for (const lb of lookbooks) {
+              await ctx.db.patch(lb._id, { userId: primaryUser._id });
+            }
+
+            // lookbook_items
+            const lookbookItems = await ctx.db
+              .query('lookbook_items')
+              .withIndex('by_user', (q) => q.eq('userId', dupUser._id))
+              .collect();
+            for (const item of lookbookItems) {
+              await ctx.db.patch(item._id, { userId: primaryUser._id });
+            }
+
+            // threads
+            const threads = await ctx.db
+              .query('threads')
+              .withIndex('by_user', (q) => q.eq('userId', dupUser._id))
+              .collect();
+            for (const thread of threads) {
+              await ctx.db.patch(thread._id, { userId: primaryUser._id });
+            }
+
+            // messages
+            const messages = await ctx.db
+              .query('messages')
+              .withIndex('by_user', (q) => q.eq('userId', dupUser._id))
+              .collect();
+            for (const msg of messages) {
+              await ctx.db.patch(msg._id, { userId: primaryUser._id });
+            }
+
+            // look_images
+            const lookImages = await ctx.db
+              .query('look_images')
+              .withIndex('by_user', (q) => q.eq('userId', dupUser._id))
+              .collect();
+            for (const li of lookImages) {
+              await ctx.db.patch(li._id, { userId: primaryUser._id });
+            }
+
+            // item_try_ons
+            const itemTryOns = await ctx.db
+              .query('item_try_ons')
+              .withIndex('by_user', (q) => q.eq('userId', dupUser._id))
+              .collect();
+            for (const ito of itemTryOns) {
+              await ctx.db.patch(ito._id, { userId: primaryUser._id });
+            }
+
+            // friendships - requester
+            const friendshipsAsRequester = await ctx.db
+              .query('friendships')
+              .withIndex('by_requester', (q) => q.eq('requesterId', dupUser._id))
+              .collect();
+            for (const fr of friendshipsAsRequester) {
+              // Check if this friendship already exists for primary user
+              const existing = await ctx.db
+                .query('friendships')
+                .withIndex('by_users', (q) => 
+                  q.eq('requesterId', primaryUser._id).eq('addresseeId', fr.addresseeId)
+                )
+                .unique();
+              if (!existing) {
+                await ctx.db.patch(fr._id, { requesterId: primaryUser._id });
+              } else {
+                // Duplicate friendship - delete it
+                await ctx.db.delete(fr._id);
+              }
+            }
+
+            // friendships - addressee
+            const friendshipsAsAddressee = await ctx.db
+              .query('friendships')
+              .withIndex('by_addressee', (q) => q.eq('addresseeId', dupUser._id))
+              .collect();
+            for (const fr of friendshipsAsAddressee) {
+              const existing = await ctx.db
+                .query('friendships')
+                .withIndex('by_users', (q) => 
+                  q.eq('requesterId', fr.requesterId).eq('addresseeId', primaryUser._id)
+                )
+                .unique();
+              if (!existing) {
+                await ctx.db.patch(fr._id, { addresseeId: primaryUser._id });
+              } else {
+                await ctx.db.delete(fr._id);
+              }
+            }
+
+            // direct_messages - sender
+            const dmsAsSender = await ctx.db
+              .query('direct_messages')
+              .withIndex('by_sender', (q) => q.eq('senderId', dupUser._id))
+              .collect();
+            for (const dm of dmsAsSender) {
+              await ctx.db.patch(dm._id, { senderId: primaryUser._id });
+            }
+
+            // direct_messages - recipient
+            const dmsAsRecipient = await ctx.db
+              .query('direct_messages')
+              .withIndex('by_recipient', (q) => q.eq('recipientId', dupUser._id))
+              .collect();
+            for (const dm of dmsAsRecipient) {
+              await ctx.db.patch(dm._id, { recipientId: primaryUser._id });
+            }
+
+            // user_wrapped
+            const wrappedRecords = await ctx.db
+              .query('user_wrapped')
+              .withIndex('by_user_and_year', (q) => q.eq('userId', dupUser._id))
+              .collect();
+            for (const wr of wrappedRecords) {
+              // Check if primary already has wrapped for this year
+              const existing = await ctx.db
+                .query('user_wrapped')
+                .withIndex('by_user_and_year', (q) => 
+                  q.eq('userId', primaryUser._id).eq('year', wr.year)
+                )
+                .unique();
+              if (!existing) {
+                await ctx.db.patch(wr._id, { userId: primaryUser._id });
+              } else {
+                // Primary already has wrapped for this year - delete duplicate
+                await ctx.db.delete(wr._id);
+              }
+            }
+
+            // Transfer any useful data from duplicate to primary
+            // (e.g., if duplicate completed onboarding but primary didn't)
+            const updates: Partial<Doc<'users'>> = {};
+            if (dupUser.onboardingCompleted && !primaryUser.onboardingCompleted) {
+              updates.onboardingCompleted = true;
+              // Also copy onboarding data
+              if (dupUser.gender && !primaryUser.gender) updates.gender = dupUser.gender;
+              if (dupUser.age && !primaryUser.age) updates.age = dupUser.age;
+              if (dupUser.stylePreferences.length > 0 && primaryUser.stylePreferences.length === 0) {
+                updates.stylePreferences = dupUser.stylePreferences;
+              }
+              if (dupUser.shirtSize && !primaryUser.shirtSize) updates.shirtSize = dupUser.shirtSize;
+              if (dupUser.waistSize && !primaryUser.waistSize) updates.waistSize = dupUser.waistSize;
+              if (dupUser.height && !primaryUser.height) updates.height = dupUser.height;
+              if (dupUser.heightUnit && !primaryUser.heightUnit) updates.heightUnit = dupUser.heightUnit;
+              if (dupUser.shoeSize && !primaryUser.shoeSize) updates.shoeSize = dupUser.shoeSize;
+              if (dupUser.shoeSizeUnit && !primaryUser.shoeSizeUnit) updates.shoeSizeUnit = dupUser.shoeSizeUnit;
+              if (dupUser.country && !primaryUser.country) updates.country = dupUser.country;
+              if (dupUser.currency && !primaryUser.currency) updates.currency = dupUser.currency;
+              if (dupUser.budgetRange && !primaryUser.budgetRange) updates.budgetRange = dupUser.budgetRange;
+            }
+            
+            // Keep the most recent WorkOS user ID (active auth)
+            updates.workosUserId = dupUser.workosUserId;
+            updates.updatedAt = Date.now();
+
+            if (Object.keys(updates).length > 0) {
+              await ctx.db.patch(primaryUser._id, updates);
+            }
+
+            // Delete the duplicate user
+            await ctx.db.delete(dupUser._id);
+            usersDeleted++;
+          }
+
+          usersMerged++;
+          console.log(`  Merged duplicate ${dupUser._id} into primary ${primaryUser._id}`);
+        } catch (error) {
+          const errMsg = `Error merging user ${dupUser._id}: ${error}`;
+          console.error(errMsg);
+          errors.push(errMsg);
+        }
+      }
+    }
+
+    const result = {
+      duplicateEmailsFound: duplicateEmails.length,
+      usersMerged,
+      usersDeleted,
+      errors,
+    };
+
+    console.log(`Merge complete:`, result);
+    if (dryRun) {
+      console.log('DRY RUN - no changes were made. Run with dryRun: false to apply changes.');
+    }
+
+    return result;
   },
 });
 

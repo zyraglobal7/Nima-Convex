@@ -75,6 +75,9 @@ export function ApparelItemCard({
                 src={item.primaryImageUrl!}
                 alt={item.name}
                 fill
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                loading={index < 4 ? 'eager' : 'lazy'}
+                priority={index < 2}
                 unoptimized={
                   item.primaryImageUrl!.includes('convex.cloud') ||
                   item.primaryImageUrl!.includes('convex.site')
