@@ -74,6 +74,31 @@ function isPostHogReady(): boolean {
 }
 
 /**
+ * Debounce map for preventing duplicate events
+ * Stores eventName -> lastTimestamp
+ */
+const lastTrackedEvent = new Map<string, number>();
+const EVENT_DEBOUNCE_MS = 1000; // 1 second debounce
+
+/**
+ * Check if an event should be debounced (fired too recently)
+ */
+function shouldDebounceEvent(eventName: string): boolean {
+  const now = Date.now();
+  const lastTime = lastTrackedEvent.get(eventName) || 0;
+  
+  if (now - lastTime < EVENT_DEBOUNCE_MS) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Analytics] Debouncing duplicate event: ${eventName}`);
+    }
+    return true;
+  }
+  
+  lastTrackedEvent.set(eventName, now);
+  return false;
+}
+
+/**
  * Track a generic analytics event
  */
 export function trackEvent(
@@ -266,13 +291,20 @@ export function trackStartExploringClicked(): void {
 
 /**
  * Track discover page view with context
+ * Includes debouncing to prevent duplicate fires
  */
 export function trackDiscoverPageViewed(properties?: {
   has_workflow?: boolean;
   is_authenticated?: boolean;
 }): void {
   if (!isPostHogReady()) return;
+  
+  // Debounce to prevent duplicate fires from re-renders
+  if (shouldDebounceEvent(ANALYTICS_EVENTS.DISCOVER_PAGE_VIEWED)) return;
 
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[Analytics] Tracking discover_page_viewed');
+  }
   posthog.capture(ANALYTICS_EVENTS.DISCOVER_PAGE_VIEWED, properties);
 }
 
