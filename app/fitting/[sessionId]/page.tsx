@@ -11,12 +11,17 @@ import { Id } from '@/convex/_generated/dataModel';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LookCarousel, ProductItem, ProductSwapperModal, BuyWithNimaSheet } from '@/components/ask';
 import { NimaChatBubble } from '@/components/discover';
+import { ShareLookModal } from '@/components/looks/ShareLookModal';
+import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
+import { ItemsUnavailableModal } from '@/components/ui/ItemsUnavailableModal';
 import { formatPrice } from '@/lib/utils/format';
+import { trackPurchaseAttempted, trackItemsUnavailableShown } from '@/lib/analytics';
 import type { Product } from '@/lib/mock-data';
 
 // Transform Convex look data to the format expected by components
 interface FittingLook {
   id: string;
+  publicId: string;
   imageUrl: string;
   userTryOnImageUrl: string;
   products: Product[];
@@ -44,6 +49,7 @@ type LookData = {
   look: {
     _id: Id<'looks'>;
     _creationTime: number;
+    publicId: string;
     totalPrice: number;
     currency: string;
     styleTags: string[];
@@ -91,6 +97,10 @@ export default function FittingRoomPage() {
   const [likedLooks, setLikedLooks] = useState<Set<string>>(new Set());
   const [savedLooks, setSavedLooks] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showComingSoonModal, setShowComingSoonModal] = useState(false);
+  const [showItemsUnavailableModal, setShowItemsUnavailableModal] = useState(false);
+  const [unavailableItemsInfo, setUnavailableItemsInfo] = useState<{ unavailable: number; total: number }>({ unavailable: 0, total: 0 });
 
   // Mutations
   const quickSaveMutation = useMutation(api.lookbooks.mutations.quickSave);
@@ -179,6 +189,7 @@ export default function FittingRoomPage() {
 
         return {
           id: lookData.look._id,
+          publicId: lookData.look.publicId,
           imageUrl: imageUrl || '', // Will check isGenerating for UI state
           userTryOnImageUrl: imageUrl || '',
           products,
@@ -310,37 +321,9 @@ export default function FittingRoomPage() {
     }
   };
 
-  const handleShareLook = async () => {
+  const handleShareLook = () => {
     if (!currentLook) return;
-    
-    const shareUrl = `${window.location.origin}/fitting/${sessionId}`;
-    const shareData = {
-      title: 'Check out this look on Nima',
-      text: `I found this ${currentLook.occasion} outfit on Nima AI!`,
-      url: shareUrl,
-    };
-    
-    try {
-      if (navigator.share && navigator.canShare?.(shareData)) {
-        await navigator.share(shareData);
-        showToast('Thanks for sharing!');
-      } else {
-        await navigator.clipboard.writeText(shareUrl);
-        showToast('Link copied to clipboard! 📋');
-      }
-    } catch (error) {
-      // User cancelled share or clipboard failed
-      if ((error as Error).name !== 'AbortError') {
-        console.error('Share failed:', error);
-        // Try clipboard as fallback
-        try {
-          await navigator.clipboard.writeText(shareUrl);
-          showToast('Link copied to clipboard! 📋');
-        } catch {
-          showToast('Could not share link', 'error');
-        }
-      }
-    }
+    setShowShareModal(true);
   };
 
   const handleLikeProduct = (productId: string) => {
@@ -404,6 +387,62 @@ export default function FittingRoomPage() {
     console.log('Swap product to:', newProductId);
     setSwappingProduct(null);
     setShowSwapModal(false);
+  };
+
+  // Handle buy button click
+  const handleBuyClick = () => {
+    if (!currentLook || !allLookData[currentLookIndex]) return;
+
+    const currentLookData = allLookData[currentLookIndex];
+    if (!currentLookData) return;
+
+    // Check if items are unavailable by comparing original itemIds with fetched items
+    // Note: The look schema has itemIds but we need to access it from the raw data
+    const availableItems = currentLookData.items.length;
+    const fetchedProducts = currentLook.products.length;
+    
+    // For fitting room, we check all looks in the session for unavailable items
+    let totalUnavailable = 0;
+    let totalItems = 0;
+    
+    allLookData.forEach((lookData) => {
+      if (lookData) {
+        // Each lookData.items already filters out inactive items
+        // We need to compare with the original look's item count
+        // For now, if products array length differs from items array, something is missing
+        totalItems += lookData.items.length;
+      }
+    });
+
+    // Since we don't have direct access to original itemIds from the query response,
+    // we check if any look has zero products (which would indicate deleted items)
+    const hasEmptyLook = session?.looks.some((look) => look.products.length === 0);
+    
+    if (hasEmptyLook) {
+      // At least one look has no products available
+      trackItemsUnavailableShown({
+        source: 'fitting_room',
+        look_id: currentLook.publicId,
+        total_items: 1, // Approximate
+        available_items: 0,
+        unavailable_count: 1,
+      });
+      setUnavailableItemsInfo({ unavailable: 1, total: 1 });
+      setShowItemsUnavailableModal(true);
+    } else {
+      // All items available - show coming soon modal
+      const totalPrice = session?.looks.reduce((sum, look) => sum + look.totalPrice, 0) || 0;
+      const totalItemCount = session?.looks.reduce((sum, look) => sum + look.products.length, 0) || 0;
+      
+      trackPurchaseAttempted({
+        source: 'fitting_room',
+        item_count: totalItemCount,
+        total_price: totalPrice,
+        currency: currentLook.currency,
+        session_id: sessionId,
+      });
+      setShowComingSoonModal(true);
+    }
   };
 
   // Loading state - wait for queries to load
@@ -561,7 +600,7 @@ export default function FittingRoomPage() {
         <div className="max-w-3xl mx-auto">
           {/* Buy With Nima CTA */}
           <button
-            onClick={() => setShowBuySheet(true)}
+            onClick={handleBuyClick}
             className="w-full h-auto py-4 px-6 bg-gradient-to-r from-primary to-secondary hover:from-primary-hover hover:to-secondary text-primary-foreground rounded-2xl font-medium transition-all duration-300 hover:shadow-lg"
           >
             <div className="flex items-center justify-between">
@@ -663,6 +702,31 @@ export default function FittingRoomPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Share Look Modal */}
+      {currentLook && (
+        <ShareLookModal
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          lookId={currentLook.id as Id<'looks'>}
+          lookPublicId={currentLook.publicId}
+        />
+      )}
+
+      {/* Coming Soon Modal */}
+      <ComingSoonModal
+        open={showComingSoonModal}
+        onClose={() => setShowComingSoonModal(false)}
+      />
+
+      {/* Items Unavailable Modal */}
+      <ItemsUnavailableModal
+        open={showItemsUnavailableModal}
+        onClose={() => setShowItemsUnavailableModal(false)}
+        onGoBack={safeGoBack}
+        unavailableCount={unavailableItemsInfo.unavailable}
+        totalCount={unavailableItemsInfo.total}
+      />
     </div>
   );
 }

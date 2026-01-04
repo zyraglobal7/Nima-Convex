@@ -30,6 +30,10 @@ export const ANALYTICS_EVENTS = {
 
   // Page events
   DISCOVER_PAGE_VIEWED: 'discover_page_viewed',
+
+  // Purchase events
+  PURCHASE_ATTEMPTED: 'purchase_attempted',
+  ITEMS_UNAVAILABLE_SHOWN: 'items_unavailable_shown',
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];
@@ -331,5 +335,36 @@ export function resetUser(): void {
   if (!isPostHogReady()) return;
 
   posthog.reset();
+}
+
+/**
+ * Track when a user attempts to purchase (before payments are enabled)
+ */
+export function trackPurchaseAttempted(properties: {
+  source: 'look_detail' | 'fitting_room';
+  item_count: number;
+  total_price: number;
+  currency: string;
+  look_id?: string;
+  session_id?: string;
+}): void {
+  if (!isPostHogReady()) return;
+
+  posthog.capture(ANALYTICS_EVENTS.PURCHASE_ATTEMPTED, properties);
+}
+
+/**
+ * Track when items in a look are unavailable
+ */
+export function trackItemsUnavailableShown(properties: {
+  source: 'look_detail' | 'fitting_room';
+  look_id: string;
+  total_items: number;
+  available_items: number;
+  unavailable_count: number;
+}): void {
+  if (!isPostHogReady()) return;
+
+  posthog.capture(ANALYTICS_EVENTS.ITEMS_UNAVAILABLE_SHOWN, properties);
 }
 
