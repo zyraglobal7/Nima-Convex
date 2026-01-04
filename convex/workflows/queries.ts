@@ -79,11 +79,11 @@ export const getUserPrimaryImage = internalQuery({
     storageId: Id<'_storage'>;
     url: string | null;
   } | null> => {
-    // Get primary image for the user
+    // Get primary image for the user (use .first() to handle duplicate primaries gracefully)
     const primaryImage = await ctx.db
       .query('user_images')
       .withIndex('by_user_and_primary', (q) => q.eq('userId', args.userId).eq('isPrimary', true))
-      .unique();
+      .first();
 
     if (!primaryImage) {
       // Fall back to any processed image for the user
