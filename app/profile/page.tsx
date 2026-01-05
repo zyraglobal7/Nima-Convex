@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, User, Camera, LogOut, ChevronRight, Save, Loader2, Users } from 'lucide-react';
+import { Sparkles, User, Camera, LogOut, ChevronRight, Save, Loader2, Users, ImageIcon, Heart, Check, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery, useMutation } from 'convex/react';
@@ -13,6 +13,8 @@ import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import { FriendsList } from '@/components/friends/FriendsList';
 import { AddFriendButton } from '@/components/friends/AddFriendButton';
 import { LookCard } from '@/components/discover';
+import { PhotosTab } from '@/components/profile';
+import { STYLE_OUTFIT_IMAGES } from '@/components/onboarding/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,6 +77,8 @@ export default function ProfilePage() {
 
   // Local state for editing
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isEditingStyle, setIsEditingStyle] = useState(false);
+  const [selectedOutfits, setSelectedOutfits] = useState<string[]>([]);
   const [isSavingStyle, setIsSavingStyle] = useState(false);
   const [isSavingSize, setIsSavingSize] = useState(false);
   const [isSavingBudget, setIsSavingBudget] = useState(false);
@@ -146,8 +150,8 @@ export default function ProfilePage() {
     }
   }, [myLooksData]);
 
-  // Initialize form from user data
-  useState(() => {
+  // Initialize form from user data when currentUser loads
+  useEffect(() => {
     if (currentUser) {
       setFirstName(currentUser.firstName || '');
       setLastName(currentUser.lastName || '');
@@ -161,20 +165,44 @@ export default function ProfilePage() {
       setBudgetRange((currentUser.budgetRange as 'low' | 'mid' | 'premium') || 'mid');
       setCurrency(currentUser.currency || 'USD');
     }
-  });
+  }, [currentUser]);
 
-  const toggleStyle = (styleId: string) => {
-    setSelectedStyles((prev) =>
-      prev.includes(styleId)
-        ? prev.filter((s) => s !== styleId)
-        : [...prev, styleId]
+  const toggleOutfit = (outfitId: string) => {
+    setSelectedOutfits((prev) =>
+      prev.includes(outfitId)
+        ? prev.filter((id) => id !== outfitId)
+        : [...prev, outfitId]
     );
+  };
+
+  const startEditingStyle = () => {
+    // Pre-select outfits that match current styles
+    const matchingOutfits = STYLE_OUTFIT_IMAGES.filter((outfit) =>
+      outfit.tags.some((tag) => selectedStyles.includes(tag))
+    ).map((o) => o.id);
+    setSelectedOutfits(matchingOutfits);
+    setIsEditingStyle(true);
+  };
+
+  const cancelEditingStyle = () => {
+    setSelectedOutfits([]);
+    setIsEditingStyle(false);
   };
 
   const handleSaveStyles = async () => {
     setIsSavingStyle(true);
     try {
-      await updateStylePreferences({ stylePreferences: selectedStyles });
+      // Extract unique style tags from selected outfits
+      const selectedTags = new Set<string>();
+      selectedOutfits.forEach((outfitId) => {
+        const outfit = STYLE_OUTFIT_IMAGES.find((o) => o.id === outfitId);
+        outfit?.tags.forEach((tag) => selectedTags.add(tag));
+      });
+      const stylePreferences = Array.from(selectedTags);
+      
+      await updateStylePreferences({ stylePreferences });
+      setSelectedStyles(stylePreferences);
+      setIsEditingStyle(false);
       toast.success('Style preferences updated!');
     } catch (error) {
       console.error('Failed to save styles:', error);
@@ -317,10 +345,14 @@ export default function ProfilePage() {
           </div>
         </motion.div>
 
-        {/* Tabs - Restructured to 3 tabs */}
+        {/* Tabs - 4 tabs */}
         <Tabs defaultValue="my-looks" className="w-full">
-          <TabsList className="w-full grid grid-cols-3 mb-6">
+          <TabsList className="w-full grid grid-cols-4 mb-6">
             <TabsTrigger value="my-looks">My Looks</TabsTrigger>
+            <TabsTrigger value="my-photos" className="gap-1">
+              <ImageIcon className="w-4 h-4 hidden sm:inline" />
+              Photos
+            </TabsTrigger>
             <TabsTrigger value="style-fit">Style & Fit</TabsTrigger>
             <TabsTrigger value="account">Account</TabsTrigger>
           </TabsList>
@@ -419,6 +451,11 @@ export default function ProfilePage() {
             </motion.div>
           </TabsContent>
 
+          {/* My Photos Tab */}
+          <TabsContent value="my-photos" className="space-y-6">
+            <PhotosTab />
+          </TabsContent>
+
           {/* Style & Fit Tab (Merged) */}
           <TabsContent value="style-fit" className="space-y-6">
             <motion.div
@@ -428,36 +465,121 @@ export default function ProfilePage() {
             >
               {/* Style Section */}
               <div>
-                <h3 className="text-lg font-medium text-foreground mb-2">Your Style Vibe</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Select the styles that best describe your fashion preferences
-                </p>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {styleOptions.map((style) => (
-                    <button
-                      key={style.id}
-                      onClick={() => toggleStyle(style.id)}
-                      className={`
-                        p-4 rounded-xl border-2 transition-all duration-200 text-left
-                        ${selectedStyles.includes(style.id)
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border hover:border-primary/50'
-                        }
-                      `}
-                    >
-                      <span className="text-2xl mb-2 block">{style.emoji}</span>
-                      <span className="text-sm font-medium text-foreground">{style.label}</span>
-                    </button>
-                  ))}
-                </div>
-                <Button onClick={handleSaveStyles} disabled={isSavingStyle} className="mt-4">
-                  {isSavingStyle ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Save className="w-4 h-4 mr-2" />
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-lg font-medium text-foreground">Your Style Vibe</h3>
+                  {!isEditingStyle && (
+                    <Button variant="ghost" size="sm" onClick={startEditingStyle}>
+                      <Pencil className="w-4 h-4 mr-1" />
+                      Edit
+                    </Button>
                   )}
-                  Save Style Preferences
-                </Button>
+                </div>
+                
+                {isEditingStyle ? (
+                  /* Edit Mode - Outfit Grid */
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Tap outfits that match your style ({selectedOutfits.length} selected)
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {STYLE_OUTFIT_IMAGES.map((outfit) => {
+                        const isSelected = selectedOutfits.includes(outfit.id);
+                        return (
+                          <button
+                            key={outfit.id}
+                            onClick={() => toggleOutfit(outfit.id)}
+                            className={`
+                              relative aspect-[3/4] rounded-xl overflow-hidden 
+                              transition-all duration-300 ease-out
+                              ${isSelected 
+                                ? 'ring-2 ring-primary ring-offset-2 ring-offset-background scale-[0.98]' 
+                                : 'hover:scale-[1.02]'
+                              }
+                            `}
+                          >
+                            <img 
+                              src={outfit.url}
+                              alt={outfit.tags.join(', ')}
+                              className="absolute inset-0 w-full h-full object-cover"
+                            />
+                            
+                            {/* Style tags overlay */}
+                            <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/50 to-transparent">
+                              <div className="flex flex-wrap gap-1">
+                                {outfit.tags.map((tag) => (
+                                  <span 
+                                    key={tag}
+                                    className="text-[10px] px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded-full text-white font-medium"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Selection indicator */}
+                            <div
+                              className={`
+                                absolute top-3 right-3 w-8 h-8 rounded-full 
+                                flex items-center justify-center
+                                transition-all duration-300
+                                ${isSelected 
+                                  ? 'bg-primary text-primary-foreground scale-100' 
+                                  : 'bg-white/30 backdrop-blur-sm text-white scale-90'
+                                }
+                              `}
+                            >
+                              {isSelected ? (
+                                <Check className="w-4 h-4" />
+                              ) : (
+                                <Heart className="w-4 h-4" />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                      <Button variant="outline" onClick={cancelEditingStyle} disabled={isSavingStyle}>
+                        <X className="w-4 h-4 mr-1" />
+                        Cancel
+                      </Button>
+                      <Button onClick={handleSaveStyles} disabled={isSavingStyle || selectedOutfits.length === 0}>
+                        {isSavingStyle ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Save className="w-4 h-4 mr-2" />
+                        )}
+                        Save Styles
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Read-only Mode - Pills */
+                  <div>
+                    {selectedStyles.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedStyles.map((styleId) => {
+                          const style = styleOptions.find((s) => s.id.toLowerCase() === styleId.toLowerCase()) 
+                            || { id: styleId, label: styleId, emoji: '✨' };
+                          return (
+                            <span
+                              key={styleId}
+                              className="px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-foreground text-sm flex items-center gap-1.5"
+                            >
+                              <span>{style.emoji}</span>
+                              <span className="font-medium">{style.label}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">
+                        No styles selected. Tap Edit to choose your style preferences.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Budget Section */}
@@ -466,21 +588,23 @@ export default function ProfilePage() {
                 <p className="text-sm text-muted-foreground mb-4">
                   Help us find items that match your budget
                 </p>
-                <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="flex flex-wrap gap-2 mb-4">
                   {(['low', 'mid', 'premium'] as const).map((range) => (
                     <button
                       key={range}
                       onClick={() => setBudgetRange(range)}
                       className={`
-                        p-4 rounded-xl border-2 transition-all duration-200 text-center
+                        px-4 py-2 rounded-full border transition-all duration-200 
+                        flex items-center gap-1.5 text-sm
                         ${budgetRange === range
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border hover:border-primary/50'
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-surface hover:border-primary/50 text-foreground'
                         }
                       `}
                     >
-                      <span className="text-sm font-medium text-foreground capitalize">
-                        {range === 'low' ? '💰 Budget' : range === 'mid' ? '💎 Mid-Range' : '👑 Premium'}
+                      <span>{range === 'low' ? '💰' : range === 'mid' ? '💎' : '👑'}</span>
+                      <span className="font-medium">
+                        {range === 'low' ? 'Budget' : range === 'mid' ? 'Mid-Range' : 'Premium'}
                       </span>
                     </button>
                   ))}

@@ -144,6 +144,7 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
   const [generationProgress, setGenerationProgress] = useState<string>('');
   const [createdLookIds, setCreatedLookIds] = useState<Id<'looks'>[]>([]);
   const [scenario, setScenario] = useState<'fresh' | 'remix'>('fresh');
+  const [fittingReadyTimestamp, setFittingReadyTimestamp] = useState<Date | null>(null);
   
   // Thread ID from URL parameter
   const threadId = chatId as Id<'threads'>;
@@ -303,6 +304,8 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
 
       // Generate images
       const lookIds = result.lookIds;
+      const timestamp = new Date();
+      setFittingReadyTimestamp(timestamp);
       setCreatedLookIds(lookIds);
       setChatState('generating');
       setGenerationProgress('Creating the new you...');
@@ -363,6 +366,8 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
         return;
       }
 
+      const timestamp = new Date();
+      setFittingReadyTimestamp(timestamp);
       setCreatedLookIds([result.lookId]);
       setChatState('generating');
       setGenerationProgress('Creating your remixed look...');
@@ -486,14 +491,14 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
   displayMessages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
   // Add fitting-ready message for current session
-  if (createdLookIds.length > 0 && chatState === 'idle' && !displayMessages.some(m => m.type === 'fitting-ready' && m.sessionId === createdLookIds.join(','))) {
+  if (createdLookIds.length > 0 && chatState === 'idle' && fittingReadyTimestamp && !displayMessages.some(m => m.type === 'fitting-ready' && m.sessionId === createdLookIds.join(','))) {
     displayMessages.push({
       id: 'fitting-ready-current',
       role: 'nima',
       content: scenario === 'remix' 
         ? `Found ${createdLookIds.length} looks - some remixed from your previous styles!`
         : `Found ${createdLookIds.length} perfect looks for you!`,
-      timestamp: new Date(),
+      timestamp: fittingReadyTimestamp,
       type: 'fitting-ready',
       sessionId: createdLookIds.join(','),
       variant: scenario,
@@ -579,7 +584,7 @@ We're always adding new items, so check back soon! ✨`,
       {/* Messages area */}
       <main className="flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-3xl mx-auto space-y-4">
-          <AnimatePresence mode="popLayout">
+          <AnimatePresence>
             {displayMessages.map((message) => (
               <MessageBubble
                 key={message.id}

@@ -777,13 +777,29 @@ export const mergeDuplicateUsers = internalMutation({
         try {
           // Migrate all related data from duplicate to primary user
           if (!dryRun) {
-            // user_images
+            // user_images - migrate and dedupe primaries
             const userImages = await ctx.db
               .query('user_images')
               .withIndex('by_user', (q) => q.eq('userId', dupUser._id))
               .collect();
+            
+            // Check if primary user already has a primary image
+            const primaryUserImages = await ctx.db
+              .query('user_images')
+              .withIndex('by_user_and_primary', (q) => q.eq('userId', primaryUser._id).eq('isPrimary', true))
+              .first();
+            const hasPrimary = !!primaryUserImages;
+            
             for (const img of userImages) {
-              await ctx.db.patch(img._id, { userId: primaryUser._id });
+              // If primary user already has a primary, unset this one
+              const updates: { userId: Id<'users'>; isPrimary?: boolean; updatedAt?: number } = { 
+                userId: primaryUser._id 
+              };
+              if (hasPrimary && img.isPrimary) {
+                updates.isPrimary = false;
+                updates.updatedAt = Date.now();
+              }
+              await ctx.db.patch(img._id, updates);
             }
 
             // lookbooks

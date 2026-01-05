@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { ArrowLeft, Share2, Sparkles, ShoppingBag, Info } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Share2, Sparkles, ShoppingBag, Info, Check, X } from 'lucide-react';
 import Link from 'next/link';
-import { useQuery } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -90,10 +90,33 @@ export default function FittingRoomPage() {
   const [showBuySheet, setShowBuySheet] = useState(false);
   const [likedLooks, setLikedLooks] = useState<Set<string>>(new Set());
   const [savedLooks, setSavedLooks] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Mutations
+  const quickSaveMutation = useMutation(api.lookbooks.mutations.quickSave);
+
+  // Show toast helper
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }, []);
 
   // Fetch looks - for now we only support single look or first look from multi
   // TODO: Use getMultipleLooksWithDetails once API types are regenerated
   const firstLookId = lookIds[0];
+
+  // Query saved status for first look (must be after firstLookId is defined)
+  const savedStatus = useQuery(
+    api.lookbooks.queries.isItemSaved,
+    firstLookId ? { itemType: 'look' as const, lookId: firstLookId } : 'skip'
+  );
+
+  // Initialize saved state from query
+  useEffect(() => {
+    if (savedStatus?.isSaved && firstLookId) {
+      setSavedLooks((prev) => new Set(prev).add(firstLookId));
+    }
+  }, [savedStatus?.isSaved, firstLookId]);
   const look1Data = useQuery(
     api.looks.queries.getLookWithFullDetails,
     firstLookId ? { lookId: firstLookId } : 'skip'
@@ -197,7 +220,11 @@ export default function FittingRoomPage() {
   }, [router]);
 
   // Handlers
-  const handleLikeLook = (lookId: string) => {
+  const handleLikeLook = async (lookId: string) => {
+    // Like = Save to lookbook
+    const isCurrentlyLiked = likedLooks.has(lookId);
+    
+    // Update local state immediately for UI feedback
     setLikedLooks((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(lookId)) {
@@ -207,6 +234,27 @@ export default function FittingRoomPage() {
       }
       return newSet;
     });
+
+    // If liking (not un-liking), also save to lookbook
+    if (!isCurrentlyLiked) {
+      try {
+        await quickSaveMutation({
+          itemType: 'look',
+          lookId: lookId as Id<'looks'>,
+        });
+        setSavedLooks((prev) => new Set(prev).add(lookId));
+        showToast('Look saved to your lookbook! ❤️');
+      } catch (error) {
+        console.error('Failed to save look:', error);
+        showToast('Failed to save look', 'error');
+        // Revert like state on error
+        setLikedLooks((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(lookId);
+          return newSet;
+        });
+      }
+    }
   };
 
   const handleDislikeLook = (lookId: string) => {
@@ -215,9 +263,20 @@ export default function FittingRoomPage() {
       newSet.delete(lookId);
       return newSet;
     });
+    
+    // Move to next look if available
+    if (session && currentLookIndex < session.looks.length - 1) {
+      setCurrentLookIndex(currentLookIndex + 1);
+      showToast('Got it! Showing next look');
+    } else {
+      showToast('Thanks for the feedback!');
+    }
   };
 
-  const handleSaveLook = (lookId: string) => {
+  const handleSaveLook = async (lookId: string) => {
+    const isCurrentlySaved = savedLooks.has(lookId);
+    
+    // Update local state immediately for UI feedback
     setSavedLooks((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(lookId)) {
@@ -227,6 +286,61 @@ export default function FittingRoomPage() {
       }
       return newSet;
     });
+
+    // Only call mutation when saving (not unsaving for now)
+    if (!isCurrentlySaved) {
+      try {
+        await quickSaveMutation({
+          itemType: 'look',
+          lookId: lookId as Id<'looks'>,
+        });
+        showToast('Look saved to your lookbook! 📌');
+      } catch (error) {
+        console.error('Failed to save look:', error);
+        showToast('Failed to save look', 'error');
+        // Revert on error
+        setSavedLooks((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(lookId);
+          return newSet;
+        });
+      }
+    } else {
+      showToast('Look removed from saved');
+    }
+  };
+
+  const handleShareLook = async () => {
+    if (!currentLook) return;
+    
+    const shareUrl = `${window.location.origin}/fitting/${sessionId}`;
+    const shareData = {
+      title: 'Check out this look on Nima',
+      text: `I found this ${currentLook.occasion} outfit on Nima AI!`,
+      url: shareUrl,
+    };
+    
+    try {
+      if (navigator.share && navigator.canShare?.(shareData)) {
+        await navigator.share(shareData);
+        showToast('Thanks for sharing!');
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        showToast('Link copied to clipboard! 📋');
+      }
+    } catch (error) {
+      // User cancelled share or clipboard failed
+      if ((error as Error).name !== 'AbortError') {
+        console.error('Share failed:', error);
+        // Try clipboard as fallback
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          showToast('Link copied to clipboard! 📋');
+        } catch {
+          showToast('Could not share link', 'error');
+        }
+      }
+    }
   };
 
   const handleLikeProduct = (productId: string) => {
@@ -354,7 +468,10 @@ export default function FittingRoomPage() {
             {/* Right actions */}
             <div className="flex items-center gap-1">
               <ThemeToggle />
-              <button className="p-2 rounded-full hover:bg-surface transition-colors">
+              <button 
+                onClick={handleShareLook}
+                className="p-2 rounded-full hover:bg-surface transition-colors"
+              >
                 <Share2 className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
@@ -519,6 +636,33 @@ export default function FittingRoomPage() {
           </Link>
         </div>
       </nav>
+
+      {/* Toast notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50"
+          >
+            <div className={`
+              flex items-center gap-2 px-4 py-3 rounded-full shadow-lg backdrop-blur-md
+              ${toast.type === 'success' 
+                ? 'bg-surface border border-border/50 text-foreground' 
+                : 'bg-destructive/90 text-white'
+              }
+            `}>
+              {toast.type === 'success' ? (
+                <Check className="w-4 h-4 text-success" />
+              ) : (
+                <X className="w-4 h-4" />
+              )}
+              <span className="text-sm font-medium">{toast.message}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
