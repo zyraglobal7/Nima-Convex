@@ -1,0 +1,2 @@
+export { PhotosTab } from './PhotosTab';
+

@@ -432,11 +432,11 @@ export const startItemTryOn = mutation({
       };
     }
 
-    // Get user's primary image
+    // Get user's primary image (use .first() to handle duplicate primaries gracefully)
     const userImage = await ctx.db
       .query('user_images')
       .withIndex('by_user_and_primary', (q) => q.eq('userId', user._id).eq('isPrimary', true))
-      .unique();
+      .first();
 
     if (!userImage) {
       return {

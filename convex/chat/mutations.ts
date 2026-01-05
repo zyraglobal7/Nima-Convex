@@ -250,11 +250,11 @@ export const createLookFromChat = mutation({
       };
     }
 
-    // Check if user has a primary image for try-on
+    // Check if user has a primary image for try-on (use .first() to handle duplicate primaries gracefully)
     const userImage = await ctx.db
       .query('user_images')
       .withIndex('by_user_and_primary', (q) => q.eq('userId', user._id).eq('isPrimary', true))
-      .unique();
+      .first();
 
     if (!userImage) {
       // Try to find any user image
@@ -398,11 +398,11 @@ export const createLooksFromChat = mutation({
       };
     }
 
-    // Check if user has a primary image for try-on
+    // Check if user has a primary image for try-on (use .first() to handle duplicate primaries gracefully)
     const userImage = await ctx.db
       .query('user_images')
       .withIndex('by_user_and_primary', (q) => q.eq('userId', user._id).eq('isPrimary', true))
-      .unique();
+      .first();
 
     if (!userImage) {
       // Try to find any user image

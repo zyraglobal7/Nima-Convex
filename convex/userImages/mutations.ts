@@ -1,6 +1,6 @@
-import { mutation, MutationCtx } from '../_generated/server';
+import { mutation, internalMutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
-import type { Id } from '../_generated/dataModel';
+import type { Id, Doc } from '../_generated/dataModel';
 import {
   MAX_USER_PHOTOS,
   MAX_ONBOARDING_PHOTOS,
@@ -590,6 +590,102 @@ export const updateImageType = mutation({
     });
 
     return true;
+  },
+});
+
+// ============================================
+// CLEANUP MUTATIONS (Internal only)
+// ============================================
+
+/**
+ * Fix duplicate primary images for all users
+ * Finds users with multiple isPrimary: true images and ensures only one is primary.
+ * Keeps the oldest image (by _creationTime) as primary.
+ * 
+ * Run via: npx convex run userImages/mutations:fixDuplicatePrimaryImages
+ */
+export const fixDuplicatePrimaryImages = internalMutation({
+  args: {
+    dryRun: v.optional(v.boolean()), // If true, only logs what would happen
+  },
+  returns: v.object({
+    usersWithDuplicates: v.number(),
+    imagesFixed: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { dryRun?: boolean }
+  ): Promise<{
+    usersWithDuplicates: number;
+    imagesFixed: number;
+    errors: Array<string>;
+  }> => {
+    const dryRun = args.dryRun ?? true; // Default to dry run for safety
+    const errors: Array<string> = [];
+    let usersWithDuplicates = 0;
+    let imagesFixed = 0;
+
+    // Get all user_images that are marked as primary
+    const allPrimaryImages = await ctx.db
+      .query('user_images')
+      .filter((q) => q.eq(q.field('isPrimary'), true))
+      .collect();
+
+    // Group by userId
+    const userIdToImages = new Map<Id<'users'>, Array<Doc<'user_images'>>>();
+    for (const image of allPrimaryImages) {
+      if (!image.userId) continue; // Skip images without userId (onboarding)
+      
+      const existing = userIdToImages.get(image.userId) || [];
+      existing.push(image);
+      userIdToImages.set(image.userId, existing);
+    }
+
+    // Find users with multiple primaries
+    for (const [userId, images] of userIdToImages) {
+      if (images.length <= 1) continue; // No duplicates
+
+      usersWithDuplicates++;
+      console.log(`User ${userId} has ${images.length} primary images`);
+
+      // Sort by _creationTime ascending - oldest first
+      images.sort((a, b) => a._creationTime - b._creationTime);
+
+      // Keep the first one as primary, unset the rest
+      const keepPrimary = images[0];
+      const toUnset = images.slice(1);
+
+      for (const image of toUnset) {
+        try {
+          if (!dryRun) {
+            await ctx.db.patch(image._id, {
+              isPrimary: false,
+              updatedAt: Date.now(),
+            });
+          }
+          imagesFixed++;
+          console.log(`  Unset primary on image ${image._id} (keeping ${keepPrimary._id})`);
+        } catch (error) {
+          const errMsg = `Error unsetting primary on image ${image._id}: ${error}`;
+          console.error(errMsg);
+          errors.push(errMsg);
+        }
+      }
+    }
+
+    const result = {
+      usersWithDuplicates,
+      imagesFixed,
+      errors,
+    };
+
+    console.log('Fix complete:', result);
+    if (dryRun) {
+      console.log('DRY RUN - no changes were made. Run with dryRun: false to apply changes.');
+    }
+
+    return result;
   },
 });
 

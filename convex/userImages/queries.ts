@@ -105,11 +105,11 @@ export const getPrimaryImage = query({
       return null;
     }
 
-    // Get primary image
+    // Get primary image (use .first() to handle duplicate primaries gracefully)
     const primaryImage = await ctx.db
       .query('user_images')
       .withIndex('by_user_and_primary', (q) => q.eq('userId', user._id).eq('isPrimary', true))
-      .unique();
+      .first();
 
     if (!primaryImage) {
       return null;
