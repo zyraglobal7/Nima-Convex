@@ -22,6 +22,9 @@ import { NimaChatBubble, ProductCard } from '@/components/discover';
 import { ShareLookModal } from '@/components/looks/ShareLookModal';
 import { FriendRequestPopup } from '@/components/friends/FriendRequestPopup';
 import { RecreateLookButton } from '@/components/looks/RecreateLookButton';
+import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
+import { ItemsUnavailableModal } from '@/components/ui/ItemsUnavailableModal';
+import { trackPurchaseAttempted, trackItemsUnavailableShown } from '@/lib/analytics';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id, Doc } from '@/convex/_generated/dataModel';
@@ -129,6 +132,8 @@ export default function LookDetailPage() {
   const [showLookbookModal, setShowLookbookModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showFriendRequestPopup, setShowFriendRequestPopup] = useState(false);
+  const [showComingSoonModal, setShowComingSoonModal] = useState(false);
+  const [showItemsUnavailableModal, setShowItemsUnavailableModal] = useState(false);
   const [newLookbookName, setNewLookbookName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -320,6 +325,37 @@ export default function LookDetailPage() {
       toast.error(message);
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  // Handle buy button click
+  const handleBuyClick = () => {
+    if (!lookData?.look) return;
+
+    const totalItems = lookData.look.itemIds.length;
+    const availableItems = products.length;
+    const unavailableCount = totalItems - availableItems;
+
+    // Check if some items are unavailable
+    if (unavailableCount > 0) {
+      trackItemsUnavailableShown({
+        source: 'look_detail',
+        look_id: lookData.look.publicId,
+        total_items: totalItems,
+        available_items: availableItems,
+        unavailable_count: unavailableCount,
+      });
+      setShowItemsUnavailableModal(true);
+    } else {
+      // All items available - show coming soon modal
+      trackPurchaseAttempted({
+        source: 'look_detail',
+        item_count: products.length,
+        total_price: lookData.look.totalPrice,
+        currency: lookData.look.currency,
+        look_id: lookData.look.publicId,
+      });
+      setShowComingSoonModal(true);
     }
   };
 
@@ -569,7 +605,10 @@ export default function LookDetailPage() {
       {/* Fixed bottom CTA */}
       <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/50 p-4">
         <div className="max-w-3xl mx-auto">
-          <button className="w-full h-14 bg-primary hover:bg-primary-hover text-primary-foreground rounded-full font-medium text-base transition-all duration-300 hover:shadow-lg flex items-center justify-center gap-2">
+          <button 
+            onClick={handleBuyClick}
+            className="w-full h-14 bg-primary hover:bg-primary-hover text-primary-foreground rounded-full font-medium text-base transition-all duration-300 hover:shadow-lg flex items-center justify-center gap-2"
+          >
             <Sparkles className="w-5 h-5" />
             Buy all {products.length} items • {formatPrice(look.totalPrice, look.currency)}
           </button>
@@ -725,6 +764,21 @@ export default function LookDetailPage() {
           sharedBy={shareMetadata.sharedBy}
         />
       )}
+
+      {/* Coming Soon Modal */}
+      <ComingSoonModal
+        open={showComingSoonModal}
+        onClose={() => setShowComingSoonModal(false)}
+      />
+
+      {/* Items Unavailable Modal */}
+      <ItemsUnavailableModal
+        open={showItemsUnavailableModal}
+        onClose={() => setShowItemsUnavailableModal(false)}
+        onGoBack={safeGoBack}
+        unavailableCount={lookData?.look ? lookData.look.itemIds.length - products.length : 0}
+        totalCount={lookData?.look?.itemIds.length ?? 0}
+      />
     </div>
   );
 }
