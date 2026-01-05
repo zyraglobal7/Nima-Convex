@@ -152,3 +152,90 @@ export const getUserImageCount = query({
     return images.length;
   },
 });
+
+/**
+ * Get onboarding images by token
+ * Used to show existing images when user returns to onboarding
+ * No authentication required - uses onboarding token
+ */
+export const getOnboardingImages = query({
+  args: {
+    onboardingToken: v.string(),
+  },
+  returns: v.array(userImageValidator),
+  handler: async (
+    ctx: QueryCtx,
+    args: { onboardingToken: string }
+  ): Promise<UserImageWithUrl[]> => {
+    // Validate token format
+    if (!args.onboardingToken.startsWith('onb_') || args.onboardingToken.length < 30) {
+      return [];
+    }
+
+    // Get all images for this onboarding token
+    const images = await ctx.db
+      .query('user_images')
+      .withIndex('by_onboarding_token', (q) => q.eq('onboardingToken', args.onboardingToken))
+      .collect();
+
+    // Resolve URLs for each image
+    const imagesWithUrls = await Promise.all(
+      images.map(async (image) => {
+        const url = await ctx.storage.getUrl(image.storageId);
+        return {
+          ...image,
+          url,
+        };
+      })
+    );
+
+    return imagesWithUrls;
+  },
+});
+
+/**
+ * Get existing images for the current authenticated user
+ * Used to show existing images when authenticated user returns to onboarding
+ */
+export const getExistingUserImages = query({
+  args: {},
+  returns: v.array(userImageValidator),
+  handler: async (
+    ctx: QueryCtx,
+    _args: Record<string, never>
+  ): Promise<UserImageWithUrl[]> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    // Get user
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return [];
+    }
+
+    // Get all images for this user
+    const images = await ctx.db
+      .query('user_images')
+      .withIndex('by_user', (q) => q.eq('userId', user._id))
+      .collect();
+
+    // Resolve URLs for each image
+    const imagesWithUrls = await Promise.all(
+      images.map(async (image) => {
+        const url = await ctx.storage.getUrl(image.storageId);
+        return {
+          ...image,
+          url,
+        };
+      })
+    );
+
+    return imagesWithUrls;
+  },
+});

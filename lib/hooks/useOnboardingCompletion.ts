@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 
@@ -16,6 +16,9 @@ interface WorkOSUser {
 // Local storage keys
 const ONBOARDING_STORAGE_KEY = 'nima-onboarding-data';
 const ONBOARDING_TOKEN_KEY = 'nima-onboarding-token';
+
+// Extend expiration to 24 hours (was 1 hour)
+const STORAGE_EXPIRATION_MS = 24 * 60 * 60 * 1000;
 
 interface StoredOnboardingData {
   gender: 'male' | 'female' | 'prefer-not-to-say';
@@ -49,9 +52,8 @@ function getStoredOnboardingData(): StoredOnboardingData | null {
   try {
     const data = JSON.parse(stored) as StoredOnboardingData;
 
-    // Check if data is too old (more than 1 hour)
-    const oneHour = 60 * 60 * 1000;
-    if (Date.now() - data.savedAt > oneHour) {
+    // Check if data is too old (24 hours)
+    if (Date.now() - data.savedAt > STORAGE_EXPIRATION_MS) {
       localStorage.removeItem(ONBOARDING_STORAGE_KEY);
       localStorage.removeItem(ONBOARDING_TOKEN_KEY);
       return null;
@@ -75,14 +77,41 @@ function clearStoredOnboardingData(): void {
 }
 
 /**
+ * Retry a function with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelayMs: number = 500
+): Promise<T> {
+  let lastError: Error | unknown;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxRetries - 1) {
+        const delay = initialDelayMs * Math.pow(2, attempt);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError;
+}
+
+/**
  * Hook to handle onboarding completion after authentication
  * 
- * This hook:
- * 1. Checks if there's pending onboarding data in localStorage
- * 2. Gets or creates the user in Convex
- * 3. If onboarding is not complete, submits the stored data
- * 4. Claims any uploaded onboarding images and links them to the user
- * 5. Clears localStorage after successful submission
+ * This hook uses a SMART completion check:
+ * - Instead of just checking `onboardingCompleted` flag, it checks:
+ *   1. Whether user has profile data (gender, stylePreferences)
+ *   2. Whether user has at least one image linked to their account
+ * 
+ * If user has BOTH profile data AND images, they are considered "complete"
+ * even if the flag wasn't properly set (handles localStorage expiration,
+ * different device sign-in, etc.)
  * 
  * @param workosUser - The WorkOS user object from useAuth(), passed from component level
  *                     to avoid calling useAuth inside this hook (which requires AuthKitProvider)
@@ -91,156 +120,196 @@ export function useOnboardingCompletion(workosUser?: WorkOSUser | null) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  const processingRef = useRef(false);
 
   // Get current user from Convex
   const user = useQuery(api.users.queries.getCurrentUser);
+  
+  // Get onboarding state (profile data + images check)
+  const onboardingState = useQuery(api.users.queries.getOnboardingState);
 
   // Mutations
   const getOrCreateUser = useMutation(api.users.mutations.getOrCreateUser);
   const completeOnboarding = useMutation(api.users.mutations.completeOnboarding);
+  const markOnboardingComplete = useMutation(api.users.mutations.markOnboardingComplete);
   const claimOnboardingImages = useMutation(api.userImages.mutations.claimOnboardingImages);
 
-  useEffect(() => {
-    async function processOnboarding() {
-      // Step 0: Ensure user exists in database (creates if missing, returns existing if present)
-      // This handles the case where user is authenticated but webhook didn't create the DB record
-      let currentUser = user;
+  const processOnboarding = useCallback(async () => {
+    // Prevent double processing
+    if (processingRef.current) return;
+    
+    // Wait for queries to resolve
+    if (user === undefined || onboardingState === undefined) return;
+    
+    // If user is null, try to create/get them
+    let currentUser = user;
+    
+    if (user === null) {
+      try {
+        const profileData = workosUser ? {
+          email: workosUser.email || undefined,
+          emailVerified: workosUser.emailVerified || false,
+          firstName: workosUser.firstName || undefined,
+          lastName: workosUser.lastName || undefined,
+          profileImageUrl: workosUser.profilePictureUrl || undefined,
+        } : {};
 
-      // If user query hasn't resolved yet, wait
-      if (user === undefined) return;
-
-      // If user is null, try to create/get them - this distinguishes between
-      // "not authenticated" vs "authenticated but no DB record"
-      if (user === null) {
-        try {
-          // Extract profile data from WorkOS user object
-          // The WorkOS user object contains the full profile from Google/OAuth
-          const profileData = workosUser ? {
-            email: workosUser.email || undefined,
-            emailVerified: workosUser.emailVerified || false,
-            firstName: workosUser.firstName || undefined,
-            lastName: workosUser.lastName || undefined,
-            profileImageUrl: workosUser.profilePictureUrl || undefined,
-          } : {};
-
-          console.log('[ONBOARDING_COMPLETION] WorkOS user object:', JSON.stringify(workosUser, null, 2));
-          console.log('[ONBOARDING_COMPLETION] Passing profile data to getOrCreateUser:', JSON.stringify(profileData, null, 2));
-
-          const createdUser = await getOrCreateUser(profileData);
-          console.log('[ONBOARDING_COMPLETION] Created user:', JSON.stringify(createdUser, null, 2));
-          if (!createdUser) {
-            // Truly not authenticated
-            setCompleted(true);
-            return;
-          }
-          currentUser = createdUser;
-        } catch (err) {
-          console.error('Failed to get or create user:', err);
-          setError(err instanceof Error ? err.message : 'Failed to authenticate');
+        console.log('[ONBOARDING_COMPLETION] Creating user with profile data');
+        const createdUser = await getOrCreateUser(profileData);
+        
+        if (!createdUser) {
+          // Truly not authenticated
           setCompleted(true);
           return;
         }
-      }
-
-      // At this point, currentUser is guaranteed to exist
-      if (!currentUser) {
-        setCompleted(true);
-        return;
-      }
-
-      // If onboarding already completed, clear any stored data and return
-      if (currentUser.onboardingCompleted) {
-        clearStoredOnboardingData();
-        setCompleted(true);
-        return;
-      }
-
-      // Check for stored onboarding data
-      const storedData = getStoredOnboardingData();
-      if (!storedData) {
-        setCompleted(true);
-        return;
-      }
-
-      // Validate stored data has required fields
-      if (
-        !storedData.gender ||
-        !storedData.age ||
-        !storedData.stylePreferences ||
-        !storedData.shirtSize ||
-        !storedData.waistSize ||
-        !storedData.height ||
-        !storedData.heightUnit ||
-        !storedData.shoeSize ||
-        !storedData.shoeSizeUnit ||
-        !storedData.country ||
-        !storedData.currency ||
-        !storedData.budgetRange
-      ) {
-        console.log('Stored onboarding data is incomplete');
-        clearStoredOnboardingData();
-        setCompleted(true);
-        return;
-      }
-
-      try {
-        setIsProcessing(true);
-        setError(null);
-
-        // Step 1: Complete onboarding with stored profile data
-        await completeOnboarding({
-          gender: storedData.gender,
-          age: storedData.age,
-          stylePreferences: storedData.stylePreferences,
-          shirtSize: storedData.shirtSize,
-          waistSize: storedData.waistSize,
-          height: storedData.height,
-          heightUnit: storedData.heightUnit,
-          shoeSize: storedData.shoeSize,
-          shoeSizeUnit: storedData.shoeSizeUnit,
-          country: storedData.country,
-          currency: storedData.currency,
-          budgetRange: storedData.budgetRange,
-        });
-
-        console.log('Profile data saved successfully');
-
-        // Step 2: Claim uploaded onboarding images if there's a token
-        if (storedData.onboardingToken) {
-          try {
-            const claimResult = await claimOnboardingImages({
-              onboardingToken: storedData.onboardingToken,
-            });
-            console.log(`Claimed ${claimResult.claimedCount} onboarding images`);
-          } catch (claimError) {
-            // Log but don't fail the whole onboarding if image claiming fails
-            console.error('Failed to claim onboarding images:', claimError);
-            // Images can be re-uploaded later from settings
-          }
-        }
-
-        // Clear stored data after successful submission
-        clearStoredOnboardingData();
-        setCompleted(true);
-
-        console.log('Onboarding completed successfully');
+        currentUser = createdUser;
       } catch (err) {
-        console.error('Failed to complete onboarding:', err);
-        setError(err instanceof Error ? err.message : 'Failed to complete onboarding');
-      } finally {
-        setIsProcessing(false);
+        console.error('Failed to get or create user:', err);
+        setError(err instanceof Error ? err.message : 'Failed to authenticate');
+        setCompleted(true);
+        return;
       }
     }
 
+    // At this point, currentUser should exist
+    if (!currentUser) {
+      setCompleted(true);
+      return;
+    }
+
+    // SMART COMPLETION CHECK:
+    // If user has BOTH profile data AND images, they're done
+    // (even if onboardingCompleted flag is false due to localStorage issues)
+    if (onboardingState?.hasProfileData && onboardingState?.hasImages) {
+      console.log('[ONBOARDING_COMPLETION] User has both profile data and images - marking complete');
+      
+      // If flag is not set, set it now
+      if (!currentUser.onboardingCompleted) {
+        try {
+          await markOnboardingComplete({});
+          console.log('[ONBOARDING_COMPLETION] Flag was false, now marked complete');
+        } catch (err) {
+          console.error('Failed to mark onboarding complete:', err);
+          // Non-fatal - user still has data
+        }
+      }
+      
+      clearStoredOnboardingData();
+      setCompleted(true);
+      return;
+    }
+
+    // If already completed (flag is true), just clear localStorage
+    if (currentUser.onboardingCompleted) {
+      clearStoredOnboardingData();
+      setCompleted(true);
+      return;
+    }
+
+    // Check for stored onboarding data
+    const storedData = getStoredOnboardingData();
+    if (!storedData) {
+      // No localStorage data - user needs to complete onboarding through UI
+      setCompleted(true);
+      return;
+    }
+
+    // Validate stored data has required fields
+    if (
+      !storedData.gender ||
+      !storedData.age ||
+      !storedData.stylePreferences ||
+      !storedData.shirtSize ||
+      !storedData.waistSize ||
+      !storedData.height ||
+      !storedData.heightUnit ||
+      !storedData.shoeSize ||
+      !storedData.shoeSizeUnit ||
+      !storedData.country ||
+      !storedData.currency ||
+      !storedData.budgetRange
+    ) {
+      console.log('[ONBOARDING_COMPLETION] Stored onboarding data is incomplete');
+      // Don't clear - let user resume from where they left off
+      setCompleted(true);
+      return;
+    }
+
+    // Start processing
+    processingRef.current = true;
+    
+    try {
+      setIsProcessing(true);
+      setError(null);
+
+      // Step 1: Complete onboarding with stored profile data
+      await completeOnboarding({
+        gender: storedData.gender,
+        age: storedData.age,
+        stylePreferences: storedData.stylePreferences,
+        shirtSize: storedData.shirtSize,
+        waistSize: storedData.waistSize,
+        height: storedData.height,
+        heightUnit: storedData.heightUnit,
+        shoeSize: storedData.shoeSize,
+        shoeSizeUnit: storedData.shoeSizeUnit,
+        country: storedData.country,
+        currency: storedData.currency,
+        budgetRange: storedData.budgetRange,
+      });
+
+      console.log('[ONBOARDING_COMPLETION] Profile data saved successfully');
+
+      // Step 2: Claim uploaded onboarding images if there's a token
+      // Use retry logic to handle transient failures
+      if (storedData.onboardingToken) {
+        try {
+          const claimResult = await retryWithBackoff(
+            () => claimOnboardingImages({ onboardingToken: storedData.onboardingToken! }),
+            3, // max retries
+            500 // initial delay ms
+          );
+          console.log(`[ONBOARDING_COMPLETION] Claimed ${claimResult.claimedCount} onboarding images`);
+        } catch (claimError) {
+          // Log but don't fail - images can be uploaded later from profile settings
+          console.error('[ONBOARDING_COMPLETION] Failed to claim onboarding images after retries:', claimError);
+        }
+      }
+
+      // Clear stored data after successful submission
+      clearStoredOnboardingData();
+      setCompleted(true);
+
+      console.log('[ONBOARDING_COMPLETION] Onboarding completed successfully');
+    } catch (err) {
+      console.error('[ONBOARDING_COMPLETION] Failed to complete onboarding:', err);
+      setError(err instanceof Error ? err.message : 'Failed to complete onboarding');
+    } finally {
+      setIsProcessing(false);
+      processingRef.current = false;
+    }
+  }, [user, onboardingState, workosUser, getOrCreateUser, completeOnboarding, markOnboardingComplete, claimOnboardingImages]);
+
+  useEffect(() => {
     processOnboarding();
-  }, [user, workosUser, getOrCreateUser, completeOnboarding, claimOnboardingImages]);
+  }, [processOnboarding]);
+
+  // Compute needsOnboarding based on SMART check:
+  // User needs onboarding if they don't have BOTH profile data AND images
+  const needsOnboarding = 
+    onboardingState !== undefined && 
+    onboardingState.isAuthenticated &&
+    onboardingState.hasUser &&
+    (!onboardingState.hasProfileData || !onboardingState.hasImages);
 
   return {
     user,
     isProcessing,
     error,
     completed,
-    needsOnboarding: user !== null && user !== undefined && !user.onboardingCompleted,
+    needsOnboarding,
+    // Expose additional state for smarter UI
+    onboardingState,
   };
 }
 

@@ -51,7 +51,7 @@ export const nimaGreetings = [
   "Hey there! What are we styling today? ✨",
   "Ready to find your next favorite look?",
   "Let's create some magic together! What's the occasion?",
-  "Hey gorgeous! Tell me what you need 💫",
+  "Hey there! Tell me what you need 💫",
   "What's on your mind? Let's find the perfect fit!",
   "Style time! What look are we going for?",
   "Hey! Ready to discover something amazing?",

@@ -19,7 +19,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Plus, Sparkles, Package } from 'lucide-react';
-import { ItemsTable, CreateItemForm, AIGenerateForm } from '@/components/admin/items';
+import { ItemsTable, CreateItemForm, EditItemForm, AIGenerateForm } from '@/components/admin/items';
 import type { Id } from '@/convex/_generated/dataModel';
 
 export default function ItemsPage() {
@@ -36,8 +36,10 @@ export default function ItemsPage() {
 
   const handleEditItem = (itemId: Id<'items'>) => {
     setEditItemId(itemId);
-    // For now, we'll just log the edit - a full edit form could be added later
-    console.log('Edit item:', itemId);
+  };
+
+  const handleEditSuccess = () => {
+    setEditItemId(null);
   };
 
   return (
@@ -161,15 +163,24 @@ export default function ItemsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Item Sheet (placeholder for future) */}
+      {/* Edit Item Sheet */}
       <Sheet open={!!editItemId} onOpenChange={(open) => !open && setEditItemId(null)}>
-        <SheetContent className="w-full sm:max-w-2xl">
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Edit Item</SheetTitle>
             <SheetDescription>
-              Edit functionality coming soon. Item ID: {editItemId}
+              Update the product details below.
             </SheetDescription>
           </SheetHeader>
+          {editItemId && (
+            <div className="mt-6">
+              <EditItemForm
+                itemId={editItemId}
+                onSuccess={handleEditSuccess}
+                onCancel={() => setEditItemId(null)}
+              />
+            </div>
+          )}
         </SheetContent>
       </Sheet>
     </div>
