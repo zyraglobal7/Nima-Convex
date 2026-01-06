@@ -1,18 +1,20 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useMutation } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
 import { StepProps, UploadedImage } from '../types';
-import { ArrowLeft, Upload, X, Camera, Shield, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Upload, X, Camera, Shield, Loader2, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { trackStepCompleted, trackBackClicked, trackPhotoUploaded, trackPhotoRemoved, ONBOARDING_STEPS } from '@/lib/analytics';
 
 // Constants for validation
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png'];
-const MAX_PHOTOS = 14;
+
+const MAX_PHOTOS = 4; // Match backend MAX_ONBOARDING_PHOTOS
+
 
 interface UploadingFile {
   id: string;
@@ -23,16 +25,71 @@ interface UploadingFile {
   progress?: number;
 }
 
+interface ExistingImage {
+  _id: Id<'user_images'>;
+  url: string | null;
+  filename?: string;
+  isPrimary: boolean;
+}
+
 export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: StepProps) {
   const [dragActive, setDragActive] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [showExistingImagesUI, setShowExistingImagesUI] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Query for existing onboarding images (by token)
+  const existingOnboardingImages = useQuery(
+    api.userImages.queries.getOnboardingImages,
+    formData.onboardingToken ? { onboardingToken: formData.onboardingToken } : 'skip'
+  );
+
+  // Query for existing user images (if authenticated)
+  const existingUserImages = useQuery(api.userImages.queries.getExistingUserImages);
 
   // Convex mutations
   const generateUploadUrl = useMutation(api.userImages.mutations.generateOnboardingUploadUrl);
   const saveImage = useMutation(api.userImages.mutations.saveOnboardingImage);
   const deleteImage = useMutation(api.userImages.mutations.deleteOnboardingImage);
+  const deleteAllOnboardingImages = useMutation(api.userImages.mutations.deleteAllOnboardingImages);
+  const deleteAllUserImages = useMutation(api.userImages.mutations.deleteAllUserImages);
+
+  // Combine existing images from both sources
+  const allExistingImages: ExistingImage[] = [
+    // Onboarding images (by token)
+    ...(existingOnboardingImages || []).map((img) => ({
+      _id: img._id,
+      url: img.url,
+      filename: img.filename,
+      isPrimary: img.isPrimary,
+    })),
+    // User images (if authenticated and different from form data)
+    ...(existingUserImages || [])
+      .filter((img) => !formData.uploadedImages.some((u) => u.imageId === img._id))
+      .map((img) => ({
+        _id: img._id,
+        url: img.url,
+        filename: img.filename,
+        isPrimary: img.isPrimary,
+      })),
+  ];
+
+  // Deduplicate by ID
+  const uniqueExistingImages = allExistingImages.filter(
+    (img, idx, arr) => arr.findIndex((i) => i._id === img._id) === idx
+  );
+
+  // Check if we have existing images that aren't in form data
+  const hasExistingImages = uniqueExistingImages.length > 0 && formData.uploadedImages.length === 0;
+
+  // Show existing images UI when there are images and none in form data
+  useEffect(() => {
+    if (hasExistingImages && !showExistingImagesUI) {
+      setShowExistingImagesUI(true);
+    }
+  }, [hasExistingImages, showExistingImagesUI]);
 
   // Cleanup preview URLs on unmount
   useEffect(() => {
@@ -54,7 +111,6 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
 
   // Upload a single file
   const uploadFile = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     async (file: File, _tempId: string): Promise<UploadedImage | null> => {
       try {
         // Generate upload URL
@@ -197,7 +253,6 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
         onboardingToken: formData.onboardingToken,
         imageId: imageId as Id<'user_images'>,
       });
-      ;
 
       // Find and revoke the preview URL
       const image = formData.uploadedImages.find((img) => img.imageId === imageId);
@@ -254,10 +309,162 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
     }
   };
 
+  // Use existing images
+  const handleUseExistingImages = () => {
+    // Convert existing images to the form format
+    const converted: UploadedImage[] = uniqueExistingImages
+      .filter((img) => img.url)
+      .map((img) => ({
+        imageId: img._id,
+        storageId: '' as Id<'_storage'>, // Not needed for display
+        filename: img.filename || 'existing-image',
+        previewUrl: img.url!,
+      }));
+
+    updateFormData({ uploadedImages: converted });
+    setShowExistingImagesUI(false);
+  };
+
+  // Start fresh - delete all existing images
+  const handleStartFresh = async () => {
+    try {
+      setIsDeletingAll(true);
+      setError(null);
+
+      // Delete onboarding images
+      if (formData.onboardingToken) {
+        await deleteAllOnboardingImages({ onboardingToken: formData.onboardingToken });
+      }
+
+      // Delete user images (if authenticated)
+      try {
+        await deleteAllUserImages({});
+      } catch {
+        // Not authenticated - ignore
+      }
+
+      setShowExistingImagesUI(false);
+    } catch (err) {
+      console.error('Error deleting images:', err);
+      setError('Failed to delete images. Please try again.');
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
   const hasUploading = uploadingFiles.some((f) => f.status === 'uploading');
   const hasPhotos = formData.uploadedImages.length > 0;
   const totalCount = formData.uploadedImages.length + uploadingFiles.length;
   const canAddMore = totalCount < MAX_PHOTOS;
+
+  // Show existing images UI
+  if (showExistingImagesUI && hasExistingImages) {
+    return (
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="px-4 py-6">
+          <div className="max-w-md mx-auto">
+            <div className="flex items-center gap-4 mb-6">
+              <button
+                onClick={() => {
+                  trackBackClicked(ONBOARDING_STEPS.PHOTO_UPLOAD);
+                  onBack?.();
+                }}
+                className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors duration-200"
+                aria-label="Go back"
+              >
+                <ArrowLeft className="w-5 h-5 text-muted-foreground" />
+              </button>
+              <div className="flex-1">
+                <h1 className="text-2xl font-serif font-semibold text-foreground">
+                  You already have photos!
+                </h1>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Would you like to use these or start fresh?
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Existing Images Preview */}
+        <div className="flex-1 px-4 pb-6">
+          <div className="max-w-md mx-auto space-y-6">
+            {/* Error message */}
+            {error && (
+              <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              </div>
+            )}
+
+            {/* Images Grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {uniqueExistingImages.map((image) => (
+                <div
+                  key={image._id}
+                  className="relative aspect-[3/4] rounded-xl overflow-hidden bg-surface"
+                >
+                  {image.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={image.url}
+                      alt={image.filename || 'Existing photo'}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center bg-surface-alt">
+                      <span className="text-muted-foreground text-sm">Image</span>
+                    </div>
+                  )}
+                  {/* Existing indicator */}
+                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-blue-500/90 rounded-full z-10">
+                    <span className="text-xs text-white font-medium">Existing</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-sm text-center text-muted-foreground">
+              {uniqueExistingImages.length} photo{uniqueExistingImages.length !== 1 ? 's' : ''} found
+            </p>
+
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              <Button
+                onClick={handleUseExistingImages}
+                size="lg"
+                className="w-full h-14 text-base font-medium tracking-wide rounded-full bg-primary hover:bg-primary-hover text-primary-foreground transition-all duration-300 hover:scale-[1.01] hover:shadow-lg"
+              >
+                <CheckCircle2 className="w-5 h-5 mr-2" />
+                Use These Photos
+              </Button>
+
+              <Button
+                onClick={handleStartFresh}
+                disabled={isDeletingAll}
+                variant="outline"
+                size="lg"
+                className="w-full h-14 text-base font-medium rounded-full border-border hover:bg-surface-alt"
+              >
+                {isDeletingAll ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-5 h-5 mr-2" />
+                    Start Fresh
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col">
@@ -450,7 +657,7 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
 
           {/* Photo tips */}
           <div className="bg-surface rounded-xl p-4 space-y-3">
-            <p className="text-sm font-medium text-foreground">📸 Tips for best results:</p>
+            <p className="text-sm font-medium text-foreground">Tips for best results:</p>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-0.5">•</span>

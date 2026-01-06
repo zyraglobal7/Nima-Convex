@@ -62,7 +62,7 @@ export function WelcomeStep({ onNext, onBack }: StepProps) {
           transition={{ duration: 0.5, delay: 0.2 }}
         >
           <h1 className="text-3xl md:text-4xl font-serif font-semibold text-foreground">
-            Hey gorgeous!
+            Hey there!
           </h1>
           <p className="text-lg text-muted-foreground leading-relaxed">
             I&apos;m <span className="text-primary font-medium">Nima</span>, your personal AI stylist. 
