@@ -242,7 +242,7 @@ export function AccountStep({ formData, onNext, onBack }: StepProps) {
               </div>
 
               {/* Email Sign Up */}
-              <Button
+              {/* <Button
                 onClick={handleSignUp}
                 disabled={isLoading}
                 size="lg"
@@ -256,7 +256,7 @@ export function AccountStep({ formData, onNext, onBack }: StepProps) {
                 ) : (
                   'Sign Up with Email'
                 )}
-              </Button>
+              </Button> */}
 
               {/* Already have account */}
               <div className="text-center">

@@ -178,6 +178,12 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   // Query user's recent looks for AI context
   const userRecentLooks = useQuery(api.chat.queries.getUserRecentLooks, { limit: 10 });
 
+  // Query messages for the thread when it exists (for stable timestamps)
+  const messagesData = useQuery(
+    api.messages.queries.getAllMessages,
+    threadId ? { threadId } : 'skip'
+  );
+
   // useChat for AI streaming
   const {
     messages: aiMessages,
@@ -252,7 +258,7 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
     if (viewState === 'chatting') {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [aiMessages, chatState, viewState]);
+  }, [messagesData, aiMessages, chatState, viewState]);
 
   // Handle item matching
   const handleMatchItems = useCallback(async (occasion: string) => {
@@ -435,29 +441,87 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
     setScenario('fresh');
   };
 
-  // Convert AI messages to display format
-  const displayMessages: DisplayMessage[] = aiMessages.map((msg) => {
-    let content = getMessageText(msg);
-    const timestamp = (msg as UIMessage & { createdAt?: Date }).createdAt || new Date();
-    
-    // Clean up special tags
-    content = content
+  // Helper to clean special tags from content
+  const cleanContent = (content: string): string => {
+    return content
       .replace('[SEARCH_READY]', '')
       .replace(/\[MATCH_ITEMS:[^\]]+\]/g, '')
       .replace(/\[REMIX_LOOK:[^\]]+\]/g, '')
       .replace(/\[MIX_LOOKS:[^\]]+\]/g, '')
       .trim();
-    
-    return {
-      id: msg.id,
-      role: msg.role === 'assistant' ? 'nima' : 'user',
-      content,
-      timestamp,
-      type: 'text' as const,
-    };
+  };
+
+  // Build display messages from DATABASE as single source of truth (when available)
+  const displayMessages: DisplayMessage[] = [];
+
+  // Add all messages from database (stable timestamps)
+  if (messagesData) {
+    messagesData.forEach((msg) => {
+      if (msg.messageType === 'fitting-ready' && msg.lookIds && msg.lookIds.length > 0) {
+        const sessionId = msg.lookIds.join(',');
+        displayMessages.push({
+          id: msg._id,
+          role: 'nima',
+          content: msg.content,
+          timestamp: new Date(msg.createdAt),
+          type: 'fitting-ready',
+          sessionId,
+          variant: msg.content.includes('remixed') ? 'remix' : 'fresh',
+        });
+      } else if (msg.messageType === 'no-matches') {
+        displayMessages.push({
+          id: msg._id,
+          role: 'nima',
+          content: msg.content,
+          timestamp: new Date(msg.createdAt),
+          type: 'text',
+        });
+      } else {
+        // Regular text message (user or assistant)
+        displayMessages.push({
+          id: msg._id,
+          role: msg.role === 'assistant' ? 'nima' : 'user',
+          content: cleanContent(msg.content),
+          timestamp: new Date(msg.createdAt),
+          type: 'text',
+        });
+      }
+    });
+  }
+
+  // Add ONLY the currently streaming AI message (not yet saved to DB)
+  const lastAiMessage = aiMessages[aiMessages.length - 1];
+  if (lastAiMessage && lastAiMessage.role === 'assistant' && status === 'streaming') {
+    const streamingContent = cleanContent(getMessageText(lastAiMessage));
+    // Only add if not already in displayMessages (check by content since ID differs)
+    if (streamingContent && !displayMessages.some(m => m.role === 'nima' && cleanContent(m.content) === streamingContent)) {
+      displayMessages.push({
+        id: 'streaming-' + lastAiMessage.id,
+        role: 'nima',
+        content: streamingContent,
+        timestamp: new Date(),
+        type: 'text',
+      });
+    }
+  }
+
+  // Add pending user message (just sent, not yet in DB)
+  const pendingUserMessages = aiMessages.filter(m => m.role === 'user');
+  pendingUserMessages.forEach((userMsg) => {
+    const userContent = getMessageText(userMsg);
+    // Only add if not already in displayMessages from DB
+    if (userContent && !displayMessages.some(m => m.role === 'user' && m.content === userContent)) {
+      displayMessages.push({
+        id: 'pending-' + userMsg.id,
+        role: 'user',
+        content: userContent,
+        timestamp: new Date(),
+        type: 'text',
+      });
+    }
   });
 
-  // Add fitting-ready message if looks were created
+  // Add fitting-ready message if looks were created (before it's saved to DB)
   if (createdLookIds.length > 0 && chatState === 'idle' && !displayMessages.some(m => m.type === 'fitting-ready')) {
     displayMessages.push({
       id: 'fitting-ready',
@@ -472,7 +536,7 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
     });
   }
 
-  // Add no-matches message if in that state
+  // Add no-matches message if in that state (before it's saved to DB)
   if (chatState === 'no_matches' && !displayMessages.some(m => m.content.includes("couldn't find enough items"))) {
     displayMessages.push({
       id: 'no-matches',
@@ -505,6 +569,9 @@ We're always adding new items, so check back soon! ✨`,
       type: 'text',
     });
   }
+
+  // Sort all messages by timestamp (must be done AFTER all messages are added)
+  displayMessages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
   const title = displayMessages.find(m => m.role === 'user')?.content.slice(0, 40) || 'Ask Nima';
 

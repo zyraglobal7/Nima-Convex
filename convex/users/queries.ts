@@ -4,6 +4,99 @@ import type { Id, Doc } from '../_generated/dataModel';
 import { isValidUsername } from '../types';
 
 /**
+ * Get the onboarding state for the current user
+ * Returns whether user has profile data and images, plus missing fields
+ * Used to determine if user needs to complete onboarding steps
+ */
+export const getOnboardingState = query({
+  args: {},
+  returns: v.object({
+    isAuthenticated: v.boolean(),
+    hasUser: v.boolean(),
+    hasProfileData: v.boolean(),
+    hasImages: v.boolean(),
+    imageCount: v.number(),
+    onboardingCompleted: v.boolean(),
+    missingFields: v.array(v.string()),
+  }),
+  handler: async (
+    ctx: QueryCtx,
+    _args: Record<string, never>
+  ): Promise<{
+    isAuthenticated: boolean;
+    hasUser: boolean;
+    hasProfileData: boolean;
+    hasImages: boolean;
+    imageCount: number;
+    onboardingCompleted: boolean;
+    missingFields: string[];
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        isAuthenticated: false,
+        hasUser: false,
+        hasProfileData: false,
+        hasImages: false,
+        imageCount: 0,
+        onboardingCompleted: false,
+        missingFields: [],
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        isAuthenticated: true,
+        hasUser: false,
+        hasProfileData: false,
+        hasImages: false,
+        imageCount: 0,
+        onboardingCompleted: false,
+        missingFields: [],
+      };
+    }
+
+    // Check which profile fields are missing
+    const missingFields: string[] = [];
+    if (!user.gender) missingFields.push('gender');
+    if (!user.stylePreferences || user.stylePreferences.length === 0) missingFields.push('stylePreferences');
+    if (!user.shirtSize) missingFields.push('shirtSize');
+    if (!user.waistSize) missingFields.push('waistSize');
+    if (!user.height) missingFields.push('height');
+    if (!user.shoeSize) missingFields.push('shoeSize');
+    if (!user.country) missingFields.push('country');
+    if (!user.budgetRange) missingFields.push('budgetRange');
+
+    // Profile is complete if we have at least gender and style preferences
+    const hasProfileData = !!user.gender && user.stylePreferences && user.stylePreferences.length > 0;
+
+    // Count images linked to this user
+    const userImages = await ctx.db
+      .query('user_images')
+      .withIndex('by_user', (q) => q.eq('userId', user._id))
+      .collect();
+
+    const imageCount = userImages.length;
+    const hasImages = imageCount > 0;
+
+    return {
+      isAuthenticated: true,
+      hasUser: true,
+      hasProfileData,
+      hasImages,
+      imageCount,
+      onboardingCompleted: user.onboardingCompleted,
+      missingFields,
+    };
+  },
+});
+
+/**
  * Get the current authenticated user
  * Returns the user document for the authenticated user, or null if not authenticated
  */

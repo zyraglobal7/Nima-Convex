@@ -276,6 +276,98 @@ export const claimOnboardingImages = mutation({
   },
 });
 
+/**
+ * Delete all onboarding images for a given token
+ * Used when user wants to "start fresh" with photo uploads
+ * No authentication required - uses onboarding token
+ */
+export const deleteAllOnboardingImages = mutation({
+  args: {
+    onboardingToken: v.string(),
+  },
+  returns: v.object({
+    deletedCount: v.number(),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { onboardingToken: string }
+  ): Promise<{
+    deletedCount: number;
+  }> => {
+    // Validate token format
+    if (!args.onboardingToken.startsWith('onb_') || args.onboardingToken.length < 30) {
+      throw new Error('Invalid onboarding token format');
+    }
+
+    // Get all images for this onboarding token
+    const images = await ctx.db
+      .query('user_images')
+      .withIndex('by_onboarding_token', (q) => q.eq('onboardingToken', args.onboardingToken))
+      .collect();
+
+    // Only delete images that are still in 'onboarding' status
+    const imagesToDelete = images.filter((img) => img.status === 'onboarding');
+
+    // Delete storage and records
+    for (const image of imagesToDelete) {
+      await ctx.storage.delete(image.storageId);
+      await ctx.db.delete(image._id);
+    }
+
+    return {
+      deletedCount: imagesToDelete.length,
+    };
+  },
+});
+
+/**
+ * Delete all user images for authenticated user
+ * Used when authenticated user wants to "start fresh" with photo uploads
+ */
+export const deleteAllUserImages = mutation({
+  args: {},
+  returns: v.object({
+    deletedCount: v.number(),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    _args: Record<string, never>
+  ): Promise<{
+    deletedCount: number;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error('Not authenticated');
+    }
+
+    // Get user
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Get all images for this user
+    const images = await ctx.db
+      .query('user_images')
+      .withIndex('by_user', (q) => q.eq('userId', user._id))
+      .collect();
+
+    // Delete storage and records
+    for (const image of images) {
+      await ctx.storage.delete(image.storageId);
+      await ctx.db.delete(image._id);
+    }
+
+    return {
+      deletedCount: images.length,
+    };
+  },
+});
+
 // ============================================
 // AUTHENTICATED USER IMAGE MUTATIONS
 // ============================================
