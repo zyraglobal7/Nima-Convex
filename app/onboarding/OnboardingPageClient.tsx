@@ -1,27 +1,26 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Authenticated, Unauthenticated } from 'convex/react';
+import { Authenticated, Unauthenticated, useQuery } from 'convex/react';
 import { OnboardingWizard } from '@/components/onboarding';
 import { useRouter } from 'next/navigation';
 import { useOnboardingCompletion } from '@/lib/hooks/useOnboardingCompletion';
 import { useAuth } from '@workos-inc/authkit-nextjs/components';
+import { api } from '@/convex/_generated/api';
 import { Loader2 } from 'lucide-react';
 
 /**
- * Inner component that safely uses useAuth (only rendered after mount when AuthKitProvider is available)
+ * Inner component for authenticated users with route protection
  */
-function OnboardingContent() {
+function AuthenticatedOnboardingContent() {
   const router = useRouter();
-  
-  // Now safe to call useAuth since we're only rendered after AuthKitProvider is mounted
   const { user: workosUser } = useAuth();
-  
-  // Pass the WorkOS user to the hook
-  const { isProcessing, error } = useOnboardingCompletion(workosUser);
+  const { isProcessing, error, onboardingState } = useOnboardingCompletion(workosUser);
+
+  // Query current user to check completion status
+  const user = useQuery(api.users.queries.getCurrentUser);
 
   const handleComplete = () => {
-    // Redirect authenticated users to discover, unauthenticated will be handled by AccountStep
     router.push('/discover');
   };
 
@@ -29,13 +28,28 @@ function OnboardingContent() {
     router.push('/');
   };
 
-  // Show loading state while hook is processing onboarding data
-  if (isProcessing) {
+  // Show loading while checking status
+  if (isProcessing || user === undefined || onboardingState === undefined) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
         <div className="max-w-md text-center space-y-6">
           <Loader2 className="w-12 h-12 mx-auto text-primary animate-spin" />
-          <p className="text-muted-foreground">Saving your profile...</p>
+          <p className="text-muted-foreground">Checking your profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ROUTE PROTECTION: If user has BOTH profile data AND images, redirect to discover
+  // They don't need to go through onboarding again
+  if (onboardingState.hasProfileData && onboardingState.hasImages) {
+    // Redirect to discover - onboarding is already complete
+    router.replace('/discover');
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
+        <div className="max-w-md text-center space-y-6">
+          <Loader2 className="w-12 h-12 mx-auto text-primary animate-spin" />
+          <p className="text-muted-foreground">Redirecting to your feed...</p>
         </div>
       </div>
     );
@@ -64,13 +78,38 @@ function OnboardingContent() {
     );
   }
 
+  // User needs to complete onboarding - show the wizard
+  return <OnboardingWizard onComplete={handleComplete} onBack={handleBack} />;
+}
+
+/**
+ * Inner component for unauthenticated users
+ */
+function UnauthenticatedOnboardingContent() {
+  const router = useRouter();
+
+  const handleComplete = () => {
+    router.push('/discover');
+  };
+
+  const handleBack = () => {
+    router.push('/');
+  };
+
+  return <OnboardingWizard onComplete={handleComplete} onBack={handleBack} />;
+}
+
+/**
+ * Inner component that safely uses useAuth (only rendered after mount when AuthKitProvider is available)
+ */
+function OnboardingContent() {
   return (
     <>
       <Authenticated>
-        <OnboardingWizard onComplete={handleComplete} onBack={handleBack} />
+        <AuthenticatedOnboardingContent />
       </Authenticated>
       <Unauthenticated>
-        <OnboardingWizard onComplete={handleComplete} onBack={handleBack} />
+        <UnauthenticatedOnboardingContent />
       </Unauthenticated>
     </>
   );

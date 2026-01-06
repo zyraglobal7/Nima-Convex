@@ -128,9 +128,10 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
   };
 
   const formatPrice = (price: number, currency: string) => {
+    const validCurrency = currency?.trim() || 'USD';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: currency.toUpperCase(),
+      currency: validCurrency.toUpperCase(),
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(price); // Display price as-is (no cents conversion)

@@ -109,10 +109,10 @@ export default function Home() {
 function AuthenticatedContent() {
   // Get WorkOS user and pass to hook (useAuth is safe here since we're after mount check)
   const { user: workosUser } = useAuth();
-  const { user, isProcessing, error, needsOnboarding } = useOnboardingCompletion(workosUser);
+  const { user, isProcessing, error, needsOnboarding, onboardingState } = useOnboardingCompletion(workosUser);
 
   // Show loading while processing onboarding
-  if (isProcessing || user === undefined) {
+  if (isProcessing || user === undefined || onboardingState === undefined) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
         <div className="max-w-md text-center space-y-6">
@@ -148,7 +148,7 @@ function AuthenticatedContent() {
 
   // If user needs onboarding (signed up but didn't complete onboarding flow)
   if (needsOnboarding) {
-    return <NeedsOnboardingPrompt />;
+    return <NeedsOnboardingPrompt onboardingState={onboardingState} />;
   }
 
   // Main feed for authenticated users with completed onboarding
@@ -157,29 +157,75 @@ function AuthenticatedContent() {
 
 /**
  * Prompt shown when user is authenticated but hasn't completed onboarding
+ * Shows context-aware messaging based on what's missing
  */
-function NeedsOnboardingPrompt() {
+interface OnboardingState {
+  isAuthenticated: boolean;
+  hasUser: boolean;
+  hasProfileData: boolean;
+  hasImages: boolean;
+  imageCount: number;
+  onboardingCompleted: boolean;
+  missingFields: string[];
+}
+
+function NeedsOnboardingPrompt({ onboardingState }: { onboardingState: OnboardingState }) {
+  // Determine what user is missing
+  const hasProfile = onboardingState.hasProfileData;
+  const hasImages = onboardingState.hasImages;
+  
+  // Context-aware messaging
+  let emoji = '👋';
+  let title = 'Welcome to Nima!';
+  let message = "Let's set up your style profile so I can show you outfits you'll love.";
+  let buttonText = 'Get Started';
+  
+  if (hasImages && !hasProfile) {
+    // Has images but missing profile
+    emoji = '✨';
+    title = "Let's finish your profile!";
+    message = "Your photos are ready. Just add your style preferences and we'll create personalized looks for you.";
+    buttonText = 'Complete Profile';
+  } else if (hasProfile && !hasImages) {
+    // Has profile but missing images
+    emoji = '📸';
+    title = 'Add your photos';
+    message = "Your style preferences are saved. Add some photos so I can show you wearing the outfits!";
+    buttonText = 'Upload Photos';
+  } else if (!hasProfile && !hasImages) {
+    // Missing both - default messaging
+    emoji = '👋';
+    title = 'Welcome to Nima!';
+    message = "Let's set up your style profile so I can show you outfits you'll love.";
+    buttonText = 'Get Started';
+  }
+  
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
       <div className="max-w-md text-center space-y-6">
         <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-          <span className="text-3xl">👋</span>
+          <span className="text-3xl">{emoji}</span>
         </div>
         <h1 className="text-3xl font-serif font-semibold text-foreground">
-          Welcome to Nima!
+          {title}
         </h1>
         <p className="text-muted-foreground">
-          Let&apos;s set up your style profile so I can show you outfits you&apos;ll love.
+          {message}
         </p>
+        
+        {/* Show progress indicator */}
+        <div className="flex justify-center gap-2">
+          <div className={`w-3 h-3 rounded-full ${hasProfile ? 'bg-green-500' : 'bg-border'}`} 
+               title={hasProfile ? 'Profile complete' : 'Profile incomplete'} />
+          <div className={`w-3 h-3 rounded-full ${hasImages ? 'bg-green-500' : 'bg-border'}`}
+               title={hasImages ? 'Photos uploaded' : 'Photos needed'} />
+        </div>
+        
         <a
           href="/onboarding"
-          onClick={() => {
-            // Clear any stale data and reload to start fresh onboarding
-            localStorage.removeItem('nima-onboarding-data');
-          }}
           className="inline-block px-6 py-3 bg-primary text-primary-foreground rounded-full hover:bg-primary-hover transition-colors"
         >
-          Complete Your Profile
+          {buttonText}
         </a>
       </div>
     </div>

@@ -233,6 +233,11 @@ export const updateProfile = mutation({
 /**
  * Complete onboarding with all collected data
  * Called after user signs up and completes the onboarding wizard
+ * 
+ * This mutation is IDEMPOTENT - if onboarding is already completed,
+ * it will still update the profile data but won't cause errors.
+ * This handles cases like localStorage expiring or users signing in
+ * from different devices.
  */
 export const completeOnboarding = mutation({
   args: {
@@ -281,7 +286,8 @@ export const completeOnboarding = mutation({
       throw new Error('User not found');
     }
 
-    // Sanitize text inputs
+    // Always update profile data and set onboardingCompleted to true
+    // This is idempotent - calling it multiple times has the same effect
     await ctx.db.patch(user._id, {
       gender: args.gender,
       age: sanitizeText(args.age, 10),
@@ -300,6 +306,69 @@ export const completeOnboarding = mutation({
     });
 
     return user._id;
+  },
+});
+
+/**
+ * Mark onboarding as complete without requiring all profile data
+ * Used when user has images but localStorage expired
+ * Only sets the flag if user already has profile data and images
+ */
+export const markOnboardingComplete = mutation({
+  args: {},
+  returns: v.object({
+    success: v.boolean(),
+    reason: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    _args: Record<string, never>
+  ): Promise<{
+    success: boolean;
+    reason?: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { success: false, reason: 'Not authenticated' };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return { success: false, reason: 'User not found' };
+    }
+
+    // Already complete
+    if (user.onboardingCompleted) {
+      return { success: true };
+    }
+
+    // Check if user has required profile data
+    const hasProfileData = !!user.gender && user.stylePreferences && user.stylePreferences.length > 0;
+    if (!hasProfileData) {
+      return { success: false, reason: 'Missing profile data' };
+    }
+
+    // Check if user has images
+    const userImages = await ctx.db
+      .query('user_images')
+      .withIndex('by_user', (q) => q.eq('userId', user._id))
+      .first();
+
+    if (!userImages) {
+      return { success: false, reason: 'No images uploaded' };
+    }
+
+    // All requirements met - mark as complete
+    await ctx.db.patch(user._id, {
+      onboardingCompleted: true,
+      updatedAt: Date.now(),
+    });
+
+    return { success: true };
   },
 });
 
