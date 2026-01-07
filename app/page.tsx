@@ -10,6 +10,47 @@ import { Loader2 } from 'lucide-react';
 
 type View = 'gate' | 'onboarding' | 'app';
 
+
+function InstallPrompt() {
+  const [isIOS, setIsIOS] = useState(false)
+  const [isStandalone, setIsStandalone] = useState(false)
+  const [isMobile, setIsMobile] = useState(false) // Added this state
+ 
+  useEffect(() => {
+    const userAgent = navigator.userAgent;
+    const isApple = /iPad|iPhone|iPod/.test(userAgent);
+    const isAndroid = /Android/.test(userAgent);
+    
+    setIsIOS(isApple);
+    setIsMobile(isApple || isAndroid); // Detects any mobile device
+    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches);
+  }, [])
+ 
+  // 1. Don't show if already installed
+  // 2. Don't show if we're on a Desktop (unless you want a desktop button too)
+  if (isStandalone || !isIOS || !isMobile) {
+    return null
+  }
+
+  return (
+    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-40 w-[min(96%,560px)] bg-surface border border-border rounded-xl p-3 shadow-md flex items-center gap-4">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-semibold">N</div>
+        <div>
+          <h3 className="text-sm font-medium text-foreground">Install App</h3>
+      
+            <p className="mt-1 text-xs text-muted-foreground">Tap the share button and choose <strong>Add to Home Screen</strong>.</p>
+          
+        </div>
+      </div>
+
+    
+    </div>
+  )
+}
+ 
+
+
 export default function Home() {
   const [view, setView] = useState<View>('gate');
   const [isMounted, setIsMounted] = useState(false);
@@ -56,6 +97,7 @@ export default function Home() {
         )}
         {view === 'app' && <OnboardingCompletePlaceholder />}
       </Unauthenticated>
+          <InstallPrompt />
     </>
   );
 }
