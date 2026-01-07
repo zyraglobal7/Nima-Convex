@@ -439,28 +439,47 @@ export const listItemsWithImages = query({
   }> => {
     const limit = Math.min(args.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
 
-    let query;
+    // If cursor is provided, get the cursor item to find its creation time for pagination
+    let cursorCreationTime: number | null = null;
+    if (args.cursor) {
+      const cursorItem = await ctx.db.get(args.cursor as Id<'items'>);
+      if (cursorItem) {
+        cursorCreationTime = cursorItem._creationTime;
+      }
+    }
+
+    let baseQuery;
     if (args.gender && args.category) {
-      query = ctx.db
+      baseQuery = ctx.db
         .query('items')
         .withIndex('by_gender_and_category', (q) =>
           q.eq('gender', args.gender!).eq('category', args.category!)
         );
     } else if (args.category) {
-      query = ctx.db
+      baseQuery = ctx.db
         .query('items')
         .withIndex('by_active_and_category', (q) =>
           q.eq('isActive', true).eq('category', args.category!)
         );
     } else if (args.gender) {
-      query = ctx.db
+      baseQuery = ctx.db
         .query('items')
         .withIndex('by_active_and_gender', (q) => q.eq('isActive', true).eq('gender', args.gender!));
     } else {
-      query = ctx.db.query('items').withIndex('by_active_and_category', (q) => q.eq('isActive', true));
+      baseQuery = ctx.db.query('items').withIndex('by_active_and_category', (q) => q.eq('isActive', true));
     }
 
-    const results = await query.order('desc').take(limit + 1);
+    // Apply cursor-based pagination: get items created BEFORE the cursor item (for desc order)
+    let results;
+    if (cursorCreationTime !== null) {
+      results = await baseQuery
+        .filter((q) => q.lt(q.field('_creationTime'), cursorCreationTime!))
+        .order('desc')
+        .take(limit + 1);
+    } else {
+      results = await baseQuery.order('desc').take(limit + 1);
+    }
+
     const activeItems = results.filter((item) => item.isActive);
     const hasMore = activeItems.length > limit;
     const items = activeItems.slice(0, limit);
@@ -509,6 +528,92 @@ export const listItemsWithImages = query({
       nextCursor: hasMore && items.length > 0 ? items[items.length - 1]._id : null,
       hasMore,
     };
+  },
+});
+
+// Category type for the carousel
+type CategoryType = 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+
+/**
+ * Get one sample item with image per category for the Shop by Category carousel
+ * Returns an array of categories with their sample product image
+ */
+export const getCategorySamples = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      category: categoryValidator,
+      label: v.string(),
+      sampleImageUrl: v.union(v.string(), v.null()),
+      itemCount: v.number(),
+    })
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: Record<string, never>
+  ): Promise<
+    Array<{
+      category: CategoryType;
+      label: string;
+      sampleImageUrl: string | null;
+      itemCount: number;
+    }>
+  > => {
+    const categories: Array<{ key: CategoryType; label: string }> = [
+      { key: 'top', label: 'Tops' },
+      { key: 'bottom', label: 'Bottoms' },
+      { key: 'dress', label: 'Dresses' },
+      { key: 'outerwear', label: 'Outerwear' },
+      { key: 'shoes', label: 'Shoes' },
+      { key: 'accessory', label: 'Accessories' },
+      { key: 'bag', label: 'Bags' },
+      { key: 'jewelry', label: 'Jewelry' },
+    ];
+
+    const results = await Promise.all(
+      categories.map(async ({ key, label }) => {
+        // Get one active item from this category
+        const items = await ctx.db
+          .query('items')
+          .withIndex('by_active_and_category', (q) => q.eq('isActive', true).eq('category', key))
+          .take(10);
+
+        // Count total items in category
+        const allCategoryItems = await ctx.db
+          .query('items')
+          .withIndex('by_active_and_category', (q) => q.eq('isActive', true).eq('category', key))
+          .collect();
+        const itemCount = allCategoryItems.length;
+
+        // Find a sample item with an image
+        let sampleImageUrl: string | null = null;
+        for (const item of items) {
+          const primaryImage = await ctx.db
+            .query('item_images')
+            .withIndex('by_item_and_primary', (q) => q.eq('itemId', item._id).eq('isPrimary', true))
+            .unique();
+
+          if (primaryImage) {
+            if (primaryImage.storageId) {
+              sampleImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+            } else if (primaryImage.externalUrl) {
+              sampleImageUrl = primaryImage.externalUrl;
+            }
+            if (sampleImageUrl) break;
+          }
+        }
+
+        return {
+          category: key,
+          label,
+          sampleImageUrl,
+          itemCount,
+        };
+      })
+    );
+
+    // Filter out categories with no items
+    return results.filter((cat) => cat.itemCount > 0);
   },
 });
 

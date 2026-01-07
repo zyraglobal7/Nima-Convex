@@ -22,6 +22,9 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
   // Always use ConvexProviderWithAuth to ensure <Authenticated>/<Unauthenticated> components work
   // During SSR/initial render, provide auth context that shows "loading"
   // After mount, wrap with AuthKitProvider for actual auth
+  // NOTE: This causes a remount when isMounted changes, but that's unavoidable because
+  // useAuthFromAuthKit requires AuthKitProvider context which can't be used during SSR.
+  // We handle the remount gracefully via useStableValue and module-level state.
   if (!isMounted) {
     return (
       <ConvexProviderWithAuth client={convex} useAuth={useLoadingAuth}>
