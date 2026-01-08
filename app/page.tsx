@@ -97,7 +97,7 @@ export default function Home() {
         )}
         {view === 'app' && <OnboardingCompletePlaceholder />}
       </Unauthenticated>
-          <InstallPrompt />
+          {/* <InstallPrompt /> */}
     </>
   );
 }

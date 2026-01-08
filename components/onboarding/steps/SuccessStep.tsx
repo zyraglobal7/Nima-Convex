@@ -71,7 +71,7 @@ export function SuccessStep({ formData }: StepProps) {
             You&apos;re in!
           </h1>
           <p className="text-lg text-muted-foreground">
-            Welcome to the club, gorgeous.
+            Welcome to the club.
           </p>
         </div>
 
