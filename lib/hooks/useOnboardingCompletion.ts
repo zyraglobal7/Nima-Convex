@@ -292,14 +292,17 @@ export function useOnboardingCompletion(workosUser?: WorkOSUser | null) {
 
   useEffect(() => {
     processOnboarding();
-  }, [processOnboarding]);
+  }, []);
 
   // Compute needsOnboarding based on SMART check:
-  // User needs onboarding if they don't have BOTH profile data AND images
+  // 1. If onboardingCompleted flag is TRUE, trust it (user explicitly completed)
+  // 2. Otherwise, use derived checks (profile data + images)
+  // This fixes the case where user completed onboarding but some data got cleared
   const needsOnboarding = 
     onboardingState !== undefined && 
     onboardingState.isAuthenticated &&
     onboardingState.hasUser &&
+    !onboardingState.onboardingCompleted &&  // ← Trust explicit flag first!
     (!onboardingState.hasProfileData || !onboardingState.hasImages);
 
   return {
