@@ -330,6 +330,10 @@ export const getDashboardStats = query({
         count: v.number(),
       })
     ),
+    // Cart statistics
+    totalCartsWithItems: v.number(),
+    totalCartItems: v.number(),
+    cartTotalValue: v.number(),
   }),
   handler: async (
     ctx: QueryCtx,
@@ -339,6 +343,9 @@ export const getDashboardStats = query({
     activeItems: number;
     inactiveItems: number;
     itemsByCategory: Array<{ category: string; count: number }>;
+    totalCartsWithItems: number;
+    totalCartItems: number;
+    cartTotalValue: number;
   }> => {
     const allItems = await ctx.db.query('items').collect();
 
@@ -357,11 +364,33 @@ export const getDashboardStats = query({
       count,
     }));
 
+    // Cart statistics
+    const allCartItems = await ctx.db.query('cart_items').collect();
+    
+    // Count unique users with items in cart
+    const usersWithCarts = new Set(allCartItems.map((item) => item.userId));
+    const totalCartsWithItems = usersWithCarts.size;
+    
+    // Count total cart items (sum of quantities)
+    const totalCartItems = allCartItems.reduce((sum, item) => sum + item.quantity, 0);
+    
+    // Calculate total cart value
+    let cartTotalValue = 0;
+    for (const cartItem of allCartItems) {
+      const item = await ctx.db.get(cartItem.itemId);
+      if (item) {
+        cartTotalValue += item.price * cartItem.quantity;
+      }
+    }
+
     return {
       totalItems,
       activeItems,
       inactiveItems,
       itemsByCategory,
+      totalCartsWithItems,
+      totalCartItems,
+      cartTotalValue,
     };
   },
 });

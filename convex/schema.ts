@@ -266,6 +266,18 @@ export default defineSchema({
       )
     ),
 
+    // User save/discard status
+    // 'pending' = just generated, not saved yet
+    // 'saved' = user saved it to lookbooks
+    // 'discarded' = user discarded it (can be restored)
+    status: v.optional(
+      v.union(
+        v.literal('pending'),
+        v.literal('saved'),
+        v.literal('discarded')
+      )
+    ),
+
     // Creator (for user-generated looks in future)
     createdBy: v.optional(v.union(v.literal('system'), v.literal('user'))),
     creatorUserId: v.optional(v.id('users')),
@@ -278,7 +290,8 @@ export default defineSchema({
     .index('by_occasion', ['occasion'])
     .index('by_active_and_featured', ['isActive', 'isFeatured'])
     .index('by_creator_and_status', ['creatorUserId', 'generationStatus'])
-    .index('by_public_and_active', ['isPublic', 'isActive']),
+    .index('by_public_and_active', ['isPublic', 'isActive'])
+    .index('by_user_and_save_status', ['creatorUserId', 'status']),
 
   /**
    * look_images - AI-generated try-on images
@@ -624,5 +637,24 @@ export default defineSchema({
     .index('by_item_and_user', ['itemId', 'userId'])
     .index('by_user', ['userId'])
     .index('by_status', ['status']),
+
+  // ============================================
+  // SHOPPING CART
+  // ============================================
+
+  /**
+   * cart_items - Items saved to user's shopping cart
+   * Persists across sessions for logged-in users
+   */
+  cart_items: defineTable({
+    userId: v.id('users'),
+    itemId: v.id('items'),
+    quantity: v.number(),
+    selectedSize: v.optional(v.string()),
+    selectedColor: v.optional(v.string()),
+    addedAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_user_and_item', ['userId', 'itemId']),
 
 });

@@ -84,8 +84,10 @@ export default function FittingRoomPage() {
   const sessionId = params.sessionId as string;
 
   // Parse lookIds from sessionId (can be comma-separated for multiple looks)
+  // Decode URL-encoded characters (e.g., %2C -> ,) before splitting
   const lookIds = useMemo(() => {
-    return sessionId.split(',').filter(Boolean) as Id<'looks'>[];
+    const decodedSessionId = decodeURIComponent(sessionId);
+    return decodedSessionId.split(',').filter(Boolean) as Id<'looks'>[];
   }, [sessionId]);
 
   const [currentLookIndex, setCurrentLookIndex] = useState(0);

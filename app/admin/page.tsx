@@ -15,6 +15,7 @@ import {
   ArrowRight,
   Plus,
 } from 'lucide-react';
+import { formatPrice } from '@/lib/utils/format';
 
 export default function AdminDashboard() {
   const stats = useQuery(api.admin.queries.getDashboardStats, {});
@@ -77,12 +78,23 @@ export default function AdminDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Orders</CardTitle>
+            <CardTitle className="text-sm font-medium">Active Carts</CardTitle>
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">—</div>
-            <p className="text-xs text-muted-foreground">Coming soon</p>
+            {stats ? (
+              <>
+                <div className="text-2xl font-bold">{stats.totalCartsWithItems}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.totalCartItems} items • {formatPrice(stats.cartTotalValue, 'USD')}
+                </p>
+              </>
+            ) : (
+              <>
+                <Skeleton className="h-8 w-16 mb-1" />
+                <Skeleton className="h-4 w-32" />
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
