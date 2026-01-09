@@ -674,6 +674,7 @@ export const recreateLook = mutation({
       viewCount: 0,
       saveCount: 0,
       generationStatus: 'pending', // Set to pending to trigger image generation
+      status: 'pending', // User will choose to save or discard after generation
       createdBy: 'user',
       creatorUserId: user._id,
       createdAt: now,
@@ -824,6 +825,7 @@ export const createLookFromSelectedItems = mutation({
       viewCount: 0,
       saveCount: 0,
       generationStatus: 'pending',
+      status: 'pending', // User will choose to save or discard after generation
       createdBy: 'user',
       creatorUserId: user._id,
       createdAt: now,
@@ -906,6 +908,213 @@ export const updateLookVisibility = mutation({
     await ctx.db.patch(args.lookId, {
       isPublic: args.isPublic,
       sharedWithFriends: args.sharedWithFriends,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+    };
+  },
+});
+
+// ============================================
+// SAVE / DISCARD / RESTORE MUTATIONS
+// ============================================
+
+/**
+ * Save a look - sets status to 'saved'
+ * Used when user chooses to save a look after generation
+ */
+export const saveLook = mutation({
+  args: {
+    lookId: v.id('looks'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    error: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { lookId: Id<'looks'> }
+  ): Promise<{ success: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        error: 'Please sign in to save looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found.',
+      };
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look) {
+      return {
+        success: false,
+        error: 'Look not found.',
+      };
+    }
+
+    // Check ownership - only the creator can save/discard
+    if (look.creatorUserId !== user._id) {
+      return {
+        success: false,
+        error: 'You can only save your own looks.',
+      };
+    }
+
+    // Update status to saved
+    await ctx.db.patch(args.lookId, {
+      status: 'saved',
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+    };
+  },
+});
+
+/**
+ * Discard a look - sets status to 'discarded'
+ * Used when user chooses to discard a look after generation
+ * Discarded looks are not deleted, they can be restored later
+ */
+export const discardLook = mutation({
+  args: {
+    lookId: v.id('looks'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    error: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { lookId: Id<'looks'> }
+  ): Promise<{ success: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        error: 'Please sign in to discard looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found.',
+      };
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look) {
+      return {
+        success: false,
+        error: 'Look not found.',
+      };
+    }
+
+    // Check ownership
+    if (look.creatorUserId !== user._id) {
+      return {
+        success: false,
+        error: 'You can only discard your own looks.',
+      };
+    }
+
+    // Update status to discarded
+    await ctx.db.patch(args.lookId, {
+      status: 'discarded',
+      isPublic: false, // Remove from public view
+      sharedWithFriends: false, // Remove from friends view
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+    };
+  },
+});
+
+/**
+ * Restore a discarded look - changes status from 'discarded' to 'saved'
+ * Used when user wants to recover a previously discarded look
+ */
+export const restoreLook = mutation({
+  args: {
+    lookId: v.id('looks'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    error: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { lookId: Id<'looks'> }
+  ): Promise<{ success: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        error: 'Please sign in to restore looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found.',
+      };
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look) {
+      return {
+        success: false,
+        error: 'Look not found.',
+      };
+    }
+
+    // Check ownership
+    if (look.creatorUserId !== user._id) {
+      return {
+        success: false,
+        error: 'You can only restore your own looks.',
+      };
+    }
+
+    // Check that it's actually discarded
+    if (look.status !== 'discarded') {
+      return {
+        success: false,
+        error: 'This look is not discarded.',
+      };
+    }
+
+    // Update status to saved
+    await ctx.db.patch(args.lookId, {
+      status: 'saved',
       updatedAt: Date.now(),
     });
 

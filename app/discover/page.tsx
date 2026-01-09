@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ThemeToggle } from '@/components/theme-toggle';
 import { CreateLookSheet, LookCardWithCreator, LookCard, useFloatingLoader, CategoryCarousel } from '@/components/discover';
 import { ApparelItemCard, type ApparelItem } from '@/components/discover/ApparelItemCard';
-import { Settings, Sparkles, User, Shirt, Loader2 } from 'lucide-react';
+import { Sparkles, User, Shirt, Loader2 } from 'lucide-react';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
+import { CartIcon } from '@/components/cart/CartIcon';
 import Link from 'next/link';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -98,12 +98,21 @@ export default function DiscoverPage() {
   const rawWorkflowStatus = useQuery(api.workflows.index.getOnboardingWorkflowStatus);
   const workflowStatus = useStableValue(rawWorkflowStatus, null);
 
-  // Items for Apparel tab - paginated with cursor
+  // Get current user for gender-based filtering
+  const currentUser = useQuery(api.users.queries.getCurrentUser);
+  
+  // Derive gender filter from user preferences
+  // Only filter by gender if user has explicitly set male/female (not prefer-not-to-say)
+  const userGenderFilter = currentUser?.gender === 'male' || currentUser?.gender === 'female' 
+    ? currentUser.gender 
+    : undefined;
+
+  // Items for Apparel tab - paginated with cursor, filtered by user's gender
   // Note: We use rawItemsData directly for pagination to avoid stale data issues with useStableValue
   const rawItemsData = useQuery(
     api.items.queries.listItemsWithImages,
     activeFilter === 'apparel' 
-      ? { limit: ITEMS_PER_PAGE, cursor: apparelCursor ?? undefined } 
+      ? { gender: userGenderFilter, limit: ITEMS_PER_PAGE, cursor: apparelCursor ?? undefined } 
       : 'skip'
   );
 
@@ -130,20 +139,24 @@ export default function DiscoverPage() {
     }
   }, [myLooksData?.length]);
 
-  // Reset accumulated items when switching to/from apparel tab
+  // Reset accumulated items when switching to/from apparel tab or when gender filter changes
   useEffect(() => {
     if (activeFilter === 'apparel') {
       setApparelCursor(null);
       setAccumulatedItems([]);
       processedCursorsRef.current = new Set();
       paginationRef.current = { hasMore: false, nextCursor: null };
+      setIsLoadingMore(false);
     }
-  }, [activeFilter]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilter, userGenderFilter]); // Intentionally exclude apparelCursor and accumulatedItems to prevent loops
 
   // Accumulate items as they come in from paginated queries
   // Uses rawItemsData directly to ensure we process fresh data, not cached stable values
   useEffect(() => {
-    if (activeFilter !== 'apparel' || !rawItemsData?.items || rawItemsData.items.length === 0) return;
+    if (activeFilter !== 'apparel' || !rawItemsData?.items || rawItemsData.items.length === 0) {
+      return;
+    }
     
     // Create a unique key for this data batch based on first item ID
     const dataKey = rawItemsData.items[0]?._id ?? 'empty';
@@ -159,6 +172,7 @@ export default function DiscoverPage() {
       hasMore: rawItemsData.hasMore, 
       nextCursor: rawItemsData.nextCursor 
     };
+    
     
     const newItems: ApparelItem[] = rawItemsData.items.map((item) => ({
       _id: item._id,
@@ -183,18 +197,25 @@ export default function DiscoverPage() {
     });
     
     setIsLoadingMore(false);
-  }, [rawItemsData, activeFilter]);
+  }, [rawItemsData, activeFilter, apparelCursor, accumulatedItems.length]);
+
+  // Track if we have items to determine when the loadMoreRef div is rendered
+  const hasApparelItems = accumulatedItems.length > 0;
 
   // Intersection observer for infinite scroll
   // Uses a ref to access the latest pagination data to avoid stale closures
+  // IMPORTANT: Include hasApparelItems in deps so observer re-attaches when items load and div renders
   useEffect(() => {
-    if (activeFilter !== 'apparel') return;
+    if (activeFilter !== 'apparel') {
+      return;
+    }
     
     const observer = new IntersectionObserver(
       (entries) => {
         const target = entries[0];
         // Use paginationRef.current to get fresh values
         const { hasMore, nextCursor } = paginationRef.current;
+        
         if (target.isIntersecting && hasMore && nextCursor && !isLoadingMore) {
           setIsLoadingMore(true);
           setApparelCursor(nextCursor);
@@ -213,7 +234,7 @@ export default function DiscoverPage() {
         observer.unobserve(currentRef);
       }
     };
-  }, [activeFilter, isLoadingMore]);
+  }, [activeFilter, isLoadingMore, hasApparelItems]); // Added hasApparelItems to re-attach when items load
 
   // Track discover page view - only once on mount, production only to avoid dev noise
   const hasTrackedPageView = useRef(false);
@@ -447,17 +468,9 @@ export default function DiscoverPage() {
               </nav>
             </div>
 
-            {/* Page title - center (mobile only) */}
-            <h1 className="md:hidden absolute left-1/2 -translate-x-1/2 text-lg font-medium text-foreground">
-              Discover
-            </h1>
-
             {/* Right actions */}
             <div className="flex items-center gap-2">
-              <ThemeToggle />
-              <button className="p-2 rounded-full hover:bg-surface transition-colors">
-                <Settings className="w-5 h-5 text-muted-foreground" />
-              </button>
+              <CartIcon />
               <MessagesIcon />
             </div>
           </div>
@@ -615,7 +628,7 @@ export default function DiscoverPage() {
             <div>
               {/* Desktop: Category carousel at top */}
               <div className="hidden md:block">
-                <CategoryCarousel />
+                <CategoryCarousel userGender={currentUser?.gender} />
               </div>
 
               {/* Apparel grid with infinite scroll */}
@@ -651,7 +664,7 @@ export default function DiscoverPage() {
                           {/* Insert carousel after every 8 items */}
                           {(index + 1) % ITEMS_PER_PAGE === 0 && index < apparelItems.length - 1 && (
                             <div className="col-span-2 my-4 -mx-4 px-4">
-                              <CategoryCarousel isInlineVariant />
+                              <CategoryCarousel isInlineVariant userGender={currentUser?.gender} />
                             </div>
                           )}
                         </div>

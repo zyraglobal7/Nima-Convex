@@ -424,6 +424,10 @@ export const createLooksFromChat = mutation({
     const userStyles = user.stylePreferences || [];
     const userBudget = user.budgetRange;
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/5d407c11-6781-42e2-9459-00c476ac031a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mutations.ts:createLooksFromChat:userPrefs',message:'User preferences extracted',data:{userGender,userStyles,userBudget,userId:user._id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H3'})}).catch(()=>{});
+    // #endregion
+
     // Get user's previous looks to detect item overlap
     const previousLooks = await ctx.db
       .query('looks')
@@ -512,6 +516,9 @@ export const createLooksFromChat = mutation({
     }
 
     if (lookIds.length === 0) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5d407c11-6781-42e2-9459-00c476ac031a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mutations.ts:createLooksFromChat:noLooks',message:'No looks created - returning no_matches',data:{userGender,userBudget,occasion:args.occasion},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H5'})}).catch(()=>{});
+      // #endregion
       return {
         success: false,
         message: 'no_matches',
@@ -601,6 +608,20 @@ async function matchItemsForLookWithExclusions(
       items = await query.take(limit);
     }
 
+    // #region agent log
+    const rawCount = items.length;
+    const afterActiveFilter = items.filter((item) => item.isActive).length;
+    const afterExcludeFilter = items.filter((item) => item.isActive).filter((item) => !preferences.excludeItemIds.has(item._id)).length;
+    const afterBudgetFilter = items.filter((item) => item.isActive).filter((item) => !preferences.excludeItemIds.has(item._id)).filter((item) => {
+      if (preferences.budgetRange) {
+        const range = budgetRanges[preferences.budgetRange];
+        return item.price >= range.min && item.price <= range.max;
+      }
+      return true;
+    }).length;
+    fetch('http://127.0.0.1:7242/ingest/5d407c11-6781-42e2-9459-00c476ac031a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mutations.ts:getItemsByCategory',message:'Items filtering breakdown',data:{category,gender:preferences.gender,budgetRange:preferences.budgetRange,rawCount,afterActiveFilter,afterExcludeFilter,afterBudgetFilter},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
+    // #endregion
+
     return items
       .filter((item) => item.isActive)
       .filter((item) => !preferences.excludeItemIds.has(item._id)) // Exclude already used items
@@ -680,6 +701,9 @@ async function matchItemsForLookWithExclusions(
     }
 
     if (!baseComplete) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5d407c11-6781-42e2-9459-00c476ac031a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mutations.ts:matchItemsForLookWithExclusions:strategyFailed',message:'Strategy failed - base incomplete',data:{strategyName:strategy.name,requiredBase:strategy.base,matchedCount:matchedItems.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2-H3'})}).catch(()=>{});
+      // #endregion
       continue;
     }
 
@@ -737,10 +761,16 @@ async function matchItemsForLookWithExclusions(
       matchedItems.forEach(item => {
         console.log(`  - ${item.name} (${item.category}, ${getFormalityLevel(item)})`);
       });
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5d407c11-6781-42e2-9459-00c476ac031a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mutations.ts:matchItemsForLookWithExclusions:success',message:'Strategy succeeded',data:{strategyName:strategy.name,matchedCount:matchedItems.length,items:matchedItems.map(i=>({name:i.name,category:i.category}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2-H5'})}).catch(()=>{});
+      // #endregion
       return matchedItems;
     }
   }
 
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/5d407c11-6781-42e2-9459-00c476ac031a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mutations.ts:matchItemsForLookWithExclusions:allFailed',message:'ALL strategies failed - returning empty',data:{strategiesTried:outfitStrategies.map(s=>s.name)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2-H5'})}).catch(()=>{});
+  // #endregion
   return [];
 }
 

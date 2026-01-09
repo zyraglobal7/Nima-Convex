@@ -17,31 +17,24 @@ import { useStableValue } from '@/lib/hooks/useStableValue';
 // Items per page for infinite scroll
 const ITEMS_PER_PAGE = 8;
 
-// Category display names
-const CATEGORY_LABELS: Record<string, string> = {
-  top: 'Tops',
-  bottom: 'Bottoms',
-  dress: 'Dresses',
-  outfit: 'Outfits',
-  outerwear: 'Outerwear',
-  shoes: 'Shoes',
-  accessory: 'Accessories',
-  bag: 'Bags',
-  jewelry: 'Jewelry',
+// Gender display names
+const GENDER_LABELS: Record<string, string> = {
+  male: 'For Him',
+  female: 'For Her',
 };
 
-// Type for valid categories
-type CategoryType = 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+// Type for valid genders
+type GenderType = 'male' | 'female';
 
-export default function CategoryPage() {
+export default function GenderPage() {
   const router = useRouter();
   const params = useParams();
-  const categoryParam = params.category as string;
+  const genderParam = params.gender as string;
   
-  // Validate category
-  const isValidCategory = Object.keys(CATEGORY_LABELS).includes(categoryParam);
-  const category = isValidCategory ? (categoryParam as CategoryType) : null;
-  const categoryLabel = category ? CATEGORY_LABELS[category] : 'Unknown';
+  // Validate gender
+  const isValidGender = Object.keys(GENDER_LABELS).includes(genderParam);
+  const gender = isValidGender ? (genderParam as GenderType) : null;
+  const genderLabel = gender ? GENDER_LABELS[gender] : 'Unknown';
 
   // Infinite scroll state
   const [cursor, setCursor] = useState<string | null>(null);
@@ -54,11 +47,11 @@ export default function CategoryPage() {
   const [selectedItems, setSelectedItems] = useState<Set<Id<'items'>>>(new Set());
   const [showCreateLookSheet, setShowCreateLookSheet] = useState(false);
 
-  // Fetch items with category filter
+  // Fetch items with gender filter
   const rawItemsData = useQuery(
     api.items.queries.listItemsWithImages,
-    category 
-      ? { category, limit: ITEMS_PER_PAGE, cursor: cursor ?? undefined }
+    gender 
+      ? { gender, limit: ITEMS_PER_PAGE, cursor: cursor ?? undefined }
       : 'skip'
   );
   const itemsData = useStableValue(rawItemsData, { items: [], nextCursor: null, hasMore: false });
@@ -136,13 +129,13 @@ export default function CategoryPage() {
   // Get selected items for CreateLookSheet
   const selectedItemsArray = accumulatedItems.filter((item) => selectedItems.has(item._id));
 
-  // Invalid category - redirect
-  if (!isValidCategory) {
+  // Invalid gender - redirect
+  if (!isValidGender) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-serif text-foreground mb-2">Category not found</h1>
-          <p className="text-muted-foreground mb-4">The category &quot;{categoryParam}&quot; doesn&apos;t exist.</p>
+          <p className="text-muted-foreground mb-4">The gender category &quot;{genderParam}&quot; doesn&apos;t exist.</p>
           <Link 
             href="/discover"
             className="inline-flex px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
@@ -194,7 +187,7 @@ export default function CategoryPage() {
 
             {/* Page title - center (mobile only) */}
             <h1 className="md:hidden absolute left-1/2 -translate-x-1/2 text-lg font-medium text-foreground">
-              {categoryLabel}
+              {genderLabel}
             </h1>
 
             {/* Right actions */}
@@ -219,12 +212,12 @@ export default function CategoryPage() {
           className="mb-6"
         >
           <h2 className="text-2xl md:text-3xl font-serif text-foreground">
-            {categoryLabel} ✨
+            {genderLabel} {gender === 'female' ? '👗' : '👔'}
           </h2>
           <p className="text-muted-foreground mt-1">
             {accumulatedItems.length > 0
               ? `${accumulatedItems.length} items${itemsData?.hasMore ? '+' : ''}`
-              : 'Browse our collection'
+              : `Browse ${gender === 'female' ? "women's" : "men's"} collection`
             }
           </p>
         </motion.div>
@@ -319,7 +312,7 @@ export default function CategoryPage() {
                 )}
                 {!itemsData?.hasMore && accumulatedItems.length > 0 && (
                   <p className="text-sm text-muted-foreground">
-                    You&apos;ve seen all {accumulatedItems.length} {categoryLabel.toLowerCase()}
+                    You&apos;ve seen all {accumulatedItems.length} items
                   </p>
                 )}
               </div>
@@ -331,10 +324,10 @@ export default function CategoryPage() {
                 <Shirt className="w-8 h-8 text-muted-foreground" />
               </div>
               <h3 className="text-lg font-medium text-foreground mb-2">
-                No {categoryLabel.toLowerCase()} yet
+                No items yet
               </h3>
               <p className="text-muted-foreground max-w-md mx-auto">
-                Check back soon for new items in this category.
+                Check back soon for new {gender === 'female' ? "women's" : "men's"} items.
               </p>
               <Link 
                 href="/discover"

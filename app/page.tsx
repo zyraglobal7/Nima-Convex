@@ -111,6 +111,15 @@ function AuthenticatedContent() {
   const { user: workosUser } = useAuth();
   const { user, isProcessing, error, needsOnboarding, onboardingState } = useOnboardingCompletion(workosUser);
 
+  console.log('[HOME_PAGE] AuthenticatedContent rendered', {
+    workosUser: workosUser ? { id: workosUser.id, email: workosUser.email } : null,
+    user: user === undefined ? 'undefined' : user === null ? 'null' : 'exists',
+    isProcessing,
+    error,
+    needsOnboarding,
+    onboardingState,
+  });
+
   // Show loading while processing onboarding
   if (isProcessing || user === undefined || onboardingState === undefined) {
     return (
