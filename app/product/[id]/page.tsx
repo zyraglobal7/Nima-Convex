@@ -15,6 +15,7 @@ import {
   Check,
   AlertCircle,
   ShoppingBag,
+  ShoppingCart,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -36,6 +37,7 @@ export default function ProductDetailPage() {
   const [tryOnStatus, setTryOnStatus] = useState<TryOnStatus>('idle');
   const [tryOnId, setTryOnId] = useState<Id<'item_try_ons'> | null>(null);
   const [showTryOnResult, setShowTryOnResult] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
 
   // Queries
   const itemData = useQuery(api.items.queries.getItemWithImage, { itemId });
@@ -45,6 +47,7 @@ export default function ProductDetailPage() {
   // Mutations
   const startTryOn = useMutation(api.workflows.index.startItemTryOn);
   const quickSave = useMutation(api.lookbooks.mutations.quickSave);
+  const addToCart = useMutation(api.cart.mutations.addToCart);
 
   // Poll for try-on status if we have a tryOnId
   const tryOnResult = useQuery(
@@ -147,6 +150,20 @@ export default function ProductDetailPage() {
     } else {
       await navigator.clipboard.writeText(window.location.href);
       toast.success('Link copied to clipboard!');
+    }
+  };
+
+  const handleAddToCart = async () => {
+    setIsAddingToCart(true);
+    try {
+      await addToCart({ itemId });
+      toast.success('Added to cart!');
+      setShowTryOnResult(false);
+      router.push('/cart');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to add to cart');
+    } finally {
+      setIsAddingToCart(false);
     }
   };
 
@@ -463,10 +480,21 @@ export default function ProductDetailPage() {
                 </div>
 
                 <button
-                  onClick={() => setShowTryOnResult(false)}
-                  className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary-hover transition-colors"
+                  onClick={handleAddToCart}
+                  disabled={isAddingToCart}
+                  className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary-hover transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  Close
+                  {isAddingToCart ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="w-5 h-5" />
+                      Add to Cart
+                    </>
+                  )}
                 </button>
               </div>
             </motion.div>

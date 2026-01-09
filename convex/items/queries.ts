@@ -617,3 +617,160 @@ export const getCategorySamples = query({
   },
 });
 
+// Extended category type that includes gender-based categories
+type ExtendedCategoryType = CategoryType | 'male' | 'female';
+
+/**
+ * Get category samples with gender awareness
+ * Returns categories with an opposite-gender category as the first item
+ * For male users: shows "For Her" first, then regular categories
+ * For female users: shows "For Him" first, then regular categories
+ */
+export const getCategorySamplesWithGender = query({
+  args: {
+    userGender: v.optional(v.union(v.literal('male'), v.literal('female'), v.literal('prefer-not-to-say'))),
+  },
+  returns: v.array(
+    v.object({
+      category: v.union(categoryValidator, v.literal('male'), v.literal('female')),
+      label: v.string(),
+      sampleImageUrl: v.union(v.string(), v.null()),
+      itemCount: v.number(),
+      isGenderCategory: v.optional(v.boolean()),
+    })
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: {
+      userGender?: 'male' | 'female' | 'prefer-not-to-say';
+    }
+  ): Promise<
+    Array<{
+      category: ExtendedCategoryType;
+      label: string;
+      sampleImageUrl: string | null;
+      itemCount: number;
+      isGenderCategory?: boolean;
+    }>
+  > => {
+    const results: Array<{
+      category: ExtendedCategoryType;
+      label: string;
+      sampleImageUrl: string | null;
+      itemCount: number;
+      isGenderCategory?: boolean;
+    }> = [];
+
+    // Determine opposite gender for the first category
+    const oppositeGender: 'male' | 'female' | null = 
+      args.userGender === 'male' ? 'female' :
+      args.userGender === 'female' ? 'male' :
+      null;
+
+    // Add opposite gender category first (if user has a gender set)
+    if (oppositeGender) {
+      const genderLabel = oppositeGender === 'female' ? 'For Her' : 'For Him';
+      
+      // Get items of the opposite gender
+      const oppositeGenderItems = await ctx.db
+        .query('items')
+        .withIndex('by_active_and_gender', (q) => q.eq('isActive', true).eq('gender', oppositeGender))
+        .take(10);
+
+      // Count total items for opposite gender
+      const allOppositeGenderItems = await ctx.db
+        .query('items')
+        .withIndex('by_active_and_gender', (q) => q.eq('isActive', true).eq('gender', oppositeGender))
+        .collect();
+      const oppositeGenderCount = allOppositeGenderItems.length;
+
+      // Find a sample image from opposite gender items
+      let sampleImageUrl: string | null = null;
+      for (const item of oppositeGenderItems) {
+        const primaryImage = await ctx.db
+          .query('item_images')
+          .withIndex('by_item_and_primary', (q) => q.eq('itemId', item._id).eq('isPrimary', true))
+          .unique();
+
+        if (primaryImage) {
+          if (primaryImage.storageId) {
+            sampleImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+          } else if (primaryImage.externalUrl) {
+            sampleImageUrl = primaryImage.externalUrl;
+          }
+          if (sampleImageUrl) break;
+        }
+      }
+
+      if (oppositeGenderCount > 0) {
+        results.push({
+          category: oppositeGender,
+          label: genderLabel,
+          sampleImageUrl,
+          itemCount: oppositeGenderCount,
+          isGenderCategory: true,
+        });
+      }
+    }
+
+    // Standard categories
+    const categories: Array<{ key: CategoryType; label: string }> = [
+      { key: 'top', label: 'Tops' },
+      { key: 'bottom', label: 'Bottoms' },
+      { key: 'dress', label: 'Dresses' },
+      { key: 'outerwear', label: 'Outerwear' },
+      { key: 'shoes', label: 'Shoes' },
+      { key: 'accessory', label: 'Accessories' },
+      { key: 'bag', label: 'Bags' },
+      { key: 'jewelry', label: 'Jewelry' },
+    ];
+
+    const categoryResults = await Promise.all(
+      categories.map(async ({ key, label }) => {
+        // Get one active item from this category
+        const items = await ctx.db
+          .query('items')
+          .withIndex('by_active_and_category', (q) => q.eq('isActive', true).eq('category', key))
+          .take(10);
+
+        // Count total items in category
+        const allCategoryItems = await ctx.db
+          .query('items')
+          .withIndex('by_active_and_category', (q) => q.eq('isActive', true).eq('category', key))
+          .collect();
+        const itemCount = allCategoryItems.length;
+
+        // Find a sample item with an image
+        let sampleImageUrl: string | null = null;
+        for (const item of items) {
+          const primaryImage = await ctx.db
+            .query('item_images')
+            .withIndex('by_item_and_primary', (q) => q.eq('itemId', item._id).eq('isPrimary', true))
+            .unique();
+
+          if (primaryImage) {
+            if (primaryImage.storageId) {
+              sampleImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+            } else if (primaryImage.externalUrl) {
+              sampleImageUrl = primaryImage.externalUrl;
+            }
+            if (sampleImageUrl) break;
+          }
+        }
+
+        return {
+          category: key as ExtendedCategoryType,
+          label,
+          sampleImageUrl,
+          itemCount,
+        };
+      })
+    );
+
+    // Add non-empty categories to results
+    results.push(...categoryResults.filter((cat) => cat.itemCount > 0));
+
+    return results;
+  },
+});
+

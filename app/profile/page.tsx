@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, User, Camera, LogOut, ChevronRight, Save, Loader2, Users, ImageIcon, Heart, Check, Pencil, X } from 'lucide-react';
+import { Sparkles, User, Camera, LogOut, ChevronRight, Save, Loader2, Users, ImageIcon, Heart, Check, Pencil, X, Moon, Sun, Trash2, Settings, Mail, Lock } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery, useMutation } from 'convex/react';
@@ -12,7 +12,6 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import { FriendsList } from '@/components/friends/FriendsList';
 import { AddFriendButton } from '@/components/friends/AddFriendButton';
-import { LookCard } from '@/components/discover';
 import { PhotosTab } from '@/components/profile';
 import { STYLE_OUTFIT_IMAGES } from '@/components/onboarding/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -20,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -36,7 +36,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import type { Look, Product } from '@/lib/mock-data';
+import { useTheme } from 'next-themes';
 
 // Style options from onboarding
 const styleOptions = [
@@ -58,16 +58,9 @@ const shirtSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
 const waistSizes = ['24', '26', '28', '30', '32', '34', '36', '38', '40', '42', '44'];
 const currencies = ['USD', 'EUR', 'GBP', 'KES', 'NGN'];
 
-type MyLooksFilter = 'system' | 'user';
-
-// Extended Look type with generation status
-interface LookWithStatus extends Look {
-  isGenerating: boolean;
-  generationFailed: boolean;
-}
-
 export default function ProfilePage() {
   const currentUser = useQuery(api.users.queries.getCurrentUser);
+  const { theme, setTheme } = useTheme();
   
   // Mutations
   const updateProfile = useMutation(api.users.mutations.updateProfile);
@@ -83,9 +76,6 @@ export default function ProfilePage() {
   const [isSavingSize, setIsSavingSize] = useState(false);
   const [isSavingBudget, setIsSavingBudget] = useState(false);
 
-  // My Looks filter state
-  const [myLooksFilter, setMyLooksFilter] = useState<MyLooksFilter>('system');
-
   // Form states
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -98,57 +88,6 @@ export default function ProfilePage() {
   const [heightUnit, setHeightUnit] = useState<'cm' | 'ft'>('cm');
   const [budgetRange, setBudgetRange] = useState<'low' | 'mid' | 'premium'>('mid');
   const [currency, setCurrency] = useState('USD');
-
-  // Query for My Looks
-  const myLooksData = useQuery(api.looks.queries.getMyLooksByCreator, { createdBy: myLooksFilter, limit: 50 });
-
-  // Transform looks data
-  const [myLooks, setMyLooks] = useState<LookWithStatus[]>([]);
-
-  useEffect(() => {
-    if (myLooksData) {
-      const heights: Array<'short' | 'medium' | 'tall' | 'extra-tall'> = ['medium', 'tall', 'short', 'extra-tall'];
-      
-      const transformedLooks: LookWithStatus[] = myLooksData.map((lookData, index) => {
-        const products: Product[] = lookData.items.map((itemData) => ({
-          id: itemData.item._id,
-          name: itemData.item.name,
-          brand: itemData.item.brand || 'Unknown',
-          category: itemData.item.category as Product['category'],
-          price: itemData.item.price,
-          currency: itemData.item.currency,
-          imageUrl: itemData.primaryImageUrl || '',
-          storeUrl: '#',
-          storeName: itemData.item.brand || 'Store',
-          color: itemData.item.colors[0] || 'Mixed',
-        }));
-
-        const imageUrl = lookData.lookImage?.imageUrl || '';
-        const isGenerating = lookData.lookImage?.status === 'pending' || lookData.lookImage?.status === 'processing';
-        const generationFailed = lookData.lookImage?.status === 'failed';
-
-        return {
-          id: lookData.look._id,
-          imageUrl,
-          products,
-          totalPrice: lookData.look.totalPrice,
-          currency: lookData.look.currency,
-          styleTags: lookData.look.styleTags,
-          occasion: lookData.look.occasion || 'Everyday',
-          nimaNote: lookData.look.nimaComment || "A look curated just for you!",
-          createdAt: new Date(lookData.look._creationTime),
-          height: heights[index % heights.length],
-          isLiked: false,
-          isDisliked: false,
-          isGenerating,
-          generationFailed,
-        };
-      });
-      setMyLooks(transformedLooks);
-    } else {
-      setMyLooks([]);
-    }
-  }, [myLooksData]);
 
   // Initialize form from user data when currentUser loads
   useEffect(() => {
@@ -300,7 +239,6 @@ export default function ProfilePage() {
 
             {/* Right actions */}
             <div className="flex items-center gap-2">
-              <ThemeToggle />
               <MessagesIcon />
             </div>
           </div>
@@ -346,9 +284,12 @@ export default function ProfilePage() {
         </motion.div>
 
         {/* Tabs - 4 tabs */}
-        <Tabs defaultValue="my-looks" className="w-full">
+        <Tabs defaultValue="settings" className="w-full">
           <TabsList className="w-full grid grid-cols-4 mb-6">
-            <TabsTrigger value="my-looks">My Looks</TabsTrigger>
+            <TabsTrigger value="settings" className="gap-1">
+              <Settings className="w-4 h-4 hidden sm:inline" />
+              Settings
+            </TabsTrigger>
             <TabsTrigger value="my-photos" className="gap-1">
               <ImageIcon className="w-4 h-4 hidden sm:inline" />
               Photos
@@ -357,97 +298,101 @@ export default function ProfilePage() {
             <TabsTrigger value="account">Account</TabsTrigger>
           </TabsList>
 
-          {/* My Looks Tab */}
-          <TabsContent value="my-looks" className="space-y-6">
+          {/* Settings Tab (New) */}
+          <TabsContent value="settings" className="space-y-6">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="space-y-4"
             >
-              {/* By Nima / By Me Pill Filter */}
-              <div className="flex justify-center">
-                <div className="relative bg-surface-alt rounded-full p-1 flex">
-                  {/* Sliding background */}
-                  <motion.div
-                    className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-primary rounded-full"
-                    initial={false}
-                    animate={{
-                      x: myLooksFilter === 'system' ? 0 : 'calc(100% + 4px)',
-                    }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+              {/* Appearance Section */}
+              <div className="p-4 bg-surface rounded-xl border border-border">
+                <h3 className="font-medium text-foreground mb-4 flex items-center gap-2">
+                  {theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+                  Appearance
+                </h3>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-foreground">Dark Mode</p>
+                    <p className="text-xs text-muted-foreground">
+                      Switch between light and dark themes
+                    </p>
+                  </div>
+                  <Switch
+                    checked={theme === 'dark'}
+                    onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
                   />
-                  
-                  {/* Buttons */}
-                  <button
-                    onClick={() => setMyLooksFilter('system')}
-                    className={`
-                      relative z-10 px-6 py-2 rounded-full text-sm font-medium transition-colors duration-200
-                      ${myLooksFilter === 'system' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}
-                    `}
-                  >
-                    By Nima
+                </div>
+              </div>
+
+              {/* Discarded Looks */}
+              <Link
+                href="/profile/discarded-looks"
+                className="flex items-center justify-between p-4 bg-surface rounded-xl border border-border hover:bg-surface-alt transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <Trash2 className="w-5 h-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium text-foreground">Discarded Looks</p>
+                    <p className="text-xs text-muted-foreground">
+                      View and restore discarded looks
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+              </Link>
+
+              {/* Account Settings */}
+              <div className="p-4 bg-surface rounded-xl border border-border">
+                <h3 className="font-medium text-foreground mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5" />
+                  Account Settings
+                </h3>
+                <div className="space-y-3">
+                  <button className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-surface-alt transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Mail className="w-4 h-4 text-muted-foreground" />
+                      <div className="text-left">
+                        <p className="text-sm text-foreground">Change Email</p>
+                        <p className="text-xs text-muted-foreground">{currentUser.email}</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   </button>
-                  <button
-                    onClick={() => setMyLooksFilter('user')}
-                    className={`
-                      relative z-10 px-6 py-2 rounded-full text-sm font-medium transition-colors duration-200
-                      ${myLooksFilter === 'user' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}
-                    `}
-                  >
-                    By Me
+                  <button className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-surface-alt transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Lock className="w-4 h-4 text-muted-foreground" />
+                      <div className="text-left">
+                        <p className="text-sm text-foreground">Change Password</p>
+                        <p className="text-xs text-muted-foreground">Update your password</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   </button>
                 </div>
               </div>
 
-              {/* Looks Grid */}
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={myLooksFilter}
-                  initial={{ opacity: 0, x: myLooksFilter === 'system' ? -20 : 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: myLooksFilter === 'system' ? 20 : -20 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {myLooks.length > 0 ? (
-                    <div className="columns-2 md:columns-3 gap-4">
-                      {myLooks.map((look, index) => (
-                        <LookCard key={look.id} look={look} index={index} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-16">
-                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-alt flex items-center justify-center">
-                        <Sparkles className="w-8 h-8 text-muted-foreground" />
-                      </div>
-                      <h3 className="text-lg font-medium text-foreground mb-2">
-                        {myLooksFilter === 'system' ? 'No looks from Nima yet' : 'No looks created yet'}
-                      </h3>
-                      <p className="text-muted-foreground max-w-md mx-auto">
-                        {myLooksFilter === 'system' 
-                          ? 'Complete your onboarding to get personalized looks curated by Nima.'
-                          : 'Create your own looks by selecting items from the Apparel tab in Discover.'
-                        }
-                      </p>
-                      {myLooksFilter === 'system' && (
-                        <Link 
-                          href="/onboarding" 
-                          className="inline-flex mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
-                        >
-                          Complete Onboarding
-                        </Link>
-                      )}
-                      {myLooksFilter === 'user' && (
-                        <Link 
-                          href="/discover" 
-                          className="inline-flex mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
-                        >
-                          Create Your First Look
-                        </Link>
-                      )}
-                    </div>
-                  )}
-                </motion.div>
-              </AnimatePresence>
+              {/* Try-on Usage */}
+              <div className="p-4 bg-surface rounded-xl border border-border">
+                <h3 className="font-medium text-foreground mb-2">Daily Try-Ons</h3>
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 h-2 bg-surface-alt rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary to-secondary"
+                      style={{
+                        width: `${Math.min((currentUser.dailyTryOnCount / 20) * 100, 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {currentUser.dailyTryOnCount} / 20
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Resets daily. Upgrade for more try-ons.
+                </p>
+              </div>
+
             </motion.div>
           </TabsContent>
 
@@ -851,39 +796,6 @@ export default function ProfilePage() {
                   <ChevronRight className="w-5 h-5 text-muted-foreground" />
                 </div>
               </div>
-
-              {/* Try-on Usage */}
-              <div className="p-4 bg-surface rounded-xl border border-border">
-                <h3 className="font-medium text-foreground mb-2">Daily Try-Ons</h3>
-                <div className="flex items-center gap-4">
-                  <div className="flex-1 h-2 bg-surface-alt rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-primary to-secondary"
-                      style={{
-                        width: `${Math.min((currentUser.dailyTryOnCount / 20) * 100, 100)}%`,
-                      }}
-                    />
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {currentUser.dailyTryOnCount} / 20
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Resets daily. Upgrade for more try-ons.
-                </p>
-              </div>
-
-              {/* Sign Out */}
-              <Link
-                href="/sign-out"
-                className="flex items-center justify-between p-4 bg-surface rounded-xl border border-border hover:bg-surface-alt transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <LogOut className="w-5 h-5 text-destructive" />
-                  <span className="font-medium text-destructive">Sign Out</span>
-                </div>
-                <ChevronRight className="w-5 h-5 text-muted-foreground" />
-              </Link>
             </motion.div>
           </TabsContent>
         </Tabs>

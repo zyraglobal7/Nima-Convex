@@ -36,6 +36,7 @@ const lookValidator = v.object({
   viewCount: v.optional(v.number()),
   saveCount: v.optional(v.number()),
   generationStatus: v.optional(generationStatusValidator),
+  status: v.optional(v.union(v.literal('pending'), v.literal('saved'), v.literal('discarded'))),
   createdBy: v.optional(v.union(v.literal('system'), v.literal('user'))),
   creatorUserId: v.optional(v.id('users')),
   createdAt: v.number(),
@@ -1933,5 +1934,306 @@ export const getLookGenerationStatus = query({
       status: look.generationStatus || 'pending',
       errorMessage: undefined,
     };
+  },
+});
+
+// ============================================
+// DISCARDED / SAVED LOOKS QUERIES
+// ============================================
+
+/**
+ * Get discarded looks for the current user
+ * Used in the discarded looks page for restoring looks
+ */
+export const getDiscardedLooks = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(
+    v.object({
+      look: lookValidator,
+      lookImage: v.union(
+        v.object({
+          _id: v.id('look_images'),
+          storageId: v.optional(v.id('_storage')),
+          status: v.union(
+            v.literal('pending'),
+            v.literal('processing'),
+            v.literal('completed'),
+            v.literal('failed')
+          ),
+          imageUrl: v.optional(v.string()),
+        }),
+        v.null()
+      ),
+      items: v.array(
+        v.object({
+          item: itemValidator,
+          primaryImageUrl: v.union(v.string(), v.null()),
+        })
+      ),
+    })
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { limit?: number }
+  ): Promise<
+    Array<{
+      look: Doc<'looks'>;
+      lookImage: {
+        _id: Id<'look_images'>;
+        storageId?: Id<'_storage'>;
+        status: 'pending' | 'processing' | 'completed' | 'failed';
+        imageUrl?: string;
+      } | null;
+      items: Array<{
+        item: Doc<'items'>;
+        primaryImageUrl: string | null;
+      }>;
+    }>
+  > => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return [];
+    }
+
+    const limit = Math.min(args.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
+    // Get discarded looks for this user
+    const looks = await ctx.db
+      .query('looks')
+      .withIndex('by_user_and_save_status', (q) =>
+        q.eq('creatorUserId', user._id).eq('status', 'discarded')
+      )
+      .order('desc')
+      .take(limit);
+
+    // Filter for active looks only
+    const activeLooks = looks.filter((look) => look.isActive);
+
+    // Build results with items and images
+    const results = await Promise.all(
+      activeLooks.map(async (look) => {
+        // Get look image
+        const lookImage = await ctx.db
+          .query('look_images')
+          .withIndex('by_look_and_user', (q) =>
+            q.eq('lookId', look._id).eq('userId', user._id)
+          )
+          .first();
+
+        let lookImageResult: {
+          _id: Id<'look_images'>;
+          storageId?: Id<'_storage'>;
+          status: 'pending' | 'processing' | 'completed' | 'failed';
+          imageUrl?: string;
+        } | null = null;
+
+        if (lookImage) {
+          let imageUrl: string | undefined;
+          if (lookImage.storageId) {
+            imageUrl = (await ctx.storage.getUrl(lookImage.storageId)) || undefined;
+          }
+          lookImageResult = {
+            _id: lookImage._id,
+            storageId: lookImage.storageId,
+            status: lookImage.status,
+            imageUrl,
+          };
+        }
+
+        // Get items
+        const items = await Promise.all(
+          look.itemIds.map(async (itemId) => {
+            const item = await ctx.db.get(itemId);
+            if (!item) return null;
+
+            const primaryImage = await ctx.db
+              .query('item_images')
+              .withIndex('by_item_and_primary', (q) =>
+                q.eq('itemId', itemId).eq('isPrimary', true)
+              )
+              .unique();
+
+            let primaryImageUrl: string | null = null;
+            if (primaryImage) {
+              if (primaryImage.storageId) {
+                primaryImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+              } else if (primaryImage.externalUrl) {
+                primaryImageUrl = primaryImage.externalUrl;
+              }
+            }
+
+            return { item, primaryImageUrl };
+          })
+        );
+
+        return {
+          look,
+          lookImage: lookImageResult,
+          items: items.filter((i): i is { item: Doc<'items'>; primaryImageUrl: string | null } => i !== null),
+        };
+      })
+    );
+
+    return results;
+  },
+});
+
+/**
+ * Get saved looks for the current user
+ * Used in the lookbooks page to show saved looks as open grid
+ */
+export const getSavedLooks = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(
+    v.object({
+      look: lookValidator,
+      lookImage: v.union(
+        v.object({
+          _id: v.id('look_images'),
+          storageId: v.optional(v.id('_storage')),
+          status: v.union(
+            v.literal('pending'),
+            v.literal('processing'),
+            v.literal('completed'),
+            v.literal('failed')
+          ),
+          imageUrl: v.optional(v.string()),
+        }),
+        v.null()
+      ),
+      items: v.array(
+        v.object({
+          item: itemValidator,
+          primaryImageUrl: v.union(v.string(), v.null()),
+        })
+      ),
+    })
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { limit?: number }
+  ): Promise<
+    Array<{
+      look: Doc<'looks'>;
+      lookImage: {
+        _id: Id<'look_images'>;
+        storageId?: Id<'_storage'>;
+        status: 'pending' | 'processing' | 'completed' | 'failed';
+        imageUrl?: string;
+      } | null;
+      items: Array<{
+        item: Doc<'items'>;
+        primaryImageUrl: string | null;
+      }>;
+    }>
+  > => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return [];
+    }
+
+    const limit = Math.min(args.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
+    // Get saved looks for this user
+    // Include looks with status 'saved' or undefined (for backward compatibility)
+    const looks = await ctx.db
+      .query('looks')
+      .withIndex('by_creator_and_status', (q) => q.eq('creatorUserId', user._id))
+      .order('desc')
+      .take(limit * 2); // Get extra to filter
+
+    // Filter for active looks that are saved or have no status (backward compatibility)
+    const savedLooks = looks.filter(
+      (look) => look.isActive && (look.status === 'saved' || look.status === undefined)
+    ).slice(0, limit);
+
+    // Build results with items and images
+    const results = await Promise.all(
+      savedLooks.map(async (look) => {
+        // Get look image
+        const lookImage = await ctx.db
+          .query('look_images')
+          .withIndex('by_look_and_user', (q) =>
+            q.eq('lookId', look._id).eq('userId', user._id)
+          )
+          .first();
+
+        let lookImageResult: {
+          _id: Id<'look_images'>;
+          storageId?: Id<'_storage'>;
+          status: 'pending' | 'processing' | 'completed' | 'failed';
+          imageUrl?: string;
+        } | null = null;
+
+        if (lookImage) {
+          let imageUrl: string | undefined;
+          if (lookImage.storageId) {
+            imageUrl = (await ctx.storage.getUrl(lookImage.storageId)) || undefined;
+          }
+          lookImageResult = {
+            _id: lookImage._id,
+            storageId: lookImage.storageId,
+            status: lookImage.status,
+            imageUrl,
+          };
+        }
+
+        // Get items
+        const items = await Promise.all(
+          look.itemIds.map(async (itemId) => {
+            const item = await ctx.db.get(itemId);
+            if (!item) return null;
+
+            const primaryImage = await ctx.db
+              .query('item_images')
+              .withIndex('by_item_and_primary', (q) =>
+                q.eq('itemId', itemId).eq('isPrimary', true)
+              )
+              .unique();
+
+            let primaryImageUrl: string | null = null;
+            if (primaryImage) {
+              if (primaryImage.storageId) {
+                primaryImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+              } else if (primaryImage.externalUrl) {
+                primaryImageUrl = primaryImage.externalUrl;
+              }
+            }
+
+            return { item, primaryImageUrl };
+          })
+        );
+
+        return {
+          look,
+          lookImage: lookImageResult,
+          items: items.filter((i): i is { item: Doc<'items'>; primaryImageUrl: string | null } => i !== null),
+        };
+      })
+    );
+
+    return results;
   },
 });

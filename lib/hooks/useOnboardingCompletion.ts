@@ -135,11 +135,23 @@ export function useOnboardingCompletion(workosUser?: WorkOSUser | null) {
   const claimOnboardingImages = useMutation(api.userImages.mutations.claimOnboardingImages);
 
   const processOnboarding = useCallback(async () => {
+    console.log('[ONBOARDING_COMPLETION] processOnboarding called', {
+      processingRef: processingRef.current,
+      user: user === undefined ? 'undefined' : user === null ? 'null' : 'exists',
+      onboardingState: onboardingState === undefined ? 'undefined' : onboardingState,
+    });
+    
     // Prevent double processing
-    if (processingRef.current) return;
+    if (processingRef.current) {
+      console.log('[ONBOARDING_COMPLETION] Already processing, skipping');
+      return;
+    }
     
     // Wait for queries to resolve
-    if (user === undefined || onboardingState === undefined) return;
+    if (user === undefined || onboardingState === undefined) {
+      console.log('[ONBOARDING_COMPLETION] Queries not resolved yet, waiting');
+      return;
+    }
     
     // If user is null, try to create/get them
     let currentUser = user;
@@ -208,28 +220,45 @@ export function useOnboardingCompletion(workosUser?: WorkOSUser | null) {
 
     // Check for stored onboarding data
     const storedData = getStoredOnboardingData();
+    console.log('[ONBOARDING_COMPLETION] Stored data from localStorage:', storedData);
+    
     if (!storedData) {
-      // No localStorage data - user needs to complete onboarding through UI
+      console.log('[ONBOARDING_COMPLETION] No localStorage data found - user needs to complete onboarding through UI');
       setCompleted(true);
       return;
     }
 
     // Validate stored data has required fields
-    if (
-      !storedData.gender ||
-      !storedData.age ||
-      !storedData.stylePreferences ||
-      !storedData.shirtSize ||
-      !storedData.waistSize ||
-      !storedData.height ||
-      !storedData.heightUnit ||
-      !storedData.shoeSize ||
-      !storedData.shoeSizeUnit ||
-      !storedData.country ||
-      !storedData.currency ||
-      !storedData.budgetRange
-    ) {
-      console.log('[ONBOARDING_COMPLETION] Stored onboarding data is incomplete');
+    const missingFields: string[] = [];
+    if (!storedData.gender) missingFields.push('gender');
+    if (!storedData.age) missingFields.push('age');
+    if (!storedData.stylePreferences) missingFields.push('stylePreferences');
+    if (!storedData.shirtSize) missingFields.push('shirtSize');
+    if (!storedData.waistSize) missingFields.push('waistSize');
+    if (!storedData.height) missingFields.push('height');
+    if (!storedData.heightUnit) missingFields.push('heightUnit');
+    if (!storedData.shoeSize) missingFields.push('shoeSize');
+    if (!storedData.shoeSizeUnit) missingFields.push('shoeSizeUnit');
+    if (!storedData.country) missingFields.push('country');
+    if (!storedData.currency) missingFields.push('currency');
+    if (!storedData.budgetRange) missingFields.push('budgetRange');
+    
+    if (missingFields.length > 0) {
+      console.log('[ONBOARDING_COMPLETION] Stored onboarding data is incomplete. Missing fields:', missingFields);
+      console.log('[ONBOARDING_COMPLETION] Stored data values:', {
+        gender: storedData.gender,
+        age: storedData.age,
+        stylePreferences: storedData.stylePreferences,
+        shirtSize: storedData.shirtSize,
+        waistSize: storedData.waistSize,
+        height: storedData.height,
+        heightUnit: storedData.heightUnit,
+        shoeSize: storedData.shoeSize,
+        shoeSizeUnit: storedData.shoeSizeUnit,
+        country: storedData.country,
+        currency: storedData.currency,
+        budgetRange: storedData.budgetRange,
+      });
       // Don't clear - let user resume from where they left off
       setCompleted(true);
       return;
@@ -292,7 +321,7 @@ export function useOnboardingCompletion(workosUser?: WorkOSUser | null) {
 
   useEffect(() => {
     processOnboarding();
-  }, []);
+  }, [user, onboardingState, processOnboarding]);
 
   // Compute needsOnboarding based on SMART check:
   // 1. If onboardingCompleted flag is TRUE, trust it (user explicitly completed)
