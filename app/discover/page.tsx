@@ -462,6 +462,9 @@ export default function DiscoverPage() {
                 <Link href="/lookbooks" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                   Lookbooks
                 </Link>
+                <Link href="/orders" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                  Orders
+                </Link>
                 <Link href="/profile" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                   Profile
                 </Link>
