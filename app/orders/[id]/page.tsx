@@ -14,7 +14,7 @@ import { Loader2 } from 'lucide-react';
 function formatPrice(amount: number, currency: string) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: currency,
+    currency: currency || 'KES',
   }).format(amount / 100);
 }
 
