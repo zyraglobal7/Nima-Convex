@@ -171,7 +171,7 @@ export default function SellerFinancePage() {
                   </p>
                 </div>
                 <span className="text-xl font-semibold text-muted-foreground">
-                  $0.00
+                  KES 0.00
                 </span>
               </div>
 

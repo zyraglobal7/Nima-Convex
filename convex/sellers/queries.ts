@@ -306,7 +306,7 @@ export const getSellerDashboardStats = query({
       pendingOrders: pendingOrderIds.size,
       totalRevenue,
       revenueThisMonth,
-      currency: 'USD', // Default currency
+      currency: 'KES', // Default currency
     };
   },
 });

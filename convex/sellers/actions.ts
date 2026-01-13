@@ -55,8 +55,8 @@ const productDetailsSchema = z.object({
     .describe('Suitable seasons (e.g., ["summer", "spring", "all_season"])'),
   suggestedPriceRange: z
     .object({
-      min: z.number().describe('Minimum suggested price in USD'),
-      max: z.number().describe('Maximum suggested price in USD'),
+      min: z.number().describe('Minimum suggested price in KES'),
+      max: z.number().describe('Maximum suggested price in KES'),
     })
     .optional()
     .describe('Suggested price range based on apparent quality and style'),

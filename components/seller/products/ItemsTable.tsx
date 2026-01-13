@@ -154,7 +154,7 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
   };
 
   const formatPrice = (price: number, currency: string) => {
-    const validCurrency = currency?.trim() || 'USD';
+    const validCurrency = currency?.trim() || 'KES';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: validCurrency.toUpperCase(),
