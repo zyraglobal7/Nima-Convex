@@ -55,6 +55,10 @@ const itemValidator = v.object({
   stockQuantity: v.optional(v.number()),
   isActive: v.boolean(),
   isFeatured: v.optional(v.boolean()),
+  sellerId: v.optional(v.id('sellers')),
+  viewCount: v.optional(v.number()),
+  saveCount: v.optional(v.number()),
+  purchaseCount: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
 });

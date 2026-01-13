@@ -342,6 +342,25 @@ export default function ProfilePage() {
                 <ChevronRight className="w-5 h-5 text-muted-foreground" />
               </Link>
 
+              {/* My Orders */}
+              <Link
+                href="/orders"
+                className="flex items-center justify-between p-4 bg-surface rounded-xl border border-border hover:bg-surface-alt transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-5 h-5 flex items-center justify-center">
+                    <span className="text-lg">🛍️</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">My Orders</p>
+                    <p className="text-xs text-muted-foreground">
+                      Track and manage your purchases
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+              </Link>
+
               {/* Account Settings */}
               <div className="p-4 bg-surface rounded-xl border border-border">
                 <h3 className="font-medium text-foreground mb-4 flex items-center gap-2">
