@@ -280,7 +280,7 @@ export default function SellerOnboardingPage() {
                 <div className="space-y-2">
                   <Label htmlFor="slug">Store URL Handle *</Label>
                   <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground text-sm">nima.com/shop/</span>
+                    <span className="text-muted-foreground text-sm">https://shopnima.ai/</span>
                     <Input
                       id="slug"
                       placeholder="urban-style-co"
@@ -448,7 +448,7 @@ export default function SellerOnboardingPage() {
                     <div>
                       <h3 className="text-lg font-semibold">{shopName || 'Your Store'}</h3>
                       <p className="text-sm text-muted-foreground">
-                        nima.com/shop/{slug || 'your-store'}
+                        https://shopnima.ai/{slug || 'your-store'}
                       </p>
                     </div>
                   </div>

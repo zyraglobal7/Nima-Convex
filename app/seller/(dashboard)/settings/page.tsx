@@ -350,7 +350,7 @@ export default function SellerSettingsPage() {
           <div className="space-y-2">
             <Label htmlFor="slug">Store URL</Label>
             <div className="flex items-center gap-2">
-              <span className="text-muted-foreground text-sm">nima.com/shop/</span>
+              <span className="text-muted-foreground text-sm">https://shopnima.ai/</span>
               <Input
                 id="slug"
                 value={seller?.slug ?? ''}
