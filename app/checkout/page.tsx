@@ -52,7 +52,7 @@ export default function CheckoutPage() {
   const currentUser = useQuery(api.users.queries.getCurrentUser);
 
   // Mutations
-  const clearCart = useMutation(api.cart.mutations.clearCart);
+  const createOrder = useMutation(api.orders.mutations.createOrder);
 
   const isLoading = cartItems === undefined || cartTotal === undefined;
   const isEmpty = !isLoading && cartItems.length === 0;
@@ -85,22 +85,24 @@ export default function CheckoutPage() {
 
     setIsPlacingOrder(true);
     try {
-      // In a real implementation, this would:
-      // 1. Create an order in the database
-      // 2. Process payment
-      // 3. Notify the Nima Delivers team
-      // For now, we'll just clear the cart and show success
-
-      // Simulate order processing
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Clear the cart
-      await clearCart({});
+      // Create the order in the database
+      const result = await createOrder({
+        shippingAddress: {
+          fullName: address.fullName,
+          addressLine1: address.addressLine1,
+          addressLine2: address.addressLine2 || undefined,
+          city: address.city,
+          state: address.state || undefined,
+          postalCode: address.postalCode,
+          country: address.country,
+          phone: address.phone,
+        },
+      });
 
       setOrderPlaced(true);
-      toast.success('Order placed successfully!');
+      toast.success(`Order ${result.orderNumber} placed successfully!`);
     } catch (error) {
-      toast.error('Failed to place order. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to place order. Please try again.');
     } finally {
       setIsPlacingOrder(false);
     }

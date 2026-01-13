@@ -59,7 +59,7 @@ export default defineSchema({
     updatedAt: v.number(),
 
     // Role-based access control
-    role: v.optional(v.union(v.literal('user'), v.literal('admin'))),
+    role: v.optional(v.union(v.literal('user'), v.literal('admin'), v.literal('seller'))),
   })
     .index('by_workos_user_id', ['workosUserId'])
     .index('by_email', ['email'])
@@ -123,6 +123,9 @@ export default defineSchema({
    * Comprehensive product catalog with categorization, pricing, and style tags
    */
   items: defineTable({
+    // Seller ownership (optional - null means Nima curated)
+    sellerId: v.optional(v.id('sellers')),
+
     // Identity
     publicId: v.string(), // External-facing ID (item_xxx)
     sku: v.optional(v.string()),
@@ -175,6 +178,11 @@ export default defineSchema({
     isActive: v.boolean(),
     isFeatured: v.optional(v.boolean()),
 
+    // Performance metrics (for seller dashboard)
+    viewCount: v.optional(v.number()),
+    saveCount: v.optional(v.number()),
+    purchaseCount: v.optional(v.number()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -183,6 +191,8 @@ export default defineSchema({
     .index('by_gender_and_category', ['gender', 'category'])
     .index('by_active_and_category', ['isActive', 'category'])
     .index('by_active_and_gender', ['isActive', 'gender'])
+    .index('by_seller', ['sellerId'])
+    .index('by_seller_and_active', ['sellerId', 'isActive'])
     .searchIndex('search_items', {
       searchField: 'name',
       filterFields: ['category', 'gender', 'isActive'],
@@ -656,5 +666,189 @@ export default defineSchema({
   })
     .index('by_user', ['userId'])
     .index('by_user_and_item', ['userId', 'itemId']),
+
+  // ============================================
+  // SELLERS & MARKETPLACE
+  // ============================================
+
+  /**
+   * sellers - Seller/Store profiles for multi-vendor marketplace
+   * Links to users table for authentication
+   */
+  sellers: defineTable({
+    userId: v.id('users'), // The owner user
+
+    // Store identity
+    slug: v.string(), // Unique URL handle: /shop/nike
+    shopName: v.string(),
+    description: v.optional(v.string()),
+
+    // Branding
+    logoStorageId: v.optional(v.id('_storage')),
+    bannerStorageId: v.optional(v.id('_storage')),
+
+    // Contact
+    contactEmail: v.optional(v.string()),
+    contactPhone: v.optional(v.string()),
+
+    // Verification
+    verificationStatus: v.union(
+      v.literal('pending'),
+      v.literal('verified'),
+      v.literal('rejected')
+    ),
+    verificationNotes: v.optional(v.string()),
+
+    // Status
+    isActive: v.boolean(),
+
+    // Timestamps
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_slug', ['slug'])
+    .index('by_verification_status', ['verificationStatus']),
+
+  // ============================================
+  // ORDERS
+  // ============================================
+
+  /**
+   * orders - Customer orders (high-level transaction)
+   * Contains payment info and shipping address snapshot
+   */
+  orders: defineTable({
+    // Customer info
+    userId: v.id('users'),
+    orderNumber: v.string(), // Human-readable: ORD-20260113-XXXX
+
+    // Shipping address (snapshot at order time)
+    shippingAddress: v.object({
+      fullName: v.string(),
+      addressLine1: v.string(),
+      addressLine2: v.optional(v.string()),
+      city: v.string(),
+      state: v.optional(v.string()),
+      postalCode: v.string(),
+      country: v.string(),
+      phone: v.string(),
+    }),
+
+    // Financials (all in cents)
+    subtotal: v.number(),
+    serviceFee: v.number(),
+    shippingCost: v.number(),
+    total: v.number(),
+    currency: v.string(),
+
+    // Payment
+    paymentStatus: v.union(
+      v.literal('pending'),
+      v.literal('paid'),
+      v.literal('failed'),
+      v.literal('refunded')
+    ),
+    paymentMethod: v.optional(v.string()),
+    paymentIntentId: v.optional(v.string()),
+
+    // Order status (overall)
+    status: v.union(
+      v.literal('pending'), // Just placed
+      v.literal('processing'), // Payment confirmed, sellers packing
+      v.literal('partially_shipped'), // Some items shipped
+      v.literal('shipped'), // All items shipped
+      v.literal('delivered'), // All items delivered
+      v.literal('cancelled')
+    ),
+
+    // Timestamps
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_order_number', ['orderNumber'])
+    .index('by_status', ['status'])
+    .index('by_created_at', ['createdAt']),
+
+  /**
+   * order_items - Individual line items in an order (seller-facing)
+   * Each row links an item to an order AND a seller
+   * Allows multi-seller orders with independent fulfillment
+   */
+  order_items: defineTable({
+    orderId: v.id('orders'),
+    sellerId: v.optional(v.id('sellers')), // null for Nima curated items
+    itemId: v.id('items'),
+
+    // Snapshot at order time (prices can change later)
+    itemName: v.string(),
+    itemBrand: v.optional(v.string()),
+    itemPrice: v.number(), // Unit price in cents
+    itemImageUrl: v.optional(v.string()),
+
+    // Order details
+    quantity: v.number(),
+    selectedSize: v.optional(v.string()),
+    selectedColor: v.optional(v.string()),
+
+    // Financial breakdown
+    lineTotal: v.number(), // itemPrice * quantity
+
+    // Fulfillment status (seller-controlled)
+    fulfillmentStatus: v.union(
+      v.literal('pending'), // Waiting for payment confirmation
+      v.literal('processing'), // Seller preparing item
+      v.literal('shipped'), // Seller shipped
+      v.literal('delivered'), // Confirmed delivered
+      v.literal('cancelled')
+    ),
+    trackingNumber: v.optional(v.string()),
+    trackingCarrier: v.optional(v.string()),
+    shippedAt: v.optional(v.number()),
+    deliveredAt: v.optional(v.number()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_order', ['orderId'])
+    .index('by_seller', ['sellerId'])
+    .index('by_seller_and_status', ['sellerId', 'fulfillmentStatus'])
+    .index('by_item', ['itemId']),
+
+  /**
+   * payouts - Financial tracking for seller earnings
+   * Records payout history and pending amounts
+   */
+  payouts: defineTable({
+    sellerId: v.id('sellers'),
+
+    // Period
+    periodStart: v.number(),
+    periodEnd: v.number(),
+
+    // Amounts (in cents)
+    grossRevenue: v.number(), // Total sales
+    netAmount: v.number(), // Amount to pay seller
+
+    // Status
+    status: v.union(
+      v.literal('pending'), // Being calculated
+      v.literal('processing'), // Transfer initiated
+      v.literal('paid'), // Money sent
+      v.literal('failed')
+    ),
+
+    // Payment details
+    stripeTransferId: v.optional(v.string()),
+    paidAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_seller', ['sellerId'])
+    .index('by_seller_and_status', ['sellerId', 'status'])
+    .index('by_period', ['periodStart', 'periodEnd']),
 
 });
