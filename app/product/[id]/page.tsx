@@ -159,7 +159,7 @@ export default function ProductDetailPage() {
       await addToCart({ itemId });
       toast.success('Added to cart!');
       setShowTryOnResult(false);
-      router.push('/cart');
+      // Don't auto-redirect - let user continue browsing
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to add to cart');
     } finally {
@@ -390,6 +390,31 @@ export default function ProductDetailPage() {
             <Heart className={`w-6 h-6 ${isLiked ? 'fill-current' : ''}`} />
           </button>
 
+          {/* Add to Cart button - accessible without trying on */}
+          <button
+            onClick={handleAddToCart}
+            disabled={isAddingToCart || !item.inStock}
+            className="flex-1 py-4 rounded-xl font-medium text-base transition-all duration-300 flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:bg-primary-hover active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isAddingToCart ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Adding...</span>
+              </>
+            ) : !item.inStock ? (
+              <>
+                <AlertCircle className="w-5 h-5" />
+                <span>Out of Stock</span>
+              </>
+            ) : (
+              <>
+                <ShoppingCart className="w-5 h-5" />
+                <span>Add to Cart</span>
+              </>
+            )}
+          </button>
+
+          {/* Try On button */}
           <button
             onClick={handleTryOn}
             disabled={tryOnStatus === 'starting'}
@@ -402,8 +427,8 @@ export default function ProductDetailPage() {
                   : tryOnStatus === 'starting' || tryOnStatus === 'pending' || tryOnStatus === 'processing'
                     ? 'bg-primary/50 text-primary-foreground cursor-not-allowed'
                     : tryOnStatus === 'failed'
-                      ? 'bg-primary text-primary-foreground hover:bg-primary-hover'
-                      : 'bg-primary text-primary-foreground hover:bg-primary-hover active:scale-[0.98]'
+                      ? 'bg-surface border border-border hover:border-primary/30 text-foreground'
+                      : 'bg-surface border border-border hover:border-primary/30 text-foreground'
               }
             `}
           >
