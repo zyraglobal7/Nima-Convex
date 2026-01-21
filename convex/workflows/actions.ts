@@ -688,7 +688,7 @@ ${itemImagesBase64.map((item, i) => `Reference Image ${i + 2}: ${item.descriptio
 ${generatedPrompt}
 
 Important:
-- Keep the person's face, body type, and identity exactly as shown in Reference Image 1
+- Keep the person's face, body type & size, and identity exactly as shown in Reference Image 1
 - Dress them in ALL the clothing items from the other reference images
 - Make it look like a professional fashion photograph
 - The person should look natural and confident wearing these items`;
@@ -945,7 +945,7 @@ Reference Image 2: ${itemDescription}
 ${generatedPrompt}
 
 Important:
-- Keep the person's face, body type, and identity exactly as shown in Reference Image 1
+- Keep the person's face, body type & size, and identity exactly as shown in Reference Image 1
 - Dress them in the item from Reference Image 2
 - Show ONLY this single item - no other clothing items or outfits
 - Make it look like a professional fashion photograph
