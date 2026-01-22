@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   Settings,
   Gift,
+  BarChart3,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -30,6 +31,11 @@ const navItems = [
     title: 'Dashboard',
     href: '/admin',
     icon: LayoutDashboard,
+  },
+  {
+    title: 'Analytics',
+    href: '/admin/analytics',
+    icon: BarChart3,
   },
   {
     title: 'Items',

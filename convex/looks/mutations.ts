@@ -677,6 +677,8 @@ export const recreateLook = mutation({
       status: 'pending', // User will choose to save or discard after generation
       createdBy: 'user',
       creatorUserId: user._id,
+      creationSource: 'recreated',
+      originalLookId: args.lookId,
       createdAt: now,
       updatedAt: now,
     });
@@ -828,6 +830,7 @@ export const createLookFromSelectedItems = mutation({
       status: 'pending', // User will choose to save or discard after generation
       createdBy: 'user',
       creatorUserId: user._id,
+      creationSource: 'apparel',
       createdAt: now,
       updatedAt: now,
     });

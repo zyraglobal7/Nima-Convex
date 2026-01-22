@@ -328,6 +328,7 @@ export const createLookFromChat = mutation({
       generationStatus: 'pending',
       createdBy: 'user',
       creatorUserId: user._id,
+      creationSource: 'chat',
       createdAt: now,
       updatedAt: now,
     });
@@ -508,6 +509,7 @@ export const createLooksFromChat = mutation({
         generationStatus: 'pending',
         createdBy: 'user',
         creatorUserId: user._id,
+        creationSource: 'chat',
         createdAt: now,
         updatedAt: now,
       });
@@ -1221,6 +1223,7 @@ export const createMixedLook = mutation({
       generationStatus: 'pending',
       createdBy: 'user',
       creatorUserId: user._id,
+      creationSource: 'chat',
       createdAt: now,
       updatedAt: now,
     });
@@ -1436,6 +1439,8 @@ export const createRemixedLook = mutation({
       generationStatus: 'pending',
       createdBy: 'user',
       creatorUserId: user._id,
+      creationSource: 'chat',
+      originalLookId: args.sourceLookId,
       createdAt: now,
       updatedAt: now,
     });
