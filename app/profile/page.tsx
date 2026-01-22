@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { useTheme } from 'next-themes';
+import { trackProfilePageViewed } from '@/lib/analytics';
 
 // Style options from onboarding
 const styleOptions = [
@@ -105,6 +106,11 @@ export default function ProfilePage() {
       setCurrency(currentUser.currency || 'USD');
     }
   }, [currentUser]);
+
+  // Track page view
+  useEffect(() => {
+    trackProfilePageViewed();
+  }, []);
 
   const toggleOutfit = (outfitId: string) => {
     setSelectedOutfits((prev) =>

@@ -81,6 +81,7 @@ export const createPendingLook = internalMutation({
       generationStatus: 'pending',
       createdBy: 'system',
       creatorUserId: args.userId,
+      creationSource: 'chat',
       createdAt: now,
       updatedAt: now,
     });

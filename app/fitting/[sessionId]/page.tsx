@@ -15,7 +15,7 @@ import { ShareLookModal } from '@/components/looks/ShareLookModal';
 import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
 import { ItemsUnavailableModal } from '@/components/ui/ItemsUnavailableModal';
 import { formatPrice } from '@/lib/utils/format';
-import { trackPurchaseAttempted, trackItemsUnavailableShown } from '@/lib/analytics';
+import { trackPurchaseAttempted, trackItemsUnavailableShown, trackFittingRoomViewed } from '@/lib/analytics';
 import type { Product } from '@/lib/mock-data';
 
 // Transform Convex look data to the format expected by components
@@ -129,6 +129,15 @@ export default function FittingRoomPage() {
       setSavedLooks((prev) => new Set(prev).add(firstLookId));
     }
   }, [savedStatus?.isSaved, firstLookId]);
+
+  // Track page view
+  useEffect(() => {
+    trackFittingRoomViewed({
+      has_looks: lookIds.length > 0,
+      look_count: lookIds.length,
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const look1Data = useQuery(
     api.looks.queries.getLookWithFullDetails,
     firstLookId ? { lookId: firstLookId } : 'skip'

@@ -30,6 +30,15 @@ export const ANALYTICS_EVENTS = {
 
   // Page events
   DISCOVER_PAGE_VIEWED: 'discover_page_viewed',
+  CHAT_PAGE_VIEWED: 'chat_page_viewed',
+  LOOK_DETAIL_VIEWED: 'look_detail_viewed',
+  ACTIVITY_PAGE_VIEWED: 'activity_page_viewed',
+  FITTING_ROOM_VIEWED: 'fitting_room_viewed',
+  CART_PAGE_VIEWED: 'cart_page_viewed',
+  EXPLORE_PAGE_VIEWED: 'explore_page_viewed',
+  PROFILE_PAGE_VIEWED: 'profile_page_viewed',
+  LOOKBOOKS_PAGE_VIEWED: 'lookbooks_page_viewed',
+  MESSAGES_PAGE_VIEWED: 'messages_page_viewed',
 
   // Purchase events
   PURCHASE_ATTEMPTED: 'purchase_attempted',
@@ -310,6 +319,107 @@ export function trackDiscoverPageViewed(properties?: {
     console.log('[Analytics] Tracking discover_page_viewed');
   }
   posthog.capture(ANALYTICS_EVENTS.DISCOVER_PAGE_VIEWED, properties);
+}
+
+/**
+ * Track chat page view
+ */
+export function trackChatPageViewed(properties?: {
+  has_existing_thread?: boolean;
+}): void {
+  if (!isPostHogReady()) return;
+  if (shouldDebounceEvent(ANALYTICS_EVENTS.CHAT_PAGE_VIEWED)) return;
+  posthog.capture(ANALYTICS_EVENTS.CHAT_PAGE_VIEWED, properties);
+}
+
+/**
+ * Track look detail page view
+ */
+export function trackLookDetailViewed(properties: {
+  look_id: string;
+  source?: 'discover' | 'explore' | 'fitting' | 'share' | 'direct';
+}): void {
+  if (!isPostHogReady()) return;
+  if (shouldDebounceEvent(`${ANALYTICS_EVENTS.LOOK_DETAIL_VIEWED}_${properties.look_id}`)) return;
+  posthog.capture(ANALYTICS_EVENTS.LOOK_DETAIL_VIEWED, properties);
+}
+
+/**
+ * Track activity page view
+ */
+export function trackActivityPageViewed(properties?: {
+  unread_count?: number;
+}): void {
+  if (!isPostHogReady()) return;
+  if (shouldDebounceEvent(ANALYTICS_EVENTS.ACTIVITY_PAGE_VIEWED)) return;
+  posthog.capture(ANALYTICS_EVENTS.ACTIVITY_PAGE_VIEWED, properties);
+}
+
+/**
+ * Track fitting room page view
+ */
+export function trackFittingRoomViewed(properties?: {
+  has_looks?: boolean;
+  look_count?: number;
+}): void {
+  if (!isPostHogReady()) return;
+  if (shouldDebounceEvent(ANALYTICS_EVENTS.FITTING_ROOM_VIEWED)) return;
+  posthog.capture(ANALYTICS_EVENTS.FITTING_ROOM_VIEWED, properties);
+}
+
+/**
+ * Track cart page view
+ */
+export function trackCartPageViewed(properties?: {
+  item_count?: number;
+  total_value?: number;
+  currency?: string;
+}): void {
+  if (!isPostHogReady()) return;
+  if (shouldDebounceEvent(ANALYTICS_EVENTS.CART_PAGE_VIEWED)) return;
+  posthog.capture(ANALYTICS_EVENTS.CART_PAGE_VIEWED, properties);
+}
+
+/**
+ * Track explore page view
+ */
+export function trackExplorePageViewed(properties?: {
+  tab?: string;
+}): void {
+  if (!isPostHogReady()) return;
+  if (shouldDebounceEvent(ANALYTICS_EVENTS.EXPLORE_PAGE_VIEWED)) return;
+  posthog.capture(ANALYTICS_EVENTS.EXPLORE_PAGE_VIEWED, properties);
+}
+
+/**
+ * Track profile page view
+ */
+export function trackProfilePageViewed(): void {
+  if (!isPostHogReady()) return;
+  if (shouldDebounceEvent(ANALYTICS_EVENTS.PROFILE_PAGE_VIEWED)) return;
+  posthog.capture(ANALYTICS_EVENTS.PROFILE_PAGE_VIEWED);
+}
+
+/**
+ * Track lookbooks page view
+ */
+export function trackLookbooksPageViewed(properties?: {
+  lookbook_count?: number;
+}): void {
+  if (!isPostHogReady()) return;
+  if (shouldDebounceEvent(ANALYTICS_EVENTS.LOOKBOOKS_PAGE_VIEWED)) return;
+  posthog.capture(ANALYTICS_EVENTS.LOOKBOOKS_PAGE_VIEWED, properties);
+}
+
+/**
+ * Track messages page view
+ */
+export function trackMessagesPageViewed(properties?: {
+  unread_count?: number;
+}): void {
+  if (!isPostHogReady()) return;
+  if (shouldDebounceEvent(ANALYTICS_EVENTS.MESSAGES_PAGE_VIEWED)) return;
+  posthog.capture(ANALYTICS_EVENTS.MESSAGES_PAGE_VIEWED, properties);
 }
 
 /**

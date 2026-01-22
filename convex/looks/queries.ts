@@ -39,6 +39,17 @@ const lookValidator = v.object({
   status: v.optional(v.union(v.literal('pending'), v.literal('saved'), v.literal('discarded'))),
   createdBy: v.optional(v.union(v.literal('system'), v.literal('user'))),
   creatorUserId: v.optional(v.id('users')),
+  creationSource: v.optional(
+    v.union(
+      v.literal('chat'),
+      v.literal('apparel'),
+      v.literal('recreated'),
+      v.literal('shared'),
+      v.literal('system')
+    )
+  ),
+  originalLookId: v.optional(v.id('looks')),
+  loveCount: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
 });

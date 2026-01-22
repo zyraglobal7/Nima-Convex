@@ -7,6 +7,7 @@ import { ApparelItemCard, type ApparelItem } from '@/components/discover/Apparel
 import { Sparkles, User, Shirt, Loader2 } from 'lucide-react';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import { CartIcon } from '@/components/cart/CartIcon';
+import { ActivityIcon } from '@/components/activity/ActivityIcon';
 import Link from 'next/link';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -474,6 +475,7 @@ export default function DiscoverPage() {
             {/* Right actions */}
             <div className="flex items-center gap-2">
               <CartIcon />
+              <ActivityIcon />
               <MessagesIcon />
             </div>
           </div>

@@ -9,6 +9,7 @@
  */
 
 import type * as admin_aiActions from "../admin/aiActions.js";
+import type * as admin_analytics from "../admin/analytics.js";
 import type * as admin_items from "../admin/items.js";
 import type * as admin_migrations from "../admin/migrations.js";
 import type * as admin_queries from "../admin/queries.js";
@@ -29,6 +30,9 @@ import type * as items_mutations from "../items/mutations.js";
 import type * as items_queries from "../items/queries.js";
 import type * as lib_rateLimiter from "../lib/rateLimiter.js";
 import type * as lib_sanitize from "../lib/sanitize.js";
+import type * as lookInteractions_index from "../lookInteractions/index.js";
+import type * as lookInteractions_mutations from "../lookInteractions/mutations.js";
+import type * as lookInteractions_queries from "../lookInteractions/queries.js";
 import type * as lookbooks_mutations from "../lookbooks/mutations.js";
 import type * as lookbooks_queries from "../lookbooks/queries.js";
 import type * as looks_mutations from "../looks/mutations.js";
@@ -68,6 +72,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "admin/aiActions": typeof admin_aiActions;
+  "admin/analytics": typeof admin_analytics;
   "admin/items": typeof admin_items;
   "admin/migrations": typeof admin_migrations;
   "admin/queries": typeof admin_queries;
@@ -88,6 +93,9 @@ declare const fullApi: ApiFromModules<{
   "items/queries": typeof items_queries;
   "lib/rateLimiter": typeof lib_rateLimiter;
   "lib/sanitize": typeof lib_sanitize;
+  "lookInteractions/index": typeof lookInteractions_index;
+  "lookInteractions/mutations": typeof lookInteractions_mutations;
+  "lookInteractions/queries": typeof lookInteractions_queries;
   "lookbooks/mutations": typeof lookbooks_mutations;
   "lookbooks/queries": typeof lookbooks_queries;
   "looks/mutations": typeof looks_mutations;
