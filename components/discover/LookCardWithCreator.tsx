@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Heart, Sparkles, AlertCircle, UserPlus, Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -9,6 +9,7 @@ import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { Look } from '@/lib/mock-data';
+import { toast } from 'sonner';
 
 // Extended look type with generation status and creator info
 interface LookWithCreator extends Look {
@@ -22,6 +23,10 @@ interface LookWithCreator extends Look {
   } | null;
   isFriend?: boolean;
   hasPendingRequest?: boolean;
+  // Interaction data
+  loveCount?: number;
+  saveCount?: number;
+  isLovedByUser?: boolean;
 }
 
 interface LookCardWithCreatorProps {
@@ -43,7 +48,27 @@ export function LookCardWithCreator({ look, index }: LookCardWithCreatorProps) {
 
   const [isSendingRequest, setIsSendingRequest] = useState(false);
   const [requestSent, setRequestSent] = useState(look.hasPendingRequest || false);
+  const [isTogglingLove, setIsTogglingLove] = useState(false);
   const sendFriendRequest = useMutation(api.friends.mutations.sendFriendRequest);
+  const toggleLoveMutation = useMutation(api.lookInteractions.mutations.toggleLove);
+  
+  // Handle love toggle
+  const handleToggleLove = useCallback(async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (isTogglingLove) return;
+    
+    setIsTogglingLove(true);
+    try {
+      await toggleLoveMutation({ lookId: look.id as Id<'looks'> });
+    } catch (error) {
+      console.error('Failed to toggle love:', error);
+      toast.error('Failed to save your reaction');
+    } finally {
+      setIsTogglingLove(false);
+    }
+  }, [isTogglingLove, toggleLoveMutation, look.id]);
 
   const handleAddFriend = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -225,16 +250,28 @@ export function LookCardWithCreator({ look, index }: LookCardWithCreatorProps) {
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
-                className="absolute top-3 left-3 p-2 bg-background/90 backdrop-blur-sm rounded-full border border-border/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                onClick={(e) => {
-                  e.preventDefault();
-                  // Handle like
-                }}
+                className={`absolute top-3 left-3 p-2 bg-background/90 backdrop-blur-sm rounded-full border border-border/50 transition-all duration-300 ${
+                  look.isLovedByUser ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                }`}
+                onClick={handleToggleLove}
+                disabled={isTogglingLove}
               >
-                <Heart
-                  className={`w-4 h-4 ${look.isLiked ? 'fill-destructive text-destructive' : 'text-foreground'}`}
-                />
+                {isTogglingLove ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <Heart
+                    className={`w-4 h-4 ${look.isLovedByUser ? 'fill-destructive text-destructive' : 'text-foreground'}`}
+                  />
+                )}
               </motion.button>
+            )}
+            
+            {/* Love count badge - shows when has loves */}
+            {hasImage && look.loveCount !== undefined && look.loveCount > 0 && (
+              <div className="absolute top-3 right-3 flex items-center gap-1 px-2 py-1 bg-background/90 backdrop-blur-sm rounded-full text-xs font-medium">
+                <Heart className="w-3 h-3 fill-destructive text-destructive" />
+                <span>{look.loveCount}</span>
+              </div>
             )}
 
             {/* Style tags - shows on hover (only when image is ready) */}

@@ -150,7 +150,7 @@ Reference Image 2: ${itemDescription}
 ${generatedPrompt}
 
 Important:
-- Keep the person's face, body type, and identity exactly as shown in Reference Image 1
+- Keep the person's face, body type & size, and identity exactly as shown in Reference Image 1
 - Dress them in ONLY the single item from Reference Image 2
 - Do NOT add any other clothing items - show ONLY this one item
 - Make it look like a professional fashion photograph

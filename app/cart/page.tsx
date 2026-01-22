@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -20,6 +20,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { formatPrice } from '@/lib/utils/format';
 import { toast } from 'sonner';
+import { trackCartPageViewed } from '@/lib/analytics';
 
 export default function CartPage() {
   const router = useRouter();
@@ -34,6 +35,17 @@ export default function CartPage() {
   const removeFromCart = useMutation(api.cart.mutations.removeFromCart);
   const updateQuantity = useMutation(api.cart.mutations.updateQuantity);
   const clearCart = useMutation(api.cart.mutations.clearCart);
+
+  // Track page view
+  useEffect(() => {
+    if (cartTotal !== undefined) {
+      trackCartPageViewed({
+        item_count: cartTotal.itemCount,
+        total_value: cartTotal.total,
+        currency: cartTotal.currency,
+      });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRemoveItem = async (cartItemId: Id<'cart_items'>) => {
     setRemovingId(cartItemId);
@@ -404,4 +416,6 @@ export default function CartPage() {
     </div>
   );
 }
+
+
 

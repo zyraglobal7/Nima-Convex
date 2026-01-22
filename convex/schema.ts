@@ -292,6 +292,24 @@ export default defineSchema({
     createdBy: v.optional(v.union(v.literal('system'), v.literal('user'))),
     creatorUserId: v.optional(v.id('users')),
 
+    // Creation source - how the look was created
+    // 'chat' = Created via AI chat conversation
+    // 'apparel' = Created via "Create a Look" feature on Apparel tab
+    // 'recreated' = Recreated from another user's look
+    // 'shared' = Received via direct message from another user
+    // 'system' = System/admin created
+    creationSource: v.optional(
+      v.union(
+        v.literal('chat'),
+        v.literal('apparel'),
+        v.literal('recreated'),
+        v.literal('shared'),
+        v.literal('system')
+      )
+    ),
+    // For recreated looks, track the original look
+    originalLookId: v.optional(v.id('looks')),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -301,7 +319,8 @@ export default defineSchema({
     .index('by_active_and_featured', ['isActive', 'isFeatured'])
     .index('by_creator_and_status', ['creatorUserId', 'generationStatus'])
     .index('by_public_and_active', ['isPublic', 'isActive'])
-    .index('by_user_and_save_status', ['creatorUserId', 'status']),
+    .index('by_user_and_save_status', ['creatorUserId', 'status'])
+    .index('by_creation_source', ['creationSource']),
 
   /**
    * look_images - AI-generated try-on images
@@ -850,5 +869,31 @@ export default defineSchema({
     .index('by_seller', ['sellerId'])
     .index('by_seller_and_status', ['sellerId', 'status'])
     .index('by_period', ['periodStart', 'periodEnd']),
+
+  // ============================================
+  // LOOK INTERACTIONS (Likes, Dislikes, Saves)
+  // ============================================
+
+  /**
+   * look_interactions - User interactions with looks
+   * Tracks loves, dislikes, and saves for analytics and activity feed
+   */
+  look_interactions: defineTable({
+    lookId: v.id('looks'),
+    userId: v.id('users'),
+    interactionType: v.union(
+      v.literal('love'),
+      v.literal('dislike'),
+      v.literal('save')
+    ),
+    // For activity feed - track if owner has seen this notification
+    seenByOwner: v.optional(v.boolean()),
+    createdAt: v.number(),
+  })
+    .index('by_look', ['lookId'])
+    .index('by_user', ['userId'])
+    .index('by_look_and_user', ['lookId', 'userId'])
+    .index('by_look_and_type', ['lookId', 'interactionType'])
+    .index('by_created_at', ['createdAt']),
 
 });

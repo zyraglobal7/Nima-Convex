@@ -24,11 +24,14 @@ import { FriendRequestPopup } from '@/components/friends/FriendRequestPopup';
 import { RecreateLookButton } from '@/components/looks/RecreateLookButton';
 import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
 import { ItemsUnavailableModal } from '@/components/ui/ItemsUnavailableModal';
-import { trackPurchaseAttempted, trackItemsUnavailableShown } from '@/lib/analytics';
+import { trackPurchaseAttempted, trackItemsUnavailableShown, trackLookDetailViewed } from '@/lib/analytics';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id, Doc } from '@/convex/_generated/dataModel';
 import { toast } from 'sonner';
+
+// Import look interactions API
+import { Users } from 'lucide-react';
 
 // Simple price formatter that displays price as stored in database (no conversion)
 function formatPrice(price: number, currency: string = 'KES'): string {
@@ -127,8 +130,6 @@ export default function LookDetailPage() {
   const lookId = params.id as string;
   const sharedByUserId = searchParams.get('sharedBy');
 
-  const [isLiked, setIsLiked] = useState(false);
-  const [isDisliked, setIsDisliked] = useState(false);
   const [showLookbookModal, setShowLookbookModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showFriendRequestPopup, setShowFriendRequestPopup] = useState(false);
@@ -166,6 +167,25 @@ export default function LookDetailPage() {
   const addToLookbookMutation = useMutation(api.lookbooks.mutations.addToLookbook);
   const createLookbookMutation = useMutation(api.lookbooks.mutations.createLookbook);
 
+  // Look interactions - queries
+  const userInteraction = useQuery(
+    api.lookInteractions.queries.getUserInteractionForLook,
+    lookData?.look ? { lookId: lookData.look._id } : 'skip'
+  );
+  const interactionCounts = useQuery(
+    api.lookInteractions.queries.getLookInteractionCounts,
+    lookData?.look ? { lookId: lookData.look._id } : 'skip'
+  );
+
+  // Look interactions - mutations
+  const toggleLoveMutation = useMutation(api.lookInteractions.mutations.toggleLove);
+  const toggleDislikeMutation = useMutation(api.lookInteractions.mutations.toggleDislike);
+  const recordSaveMutation = useMutation(api.lookInteractions.mutations.recordSave);
+
+  // Derived state for like/dislike (from server)
+  const isLiked = userInteraction?.isLoved ?? false;
+  const isDisliked = userInteraction?.isDisliked ?? false;
+
   // Fetch current user
   const currentUser = useQuery(api.users.queries.getCurrentUser);
 
@@ -186,6 +206,17 @@ export default function LookDetailPage() {
       setShowFriendRequestPopup(true);
     }
   }, [shareMetadata, sharedByUserId]);
+
+  // Track page view
+  useEffect(() => {
+    if (lookData?.look) {
+      const source = sharedByUserId ? 'share' : 'direct';
+      trackLookDetailViewed({
+        look_id: lookData.look.publicId,
+        source,
+      });
+    }
+  }, [lookData?.look?.publicId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Transform items to products format
   const products: TransformedProduct[] = useMemo(() => {
@@ -247,21 +278,23 @@ export default function LookDetailPage() {
     });
   }, [router]);
 
-  const handleLike = () => {
-    if (isLiked) {
-      setIsLiked(false);
-    } else {
-      setIsLiked(true);
-      setIsDisliked(false);
+  const handleLike = async () => {
+    if (!lookData?.look) return;
+    try {
+      await toggleLoveMutation({ lookId: lookData.look._id });
+    } catch (error) {
+      console.error('Failed to toggle love:', error);
+      toast.error('Failed to save your reaction');
     }
   };
 
-  const handleDislike = () => {
-    if (isDisliked) {
-      setIsDisliked(false);
-    } else {
-      setIsDisliked(true);
-      setIsLiked(false);
+  const handleDislike = async () => {
+    if (!lookData?.look) return;
+    try {
+      await toggleDislikeMutation({ lookId: lookData.look._id });
+    } catch (error) {
+      console.error('Failed to toggle dislike:', error);
+      toast.error('Failed to save your reaction');
     }
   };
 
@@ -289,6 +322,8 @@ export default function LookDetailPage() {
         itemType: 'look',
         lookId: lookData.look._id,
       });
+      // Also record the save interaction for activity feed
+      await recordSaveMutation({ lookId: lookData.look._id });
       toast.success('Saved to lookbook!');
     } catch (error) {
       console.error('Failed to save to lookbook:', error);
@@ -534,6 +569,36 @@ export default function LookDetailPage() {
             </span>
           </motion.button>
         </motion.div>
+
+        {/* Interaction counts - show for public/shared looks */}
+        {interactionCounts && (interactionCounts.loveCount > 0 || interactionCounts.saveCount > 0) && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.25 }}
+            className="flex items-center justify-center gap-6 mb-4 text-sm text-muted-foreground"
+          >
+            {interactionCounts.loveCount > 0 && (
+              <div className="flex items-center gap-1.5">
+                <Heart className="w-4 h-4 text-destructive fill-destructive" />
+                <span>{interactionCounts.loveCount} {interactionCounts.loveCount === 1 ? 'love' : 'loves'}</span>
+              </div>
+            )}
+            {interactionCounts.saveCount > 0 && (
+              <div className="flex items-center gap-1.5">
+                <Users className="w-4 h-4" />
+                <span>{interactionCounts.saveCount} {interactionCounts.saveCount === 1 ? 'save' : 'saves'}</span>
+              </div>
+            )}
+            {/* Show dislike count only to owner */}
+            {interactionCounts.isOwner && interactionCounts.dislikeCount > 0 && (
+              <div className="flex items-center gap-1.5 opacity-60">
+                <ThumbsDown className="w-4 h-4" />
+                <span>{interactionCounts.dislikeCount}</span>
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* Nima's styling note */}
         {look.nimaComment && (

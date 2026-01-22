@@ -1,6 +1,6 @@
 'use client';
 
-
+import { useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { ArrowLeft, Sparkles, MessageSquare, User } from 'lucide-react';
@@ -10,11 +10,24 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import type { Id } from '@/convex/_generated/dataModel';
+import { trackMessagesPageViewed } from '@/lib/analytics';
 
 export default function MessagesPage() {
   const router = useRouter();
   const conversations = useQuery(api.directMessages.queries.getConversations);
   const markConversationAsRead = useMutation(api.directMessages.mutations.markConversationAsRead);
+
+  // Calculate unread count for tracking
+  const unreadCount = useMemo(() => {
+    return conversations?.filter(c => c.hasUnread).length ?? 0;
+  }, [conversations]);
+
+  // Track page view
+  useEffect(() => {
+    if (conversations !== undefined) {
+      trackMessagesPageViewed({ unread_count: unreadCount });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleConversationClick = async (otherUserId: Id<'users'>, hasUnread: boolean) => {
     if (hasUnread) {

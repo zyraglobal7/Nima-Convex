@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Sparkles, Heart, Users, ArrowLeft, User } from 'lucide-react';
@@ -10,9 +10,15 @@ import Image from 'next/image';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { formatPrice } from '@/lib/utils/format';
+import { trackExplorePageViewed } from '@/lib/analytics';
 
 export default function ExplorePage() {
   const [selectedFilter, setSelectedFilter] = useState<string>('All');
+
+  // Track page view
+  useEffect(() => {
+    trackExplorePageViewed({ tab: selectedFilter });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch public looks
   const publicLooksData = useQuery(api.looks.queries.getPublicLooks, { limit: 20 });
