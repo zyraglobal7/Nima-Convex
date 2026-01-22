@@ -19,7 +19,7 @@ export default function MessagesPage() {
 
   // Calculate unread count for tracking
   const unreadCount = useMemo(() => {
-    return conversations?.filter(c => c.hasUnread).length ?? 0;
+    return conversations?.filter(c => c.unreadCount > 0).length ?? 0;
   }, [conversations]);
 
   // Track page view
