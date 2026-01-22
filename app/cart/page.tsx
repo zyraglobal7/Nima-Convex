@@ -41,7 +41,7 @@ export default function CartPage() {
     if (cartTotal !== undefined) {
       trackCartPageViewed({
         item_count: cartTotal.itemCount,
-        total_value: cartTotal.total,
+        total_value: cartTotal.subtotal,
         currency: cartTotal.currency,
       });
     }
