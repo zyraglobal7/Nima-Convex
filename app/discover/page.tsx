@@ -15,6 +15,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import type { Look, Product } from '@/lib/mock-data';
 import { trackDiscoverPageViewed } from '@/lib/analytics';
 import { useStableValue } from '@/lib/hooks/useStableValue';
+import { useSelection } from '@/lib/contexts/SelectionContext';
 
 type ViewState = 'loading' | 'generating' | 'ready';
 
@@ -86,9 +87,8 @@ export default function DiscoverPage() {
     setTimeout(() => setShowWelcome(false), 8000);
   }, []);
 
-  // Selection mode for Create a Look
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<Set<Id<'items'>>>(new Set());
+  // Selection mode for Create a Look (using shared context)
+  const { isSelectionMode, selectedItemIds, setSelectionMode, toggleItemSelection, clearSelection } = useSelection();
   const [showCreateLookSheet, setShowCreateLookSheet] = useState(false);
 
   // Convex queries and mutations - use useStableValue to prevent UI flicker
@@ -399,21 +399,8 @@ export default function DiscoverPage() {
   // Use accumulated items for Apparel grid (for infinite scroll)
   const apparelItems: ApparelItem[] = accumulatedItems;
 
-  // Handle item selection for Create a Look
-  const handleItemSelect = (itemId: Id<'items'>) => {
-    setSelectedItems((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId);
-      } else if (newSet.size < 6) {
-        newSet.add(itemId);
-      }
-      return newSet;
-    });
-  };
-
-  // Get selected items for CreateLookSheet
-  const selectedItemsArray = apparelItems.filter((item) => selectedItems.has(item._id));
+  // Get selected items for CreateLookSheet (using context's selectedItemIds)
+  const selectedItemsArray = apparelItems.filter((item) => selectedItemIds.has(item._id));
 
   // Handle welcome message dismissal for users who already have looks
   // (Centralized - uses scheduleWelcomeDismiss instead of raw setTimeout)
@@ -553,8 +540,7 @@ export default function DiscoverPage() {
                 setActiveFilter(filter.id);
                 // Reset selection mode when switching tabs
                 if (filter.id !== 'apparel' && isSelectionMode) {
-                  setIsSelectionMode(false);
-                  setSelectedItems(new Set());
+                  clearSelection();
                 }
               }}
               className={`
@@ -586,10 +572,9 @@ export default function DiscoverPage() {
               <button
                 onClick={() => {
                   if (isSelectionMode) {
-                    setIsSelectionMode(false);
-                    setSelectedItems(new Set());
+                    clearSelection();
                   } else {
-                    setIsSelectionMode(true);
+                    setSelectionMode(true);
                   }
                 }}
                 className={`
@@ -617,7 +602,7 @@ export default function DiscoverPage() {
           >
             <p className="text-sm text-primary font-medium">
               Select 2-6 items to create your look
-              {selectedItems.size > 0 && ` (${selectedItems.size} selected)`}
+              {selectedItemIds.size > 0 && ` (${selectedItemIds.size} selected)`}
             </p>
           </motion.div>
         )}
@@ -663,8 +648,8 @@ export default function DiscoverPage() {
                             item={item}
                             index={index}
                             isSelectionMode={isSelectionMode}
-                            isSelected={selectedItems.has(item._id)}
-                            onSelect={handleItemSelect}
+                            isSelected={selectedItemIds.has(item._id)}
+                            onSelect={toggleItemSelection}
                           />
                           {/* Insert carousel after every 8 items */}
                           {(index + 1) % ITEMS_PER_PAGE === 0 && index < apparelItems.length - 1 && (
@@ -686,8 +671,8 @@ export default function DiscoverPage() {
                           item={item}
                           index={index}
                           isSelectionMode={isSelectionMode}
-                          isSelected={selectedItems.has(item._id)}
-                          onSelect={handleItemSelect}
+                          isSelected={selectedItemIds.has(item._id)}
+                          onSelect={toggleItemSelection}
                         />
                       ))}
                     </div>
@@ -816,7 +801,7 @@ export default function DiscoverPage() {
 
       {/* Floating "Try On Selected" button */}
       <AnimatePresence>
-        {isSelectionMode && selectedItems.size >= 2 && (
+        {isSelectionMode && selectedItemIds.size >= 2 && (
           <motion.div
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
@@ -829,7 +814,7 @@ export default function DiscoverPage() {
                 className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-medium text-base shadow-lg hover:bg-primary-hover transition-all active:scale-[0.98] flex items-center justify-center gap-2"
               >
                 <Sparkles className="w-5 h-5" />
-                <span>Try On Selected ({selectedItems.size})</span>
+                <span>Try On Selected ({selectedItemIds.size})</span>
               </button>
             </div>
           </motion.div>
@@ -841,10 +826,7 @@ export default function DiscoverPage() {
         isOpen={showCreateLookSheet}
         onClose={() => setShowCreateLookSheet(false)}
         selectedItems={selectedItemsArray}
-        onClearSelection={() => {
-          setSelectedItems(new Set());
-          setIsSelectionMode(false);
-        }}
+        onClearSelection={clearSelection}
       />
 
       {/* Bottom navigation (mobile) */}
