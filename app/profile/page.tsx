@@ -394,6 +394,19 @@ export default function ProfilePage() {
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   </button>
+                  <a 
+                    href="/sign-out"
+                    className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <LogOut className="w-4 h-4" />
+                      <div className="text-left">
+                        <p className="text-sm">Log Out</p>
+                        <p className="text-xs opacity-70">Sign out of your account</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4" />
+                  </a>
                 </div>
               </div>
 

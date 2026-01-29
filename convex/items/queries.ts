@@ -729,20 +729,56 @@ export const getCategorySamplesWithGender = query({
       { key: 'jewelry', label: 'Jewelry' },
     ];
 
+    // Determine user's gender for filtering categories
+    // If user is male, show male + unisex items; if female, show female + unisex
+    const userGender: 'male' | 'female' | null = 
+      args.userGender === 'male' ? 'male' :
+      args.userGender === 'female' ? 'female' :
+      null;
+
     const categoryResults = await Promise.all(
       categories.map(async ({ key, label }) => {
-        // Get one active item from this category
-        const items = await ctx.db
-          .query('items')
-          .withIndex('by_active_and_category', (q) => q.eq('isActive', true).eq('category', key))
-          .take(10);
+        let items: Doc<'items'>[] = [];
+        let itemCount = 0;
 
-        // Count total items in category
-        const allCategoryItems = await ctx.db
-          .query('items')
-          .withIndex('by_active_and_category', (q) => q.eq('isActive', true).eq('category', key))
-          .collect();
-        const itemCount = allCategoryItems.length;
+        if (userGender) {
+          // Filter by user's gender + unisex items
+          const genderItems = await ctx.db
+            .query('items')
+            .withIndex('by_gender_and_category', (q) => q.eq('gender', userGender).eq('category', key))
+            .take(10);
+          
+          const unisexItems = await ctx.db
+            .query('items')
+            .withIndex('by_gender_and_category', (q) => q.eq('gender', 'unisex').eq('category', key))
+            .take(10);
+          
+          items = [...genderItems, ...unisexItems].filter(item => item.isActive);
+
+          // Count total items (user's gender + unisex)
+          const allGenderItems = await ctx.db
+            .query('items')
+            .withIndex('by_gender_and_category', (q) => q.eq('gender', userGender).eq('category', key))
+            .collect();
+          const allUnisexItems = await ctx.db
+            .query('items')
+            .withIndex('by_gender_and_category', (q) => q.eq('gender', 'unisex').eq('category', key))
+            .collect();
+          
+          itemCount = allGenderItems.filter(i => i.isActive).length + allUnisexItems.filter(i => i.isActive).length;
+        } else {
+          // No gender preference - get all items in this category
+          items = await ctx.db
+            .query('items')
+            .withIndex('by_active_and_category', (q) => q.eq('isActive', true).eq('category', key))
+            .take(10);
+
+          const allCategoryItems = await ctx.db
+            .query('items')
+            .withIndex('by_active_and_category', (q) => q.eq('isActive', true).eq('category', key))
+            .collect();
+          itemCount = allCategoryItems.length;
+        }
 
         // Find a sample item with an image
         let sampleImageUrl: string | null = null;

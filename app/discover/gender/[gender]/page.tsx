@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { ApparelItemCard, type ApparelItem } from '@/components/discover/ApparelItemCard';
@@ -11,8 +11,8 @@ import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import type { Id } from '@/convex/_generated/dataModel';
 import { useStableValue } from '@/lib/hooks/useStableValue';
+import { useSelection } from '@/lib/contexts/SelectionContext';
 
 // Items per page for infinite scroll
 const ITEMS_PER_PAGE = 8;
@@ -41,10 +41,15 @@ export default function GenderPage() {
   const [accumulatedItems, setAccumulatedItems] = useState<ApparelItem[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  
+  // Ref to track pagination state (avoids stale closures in intersection observer)
+  const paginationRef = useRef<{ hasMore: boolean; nextCursor: string | null }>({ 
+    hasMore: false, 
+    nextCursor: null 
+  });
 
-  // Selection mode for Create a Look
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<Set<Id<'items'>>>(new Set());
+  // Selection mode for Create a Look (using shared context)
+  const { isSelectionMode, selectedItemIds, setSelectionMode, toggleItemSelection, clearSelection } = useSelection();
   const [showCreateLookSheet, setShowCreateLookSheet] = useState(false);
 
   // Fetch items with gender filter
@@ -55,6 +60,19 @@ export default function GenderPage() {
       : 'skip'
   );
   const itemsData = useStableValue(rawItemsData, { items: [], nextCursor: null, hasMore: false });
+
+  // Update pagination ref when data changes
+  useEffect(() => {
+    if (itemsData) {
+      paginationRef.current = { 
+        hasMore: itemsData.hasMore, 
+        nextCursor: itemsData.nextCursor 
+      };
+    }
+  }, [itemsData]);
+
+  // Track if we have items (for observer re-attachment)
+  const hasItems = accumulatedItems.length > 0;
 
   // Accumulate items as they come in from paginated queries
   useEffect(() => {
@@ -89,16 +107,19 @@ export default function GenderPage() {
   }, [itemsData, cursor]);
 
   // Intersection observer for infinite scroll
+  // Uses paginationRef to avoid stale closures
+  // Re-attaches when hasItems changes (so observer works after initial load)
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         const target = entries[0];
-        if (target.isIntersecting && itemsData?.hasMore && !isLoadingMore) {
+        const { hasMore, nextCursor } = paginationRef.current;
+        if (target.isIntersecting && hasMore && nextCursor && !isLoadingMore) {
           setIsLoadingMore(true);
-          setCursor(itemsData.nextCursor);
+          setCursor(nextCursor);
         }
       },
-      { threshold: 0.1, rootMargin: '100px' }
+      { threshold: 0.1, rootMargin: '200px' }
     );
 
     const currentRef = loadMoreRef.current;
@@ -111,23 +132,10 @@ export default function GenderPage() {
         observer.unobserve(currentRef);
       }
     };
-  }, [itemsData?.hasMore, itemsData?.nextCursor, isLoadingMore]);
+  }, [isLoadingMore, hasItems]);
 
-  // Handle item selection for Create a Look
-  const handleItemSelect = useCallback((itemId: Id<'items'>) => {
-    setSelectedItems((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId);
-      } else if (newSet.size < 6) {
-        newSet.add(itemId);
-      }
-      return newSet;
-    });
-  }, []);
-
-  // Get selected items for CreateLookSheet
-  const selectedItemsArray = accumulatedItems.filter((item) => selectedItems.has(item._id));
+  // Get selected items for CreateLookSheet (using context's selectedItemIds)
+  const selectedItemsArray = accumulatedItems.filter((item) => selectedItemIds.has(item._id));
 
   // Invalid gender - redirect
   if (!isValidGender) {
@@ -232,10 +240,9 @@ export default function GenderPage() {
           <button
             onClick={() => {
               if (isSelectionMode) {
-                setIsSelectionMode(false);
-                setSelectedItems(new Set());
+                clearSelection();
               } else {
-                setIsSelectionMode(true);
+                setSelectionMode(true);
               }
             }}
             className={`
@@ -261,7 +268,7 @@ export default function GenderPage() {
           >
             <p className="text-sm text-primary font-medium">
               Select 2-6 items to create your look
-              {selectedItems.size > 0 && ` (${selectedItems.size} selected)`}
+              {selectedItemIds.size > 0 && ` (${selectedItemIds.size} selected)`}
             </p>
           </motion.div>
         )}
@@ -296,8 +303,8 @@ export default function GenderPage() {
                     item={item}
                     index={index}
                     isSelectionMode={isSelectionMode}
-                    isSelected={selectedItems.has(item._id)}
-                    onSelect={handleItemSelect}
+                    isSelected={selectedItemIds.has(item._id)}
+                    onSelect={toggleItemSelection}
                   />
                 ))}
               </div>
@@ -342,7 +349,7 @@ export default function GenderPage() {
 
       {/* Floating "Try On Selected" button */}
       <AnimatePresence>
-        {isSelectionMode && selectedItems.size >= 2 && (
+        {isSelectionMode && selectedItemIds.size >= 2 && (
           <motion.div
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
@@ -355,7 +362,7 @@ export default function GenderPage() {
                 className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-medium text-base shadow-lg hover:bg-primary-hover transition-all active:scale-[0.98] flex items-center justify-center gap-2"
               >
                 <Sparkles className="w-5 h-5" />
-                <span>Try On Selected ({selectedItems.size})</span>
+                <span>Try On Selected ({selectedItemIds.size})</span>
               </button>
             </div>
           </motion.div>
@@ -367,10 +374,7 @@ export default function GenderPage() {
         isOpen={showCreateLookSheet}
         onClose={() => setShowCreateLookSheet(false)}
         selectedItems={selectedItemsArray}
-        onClearSelection={() => {
-          setSelectedItems(new Set());
-          setIsSelectionMode(false);
-        }}
+        onClearSelection={clearSelection}
       />
 
       {/* Bottom navigation (mobile) */}
@@ -404,6 +408,8 @@ export default function GenderPage() {
     </div>
   );
 }
+
+
 
 
 

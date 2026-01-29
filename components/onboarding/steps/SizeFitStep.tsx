@@ -221,7 +221,7 @@ export function SizeFitStep({ formData, updateFormData, onNext, onBack }: StepPr
                 Waist Size
               </label>
               <span className="text-lg font-semibold text-primary">
-                {formData.waistSize ? `${formData.waistSize}"` : `${DEFAULT_WAIST_SIZE}"`}
+                {formData.waistSize ? `${formData.waistSize} inches` : `${DEFAULT_WAIST_SIZE} inches`}
               </span>
             </div>
             <div className="px-2">
@@ -233,9 +233,10 @@ export function SizeFitStep({ formData, updateFormData, onNext, onBack }: StepPr
                 step={1}
                 className="cursor-pointer"
               />
+
               <div className="flex justify-between mt-2">
-                 <span className="text-xs text-muted-foreground">24&quot;</span>
-                 <span className="text-xs text-muted-foreground">44&quot;</span>
+                 <span className="text-xs text-muted-foreground">24 inches</span>
+                 <span className="text-xs text-muted-foreground">72 inches</span>
               </div>
 
             </div>
