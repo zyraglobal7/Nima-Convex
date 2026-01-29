@@ -120,7 +120,7 @@ export function LookCard({ look, index }: LookCardProps) {
             )}
             
             {/* Price badge - always show */}
-            <div className="absolute top-3 right-3 px-3 py-1.5 bg-background/90 backdrop-blur-sm rounded-full border border-border/50">
+            <div className="absolute bottom-3 right-3 px-3 py-1.5 bg-background/90 backdrop-blur-sm rounded-full border border-border/50">
               <span className="text-xs font-medium text-foreground">
                 {formatPrice(look.totalPrice, look.currency)}
               </span>
