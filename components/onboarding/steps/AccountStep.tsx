@@ -6,7 +6,7 @@ import { StepProps, OnboardingFormData } from '../types';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { trackStepCompleted, trackBackClicked, trackSignupInitiated, trackSignInClicked, trackCompleteProfileClicked, ONBOARDING_STEPS } from '@/lib/analytics';
+import { trackStepCompleted, trackBackClicked, trackSignupInitiated, trackCompleteProfileClicked, ONBOARDING_STEPS } from '@/lib/analytics';
 
 // Local storage key for onboarding data
 const ONBOARDING_STORAGE_KEY = 'nima-onboarding-data';
@@ -100,7 +100,7 @@ export function AccountStep({ formData, onNext, onBack }: StepProps) {
     }
   };
 
-  const handleSignUp = async () => {
+  const handleContinueToAuth = async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -113,27 +113,8 @@ export function AccountStep({ formData, onNext, onBack }: StepProps) {
       // Save the current form data to localStorage
       saveOnboardingData(formData);
 
-      // Redirect to WorkOS sign-up
+      // Redirect directly to WorkOS sign-in (handles both sign-up and sign-in)
       // The callback will read from localStorage and complete onboarding
-      window.location.href = '/sign-up';
-    } catch (err) {
-      console.error('Error redirecting to sign-up:', err);
-      setError('Something went wrong. Please try again.');
-      setIsLoading(false);
-    }
-  };
-
-  const handleSignIn = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      trackSignInClicked();
-
-      // Save the current form data to localStorage
-      saveOnboardingData(formData);
-
-      // Redirect to WorkOS sign-in
       window.location.href = '/sign-in';
     } catch (err) {
       console.error('Error redirecting to sign-in:', err);
@@ -141,6 +122,7 @@ export function AccountStep({ formData, onNext, onBack }: StepProps) {
       setIsLoading(false);
     }
   };
+
 
   return (
     <div className="flex-1 flex flex-col">
@@ -198,52 +180,9 @@ export function AccountStep({ formData, onNext, onBack }: StepProps) {
             </Button>
           ) : (
             <>
-              {/* Sign Up with Google */}
+              {/* Continue to Sign In - redirects to WorkOS which handles both sign-up and sign-in */}
               <Button
-                onClick={handleSignUp}
-                disabled={isLoading}
-                variant="outline"
-                size="lg"
-                className="w-full h-14 text-base font-medium rounded-xl bg-surface border-border hover:bg-surface-alt hover:border-primary/30 transition-all duration-300"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-5 h-5 mr-3 animate-spin" />
-                ) : (
-                  <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                    />
-                  </svg>
-                )}
-                Continue with Google
-              </Button>
-
-              {/* Divider */}
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-border"></div>
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-4 text-muted-foreground">or</span>
-                </div>
-              </div>
-
-              {/* Email Sign Up */}
-              {/* <Button
-                onClick={handleSignUp}
+                onClick={handleContinueToAuth}
                 disabled={isLoading}
                 size="lg"
                 className="w-full h-14 text-base font-medium tracking-wide rounded-full bg-primary hover:bg-primary-hover text-primary-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.01] hover:shadow-lg"
@@ -254,23 +193,9 @@ export function AccountStep({ formData, onNext, onBack }: StepProps) {
                     Redirecting...
                   </>
                 ) : (
-                  'Sign Up with Email'
+                  'Continue to Sign In'
                 )}
-              </Button> */}
-
-              {/* Already have account */}
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">
-                  Already have an account?{' '}
-                  <button
-                    onClick={handleSignIn}
-                    disabled={isLoading}
-                    className="text-secondary hover:underline font-medium disabled:opacity-50"
-                  >
-                    Sign in
-                  </button>
-                </p>
-              </div>
+              </Button>
 
               {/* Terms */}
               <p className="text-xs text-muted-foreground text-center">

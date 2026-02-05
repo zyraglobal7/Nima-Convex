@@ -145,6 +145,7 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
   const [createdLookIds, setCreatedLookIds] = useState<Id<'looks'>[]>([]);
   const [scenario, setScenario] = useState<'fresh' | 'remix'>('fresh');
   const [fittingReadyTimestamp, setFittingReadyTimestamp] = useState<Date | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   
   // Thread ID from URL parameter
   const threadId = chatId as Id<'threads'>;
@@ -183,6 +184,8 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
   const createLooksFromChat = useMutation(api.chat.mutations.createLooksFromChat);
   const createRemixedLook = useMutation(api.chat.mutations.createRemixedLook);
   const generateChatLookImages = useAction(api.chat.actions.generateChatLookImages);
+  const generateUploadUrl = useMutation(api.userImages.mutations.generateUploadUrl);
+  const findSimilarItems = useAction(api.search.visualSearch.findSimilarItems);
   
   // Query user's recent looks for AI context
   const userRecentLooks = useQuery(api.chat.queries.getUserRecentLooks, { limit: 10 });
@@ -407,6 +410,49 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
         safeNavigate('/sign-in');
       }
     });
+  };
+
+  // Handle image upload for visual search
+  const handleImageUpload = async (file: File) => {
+    try {
+      setIsUploadingImage(true);
+      
+      // 1. Get upload URL
+      const uploadUrl = await generateUploadUrl();
+      
+      // 2. Upload the file to Convex storage
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to upload image');
+      }
+      
+      const { storageId } = await response.json();
+      
+      // 3. Call visual search action
+      const result = await findSimilarItems({ imageStorageId: storageId });
+      
+      if (!result.success || result.items.length === 0) {
+        // No matches found
+        setChatState('no_matches');
+        return;
+      }
+      
+      // 4. Send a message with the search context
+      const searchDescription = result.extractedAttributes?.description || 'uploaded image';
+      const itemNames = result.items.slice(0, 3).map(item => item.name).join(', ');
+      
+      handleSendMessage(`I'm looking for items similar to this: ${searchDescription}. I found some matches like ${itemNames}. Can you help me style these?`);
+      
+    } catch (error) {
+      console.error('[Visual Search] Error:', error);
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   const handleFittingRoomClick = (sessionId: string) => {
@@ -681,6 +727,8 @@ We're always adding new items, so check back soon! ✨`,
         <div className="max-w-3xl mx-auto">
           <ChatInput
             onSend={handleSendMessage}
+            onImageUpload={handleImageUpload}
+            isUploadingImage={isUploadingImage}
             disabled={chatState === 'curating' || chatState === 'generating' || isAiLoading}
             placeholder={
               chatState === 'curating'

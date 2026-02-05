@@ -884,7 +884,8 @@ export default defineSchema({
     interactionType: v.union(
       v.literal('love'),
       v.literal('dislike'),
-      v.literal('save')
+      v.literal('save'),
+      v.literal('recreate')
     ),
     // For activity feed - track if owner has seen this notification
     seenByOwner: v.optional(v.boolean()),
@@ -895,5 +896,23 @@ export default defineSchema({
     .index('by_look_and_user', ['lookId', 'userId'])
     .index('by_look_and_type', ['lookId', 'interactionType'])
     .index('by_created_at', ['createdAt']),
+
+  // ============================================
+  // ITEM LIKES (User likes on individual items)
+  // ============================================
+
+  /**
+   * item_likes - User likes on individual apparel items
+   * Tracks when users like/heart items for showing in Liked Items section
+   */
+  item_likes: defineTable({
+    userId: v.id('users'),
+    itemId: v.id('items'),
+    createdAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_item', ['itemId'])
+    .index('by_user_and_item', ['userId', 'itemId'])
+    .index('by_user_and_created', ['userId', 'createdAt']),
 
 });

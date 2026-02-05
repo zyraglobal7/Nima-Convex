@@ -690,6 +690,18 @@ export const recreateLook = mutation({
       userId: user._id,
     });
 
+    // Record the recreate interaction for activity feed
+    // Only if the original look has a creator (not system-generated) and it's not the same user
+    if (originalLook.creatorUserId && originalLook.creatorUserId !== user._id) {
+      await ctx.db.insert('look_interactions', {
+        lookId: args.lookId, // The ORIGINAL look ID, so the owner gets notified
+        userId: user._id,
+        interactionType: 'recreate',
+        seenByOwner: false,
+        createdAt: now,
+      });
+    }
+
     return {
       success: true,
       lookId: newLookId,

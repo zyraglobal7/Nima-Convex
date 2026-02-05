@@ -374,7 +374,15 @@ export default function ProfilePage() {
                   Account Settings
                 </h3>
                 <div className="space-y-3">
-                  <button className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-surface-alt transition-colors">
+                  <a
+                    href="https://myaccount.google.com/email"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => {
+                      toast.info('You will be redirected to Google Account settings to change your email.');
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-surface-alt transition-colors"
+                  >
                     <div className="flex items-center gap-3">
                       <Mail className="w-4 h-4 text-muted-foreground" />
                       <div className="text-left">
@@ -383,17 +391,25 @@ export default function ProfilePage() {
                       </div>
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                  <button className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-surface-alt transition-colors">
+                  </a>
+                  <a
+                    href="https://myaccount.google.com/signinoptions/password"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => {
+                      toast.info('You will be redirected to Google Account settings to change your password.');
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-surface-alt transition-colors"
+                  >
                     <div className="flex items-center gap-3">
                       <Lock className="w-4 h-4 text-muted-foreground" />
                       <div className="text-left">
                         <p className="text-sm text-foreground">Change Password</p>
-                        <p className="text-xs text-muted-foreground">Update your password</p>
+                        <p className="text-xs text-muted-foreground">Managed via Google Account</p>
                       </div>
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </button>
+                  </a>
                   <a 
                     href="/sign-out"
                     className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"

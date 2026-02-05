@@ -180,12 +180,12 @@ export default function CategoryPage() {
             {/* Back button and Logo */}
             <div className="flex items-center gap-3">
               <button
-                onClick={() => router.back()}
+                onClick={() => router.push('/discover?tab=apparel')}
                 className="p-2 rounded-full hover:bg-surface transition-colors"
               >
                 <ArrowLeft className="w-5 h-5 text-foreground" />
               </button>
-              <Link href="/discover" className="flex items-center gap-2">
+              <Link href="/discover?tab=apparel" className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
                   <Sparkles className="w-4 h-4 text-primary-foreground" />
                 </div>
@@ -321,6 +321,7 @@ export default function CategoryPage() {
                     isSelectionMode={isSelectionMode}
                     isSelected={selectedItemIds.has(item._id)}
                     onSelect={toggleItemSelection}
+                    isInfiniteScrollLoad={index >= ITEMS_PER_PAGE}
                   />
                 ))}
               </div>

@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Heart } from 'lucide-react';
+import { Check, Heart, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { formatPrice } from '@/lib/utils/format';
@@ -27,6 +28,9 @@ interface ApparelItemCardProps {
   isSelectionMode?: boolean;
   isSelected?: boolean;
   onSelect?: (itemId: Id<'items'>) => void;
+  isInfiniteScrollLoad?: boolean; // Flag for items loaded via infinite scroll
+  isLiked?: boolean; // Whether the item is liked by the current user
+  onToggleLike?: (itemId: Id<'items'>) => Promise<void>; // Callback to toggle like
 }
 
 export function ApparelItemCard({
@@ -35,7 +39,11 @@ export function ApparelItemCard({
   isSelectionMode = false,
   isSelected = false,
   onSelect,
+  isInfiniteScrollLoad = false,
+  isLiked = false,
+  onToggleLike,
 }: ApparelItemCardProps) {
+  const [isLiking, setIsLiking] = useState(false);
   const hasImage = item.primaryImageUrl && item.primaryImageUrl.length > 0;
 
   const handleClick = (e: React.MouseEvent) => {
@@ -45,13 +53,18 @@ export function ApparelItemCard({
     }
   };
 
+  // For infinite scroll items, use faster animation with no stagger delay
+  // For initial load, use stagger but cap at first 8 items to avoid long delays
+  const animationDelay = isInfiniteScrollLoad ? 0 : Math.min(index, 7) * 0.05;
+  const animationDuration = isInfiniteScrollLoad ? 0.3 : 0.5;
+
   const cardContent = (
     <motion.div
-      initial={{ opacity: 0, y: 40 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
-        duration: 0.5,
-        delay: index * 0.05,
+        duration: animationDuration,
+        delay: animationDelay,
         ease: [0.25, 0.46, 0.45, 0.94],
       }}
       className="break-inside-avoid mb-4"
@@ -118,19 +131,38 @@ export function ApparelItemCard({
             </span>
           </div>
 
-          {/* Quick like button - shows on hover (not in selection mode) */}
+          {/* Quick like button - shows on hover or if liked (not in selection mode) */}
           {!isSelectionMode && hasImage && (
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
-              className="absolute bottom-3 right-3 p-2 bg-background/90 backdrop-blur-sm rounded-full border border-border/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-              onClick={(e) => {
+              disabled={isLiking}
+              className={`
+                absolute bottom-3 right-3 p-2 bg-background/90 backdrop-blur-sm rounded-full border border-border/50 
+                transition-all duration-300
+                ${isLiked ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
+                disabled:opacity-50
+              `}
+              onClick={async (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                // Handle like
+                if (onToggleLike && !isLiking) {
+                  setIsLiking(true);
+                  try {
+                    await onToggleLike(item._id);
+                  } finally {
+                    setIsLiking(false);
+                  }
+                }
               }}
             >
-              <Heart className="w-4 h-4 text-foreground" />
+              {isLiking ? (
+                <Loader2 className="w-4 h-4 text-foreground animate-spin" />
+              ) : (
+                <Heart 
+                  className={`w-4 h-4 transition-colors ${isLiked ? 'text-red-500 fill-red-500' : 'text-foreground'}`} 
+                />
+              )}
             </motion.button>
           )}
 
