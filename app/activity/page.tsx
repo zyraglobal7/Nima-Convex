@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { Heart, Bookmark, ArrowLeft, Bell, BellOff, Check, Loader2 } from 'lucide-react';
+import { Heart, Bookmark, ArrowLeft, Bell, BellOff, Check, Loader2, Sparkles } from 'lucide-react';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -17,7 +17,7 @@ import { trackActivityPageViewed } from '@/lib/analytics';
 // Notification item type
 interface ActivityNotification {
   _id: Id<'look_interactions'>;
-  interactionType: 'love' | 'dislike' | 'save';
+  interactionType: 'love' | 'dislike' | 'save' | 'recreate';
   createdAt: number;
   seenByOwner: boolean;
   look: {
@@ -35,12 +35,34 @@ interface ActivityNotification {
 
 function NotificationItem({ notification, isNew }: { notification: ActivityNotification; isNew: boolean }) {
   const userName = notification.user.firstName || notification.user.username || 'Someone';
-  const actionText = notification.interactionType === 'love' ? 'loved' : 'saved';
-  const icon = notification.interactionType === 'love' ? (
-    <Heart className="w-5 h-5 fill-destructive text-destructive" />
-  ) : (
-    <Bookmark className="w-5 h-5 fill-primary text-primary" />
-  );
+  
+  // Determine action text and icon based on interaction type
+  const getActionDetails = () => {
+    switch (notification.interactionType) {
+      case 'love':
+        return {
+          text: 'loved',
+          icon: <Heart className="w-5 h-5 fill-destructive text-destructive" />,
+        };
+      case 'save':
+        return {
+          text: 'saved',
+          icon: <Bookmark className="w-5 h-5 fill-primary text-primary" />,
+        };
+      case 'recreate':
+        return {
+          text: 'recreated',
+          icon: <Sparkles className="w-5 h-5 text-amber-500" />,
+        };
+      default:
+        return {
+          text: 'interacted with',
+          icon: <Bell className="w-5 h-5 text-muted-foreground" />,
+        };
+    }
+  };
+  
+  const { text: actionText, icon } = getActionDetails();
 
   return (
     <motion.div

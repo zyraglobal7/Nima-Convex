@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CreateLookSheet, LookCardWithCreator, LookCard, useFloatingLoader, CategoryCarousel } from '@/components/discover';
+import { CreateLookSheet, LookCardWithCreator, LookCard, useFloatingLoader, CategoryCarousel, ApparelSearchBar } from '@/components/discover';
 import { ApparelItemCard, type ApparelItem } from '@/components/discover/ApparelItemCard';
 import { Sparkles, User, Shirt, Loader2 } from 'lucide-react';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
@@ -16,6 +16,7 @@ import type { Look, Product } from '@/lib/mock-data';
 import { trackDiscoverPageViewed } from '@/lib/analytics';
 import { useStableValue } from '@/lib/hooks/useStableValue';
 import { useSelection } from '@/lib/contexts/SelectionContext';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 type ViewState = 'loading' | 'generating' | 'ready';
 
@@ -45,17 +46,45 @@ interface LookWithStatus extends Look {
 const ITEMS_PER_PAGE = 8;
 
 export default function DiscoverPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
   const [viewState, setViewState] = useState<ViewState>('ready');
   const [showWelcome, setShowWelcome] = useState(true);
   const [workflowStarted, setWorkflowStarted] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<FilterType>('my-look');
   
+  // Get active filter from URL params, default to 'my-look'
+  // Also check for 'from=apparel' param (used when returning from category pages)
+  const tabFromUrl = searchParams.get('tab') as FilterType | null;
+  const fromParam = searchParams.get('from');
+  const initialFilter: FilterType = 
+    (tabFromUrl && ['my-look', 'explore', 'apparel'].includes(tabFromUrl))
+      ? tabFromUrl 
+      : fromParam === 'apparel' 
+        ? 'apparel'
+        : 'my-look';
+  const [activeFilter, setActiveFilterState] = useState<FilterType>(initialFilter);
+  
+  // Track if we initialized from a category return (to preserve selection)
+  const isReturningFromCategory = fromParam === 'apparel';
+  
+  // Update activeFilter and URL when changing tabs
+  const setActiveFilter = useCallback((filter: FilterType, preserveSelection: boolean = false) => {
+    setActiveFilterState(filter);
+    // Update URL without navigation
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', filter);
+    // Clear the 'from' param as it's no longer needed
+    params.delete('from');
+    router.replace(`/discover?${params.toString()}`, { scroll: false });
+  }, [searchParams, router]);
+
   // Infinite scroll state for Apparel tab
   const [apparelCursor, setApparelCursor] = useState<string | null>(null);
   const [accumulatedItems, setAccumulatedItems] = useState<ApparelItem[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  
+
   // Track processed cursors to detect new data (prevents re-processing same data)
   const processedCursorsRef = useRef<Set<string | null>>(new Set());
   // Ref to store latest pagination info for intersection observer
@@ -76,7 +105,7 @@ export default function DiscoverPage() {
 
   // Track if welcome dismiss timeout has been scheduled (prevents duplicate timeouts)
   const hasScheduledWelcomeDismiss = useRef(false);
-  
+
   // Track previous workflow status to prevent effect from running on same data
   const prevWorkflowStatusRef = useRef<string | null>(null);
 
@@ -101,19 +130,19 @@ export default function DiscoverPage() {
 
   // Get current user for gender-based filtering
   const currentUser = useQuery(api.users.queries.getCurrentUser);
-  
+
   // Derive gender filter from user preferences
   // Only filter by gender if user has explicitly set male/female (not prefer-not-to-say)
-  const userGenderFilter = currentUser?.gender === 'male' || currentUser?.gender === 'female' 
-    ? currentUser.gender 
+  const userGenderFilter = currentUser?.gender === 'male' || currentUser?.gender === 'female'
+    ? currentUser.gender
     : undefined;
 
   // Items for Apparel tab - paginated with cursor, filtered by user's gender
   // Note: We use rawItemsData directly for pagination to avoid stale data issues with useStableValue
   const rawItemsData = useQuery(
     api.items.queries.listItemsWithImages,
-    activeFilter === 'apparel' 
-      ? { gender: userGenderFilter, limit: ITEMS_PER_PAGE, cursor: apparelCursor ?? undefined } 
+    activeFilter === 'apparel'
+      ? { gender: userGenderFilter, limit: ITEMS_PER_PAGE, cursor: apparelCursor ?? undefined }
       : 'skip'
   );
 
@@ -130,6 +159,18 @@ export default function DiscoverPage() {
     activeFilter === 'my-look' ? { createdBy: 'system', limit: 50 } : 'skip'
   );
   const myLooksData = useStableValue(rawMyLooksData, []);
+
+  // Liked item IDs for apparel tab (to show heart state)
+  const likedItemIds = useQuery(api.items.likes.getLikedItemIds) ?? [];
+  const likedItemIdsSet = useMemo(() => new Set(likedItemIds), [likedItemIds]);
+
+  // Toggle like mutation
+  const toggleLikeMutation = useMutation(api.items.likes.toggleLike);
+  
+  // Handler for toggling item likes
+  const handleToggleLike = useCallback(async (itemId: Id<'items'>) => {
+    await toggleLikeMutation({ itemId });
+  }, [toggleLikeMutation]);
 
   const startWorkflow = useMutation(api.workflows.index.startOnboardingWorkflow);
 
@@ -149,7 +190,7 @@ export default function DiscoverPage() {
       paginationRef.current = { hasMore: false, nextCursor: null };
       setIsLoadingMore(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilter, userGenderFilter]); // Intentionally exclude apparelCursor and accumulatedItems to prevent loops
 
   // Accumulate items as they come in from paginated queries
@@ -158,23 +199,23 @@ export default function DiscoverPage() {
     if (activeFilter !== 'apparel' || !rawItemsData?.items || rawItemsData.items.length === 0) {
       return;
     }
-    
+
     // Create a unique key for this data batch based on first item ID
     const dataKey = rawItemsData.items[0]?._id ?? 'empty';
-    
+
     // Skip if we've already processed this exact data
     if (processedCursorsRef.current.has(dataKey)) {
       return;
     }
     processedCursorsRef.current.add(dataKey);
-    
+
     // Update pagination ref with latest values
-    paginationRef.current = { 
-      hasMore: rawItemsData.hasMore, 
-      nextCursor: rawItemsData.nextCursor 
+    paginationRef.current = {
+      hasMore: rawItemsData.hasMore,
+      nextCursor: rawItemsData.nextCursor
     };
-    
-    
+
+
     const newItems: ApparelItem[] = rawItemsData.items.map((item) => ({
       _id: item._id,
       publicId: item.publicId,
@@ -196,7 +237,7 @@ export default function DiscoverPage() {
       if (uniqueNewItems.length === 0) return prev;
       return [...prev, ...uniqueNewItems];
     });
-    
+
     setIsLoadingMore(false);
   }, [rawItemsData, activeFilter, apparelCursor, accumulatedItems.length]);
 
@@ -210,13 +251,13 @@ export default function DiscoverPage() {
     if (activeFilter !== 'apparel') {
       return;
     }
-    
+
     const observer = new IntersectionObserver(
       (entries) => {
         const target = entries[0];
         // Use paginationRef.current to get fresh values
         const { hasMore, nextCursor } = paginationRef.current;
-        
+
         if (target.isIntersecting && hasMore && nextCursor && !isLoadingMore) {
           setIsLoadingMore(true);
           setApparelCursor(nextCursor);
@@ -242,7 +283,7 @@ export default function DiscoverPage() {
   useEffect(() => {
     if (hasTrackedPageView.current) return;
     hasTrackedPageView.current = true;
-    
+
     // Only track in production to avoid duplicate event warnings in dev
     if (process.env.NODE_ENV === 'production') {
       trackDiscoverPageViewed({
@@ -259,7 +300,7 @@ export default function DiscoverPage() {
         console.log('[DISCOVER] Starting onboarding workflow...');
       }
       setWorkflowStarted(true);
-      
+
       startWorkflow()
         .then((result) => {
           if (result.success) {
@@ -288,7 +329,7 @@ export default function DiscoverPage() {
     // Compare with previous values to prevent duplicate runs
     const currentKey = `${workflowStatus.isComplete}-${workflowStatus.completedCount}`;
     if (currentKey === prevWorkflowStatusRef.current) return; // No actual change in values
-    
+
     // Update the ref with current values
     prevWorkflowStatusRef.current = currentKey;
 
@@ -309,10 +350,13 @@ export default function DiscoverPage() {
   // Using useMemo to prevent re-renders from Convex subscription updates
   const exploreLooks = useMemo((): LookWithCreator[] => {
     if (activeFilter !== 'explore' || !publicLooks) return [];
-    
+
     const heights: Array<'short' | 'medium' | 'tall' | 'extra-tall'> = ['medium', 'tall', 'short', 'extra-tall'];
-    
-    return publicLooks.looks.map((lookData, index) => {
+
+    // Filter out looks with 0 items (deleted/inactive items)
+    const validLooks = publicLooks.looks.filter((lookData) => lookData.itemCount > 0);
+
+    return validLooks.map((lookData, index) => {
       const products: Product[] = lookData.items.map((itemData) => ({
         id: itemData.item._id,
         name: itemData.item.name,
@@ -356,9 +400,9 @@ export default function DiscoverPage() {
   // Using useMemo to prevent re-renders from Convex subscription updates
   const myLooks = useMemo((): LookWithStatus[] => {
     if (activeFilter !== 'my-look' || !myLooksData) return [];
-    
+
     const heights: Array<'short' | 'medium' | 'tall' | 'extra-tall'> = ['medium', 'tall', 'short', 'extra-tall'];
-    
+
     return myLooksData.map((lookData, index) => {
       const products: Product[] = lookData.items.map((itemData) => ({
         id: itemData.item._id,
@@ -396,18 +440,33 @@ export default function DiscoverPage() {
     });
   }, [myLooksData, activeFilter]);
 
+  // Apparel search state
+  const [apparelSearchQuery, setApparelSearchQuery] = useState('');
+
   // Use accumulated items for Apparel grid (for infinite scroll)
   const apparelItems: ApparelItem[] = accumulatedItems;
 
+  // Filter apparel items based on search query
+  const filteredApparelItems = useMemo(() => {
+    if (!apparelSearchQuery.trim()) return apparelItems;
+
+    const query = apparelSearchQuery.toLowerCase().trim();
+    return apparelItems.filter((item) =>
+      item.name.toLowerCase().includes(query) ||
+      item.brand?.toLowerCase().includes(query) ||
+      item.category.toLowerCase().includes(query)
+    );
+  }, [apparelItems, apparelSearchQuery]);
+
   // Get selected items for CreateLookSheet (using context's selectedItemIds)
-  const selectedItemsArray = apparelItems.filter((item) => selectedItemIds.has(item._id));
+  const selectedItemsArray = filteredApparelItems.filter((item) => selectedItemIds.has(item._id));
 
   // Handle welcome message dismissal for users who already have looks
   // (Centralized - uses scheduleWelcomeDismiss instead of raw setTimeout)
   useEffect(() => {
     if (shouldStartWorkflow && !shouldStartWorkflow.shouldStart) {
-      if (shouldStartWorkflow.reason === 'Looks already generated' || 
-          shouldStartWorkflow.completedCount > 0) {
+      if (shouldStartWorkflow.reason === 'Looks already generated' ||
+        shouldStartWorkflow.completedCount > 0) {
         scheduleWelcomeDismiss();
       }
     }
@@ -417,7 +476,7 @@ export default function DiscoverPage() {
   // Generation progress is now shown in the floating loader
   if (viewState === 'loading') {
     return (
-      <GeneratingScreen 
+      <GeneratingScreen
         generationProgress={null}
         viewState={viewState}
       />
@@ -491,38 +550,58 @@ export default function DiscoverPage() {
           )}
         </AnimatePresence> */}
 
-        {/* User greeting */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="mb-6"
-        >
-          <h2 className="text-2xl md:text-3xl font-serif text-foreground">
-            {activeFilter === 'my-look' 
-              ? 'Your curated looks ✨'
-              : activeFilter === 'explore' 
-                ? 'Discover new styles ✨'
-                : 'Shop the collection ✨'
-            }
-          </h2>
-          <p className="text-muted-foreground mt-1">
-            {activeFilter === 'my-look'
-              ? myLooks.length > 0 
-                ? `${myLooks.length} looks curated by Nima`
-                : 'Looks curated by Nima for you'
-              : activeFilter === 'explore'
-                ? exploreLooks.length > 0 
-                  ? `${exploreLooks.length} looks from the community`
-                  : 'Explore looks shared by others'
-                : apparelItems.length > 0
+        {/* User greeting - on mobile apparel tab, show CategoryCarousel instead */}
+        {activeFilter === 'apparel' ? (
+          <>
+            {/* Mobile: Show CategoryCarousel instead of text heading */}
+            <div className="md:hidden mb-6">
+              <CategoryCarousel userGender={currentUser?.gender} />
+            </div>
+            {/* Desktop: Show text heading */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="mb-6 hidden md:block"
+            >
+              <h2 className="text-2xl md:text-3xl font-serif text-foreground">
+                Shop the collection ✨
+              </h2>
+              <p className="text-muted-foreground mt-1">
+                {apparelItems.length > 0
                   ? `${apparelItems.length} items${paginationRef.current.hasMore ? '+' : ''}`
                   : 'Browse apparel items'
-            }
-          </p>
-        </motion.div>
+                }
+              </p>
+            </motion.div>
+          </>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="mb-6"
+          >
+            <h2 className="text-2xl md:text-3xl font-serif text-foreground">
+              {activeFilter === 'my-look'
+                ? 'Your curated looks ✨'
+                : 'Discover new styles ✨'
+              }
+            </h2>
+            <p className="text-muted-foreground mt-1">
+              {activeFilter === 'my-look'
+                ? myLooks.length > 0
+                  ? `${myLooks.length} looks curated by Nima`
+                  : 'Looks curated by Nima for you'
+                : exploreLooks.length > 0
+                  ? `${exploreLooks.length} looks from the community`
+                  : 'Explore looks shared by others'
+              }
+            </p>
+          </motion.div>
+        )}
 
-        {/* Filter tabs - 3 main pills */}
+        {/* Filter tabs - 3 main pills + Create a Look button */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -547,7 +626,7 @@ export default function DiscoverPage() {
                 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
                 transition-all duration-200
                 ${activeFilter === filter.id
-                  ? 'bg-primary text-primary-foreground' 
+                  ? 'bg-primary text-primary-foreground'
                   : 'bg-surface hover:bg-surface-alt text-foreground border border-border/50 hover:border-primary/30'
                 }
               `}
@@ -555,43 +634,31 @@ export default function DiscoverPage() {
               {filter.label}
             </button>
           ))}
-        </motion.div>
-
-        {/* Sub-elements under each tab */}
-        <AnimatePresence mode="wait">
-          {/* Create a Look button - shown under Apparel tab */}
+          
+          {/* Create a Look button - shown inline after Apparel tab */}
           {activeFilter === 'apparel' && (
-            <motion.div
-              key="apparel-create"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="mb-6 flex justify-center"
+            <button
+              onClick={() => {
+                if (isSelectionMode) {
+                  clearSelection();
+                } else {
+                  setSelectionMode(true);
+                }
+              }}
+              className={`
+                px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
+                transition-all duration-200 flex items-center gap-2
+                ${isSelectionMode
+                  ? 'bg-destructive text-destructive-foreground'
+                  : 'bg-secondary text-secondary-foreground hover:bg-secondary-hover'
+                }
+              `}
             >
-              <button
-                onClick={() => {
-                  if (isSelectionMode) {
-                    clearSelection();
-                  } else {
-                    setSelectionMode(true);
-                  }
-                }}
-                className={`
-                  px-6 py-2 rounded-full text-sm font-medium whitespace-nowrap
-                  transition-all duration-200 flex items-center gap-2
-                  ${isSelectionMode
-                    ? 'bg-destructive text-destructive-foreground'
-                    : 'bg-secondary text-secondary-foreground hover:bg-secondary-hover'
-                  }
-                `}
-              >
-                <Sparkles className="w-4 h-4" />
-                {isSelectionMode ? 'Cancel Selection' : 'Create a Look'}
-              </button>
-            </motion.div>
+              <Sparkles className="w-3 h-3" />
+              {isSelectionMode ? 'Cancel' : 'Create Look'}
+            </button>
           )}
-        </AnimatePresence>
+        </motion.div>
 
         {/* Selection mode indicator */}
         {isSelectionMode && activeFilter === 'apparel' && (
@@ -616,7 +683,14 @@ export default function DiscoverPage() {
           {activeFilter === 'apparel' ? (
             // Apparel section with infinite scroll and category carousels
             <div>
-              {/* Desktop: Category carousel at top */}
+              {/* Search bar for Apparel section */}
+              <ApparelSearchBar
+                value={apparelSearchQuery}
+                onChange={setApparelSearchQuery}
+                placeholder="Search by name, brand, or category..."
+              />
+
+              {/* Category carousel at top (desktop only - mobile shows it in header section) */}
               <div className="hidden md:block">
                 <CategoryCarousel userGender={currentUser?.gender} />
               </div>
@@ -637,35 +711,12 @@ export default function DiscoverPage() {
                     </div>
                   ))}
                 </div>
-              ) : apparelItems.length > 0 ? (
+              ) : filteredApparelItems.length > 0 ? (
                 <>
-                  {/* Mobile: Grid with carousel after every 8 items */}
+                  {/* Mobile: Grid (carousel is now at top, not interleaved) */}
                   <div className="md:hidden">
                     <div className="columns-2 gap-4">
-                      {apparelItems.map((item, index) => (
-                        <div key={item._id}>
-                          <ApparelItemCard
-                            item={item}
-                            index={index}
-                            isSelectionMode={isSelectionMode}
-                            isSelected={selectedItemIds.has(item._id)}
-                            onSelect={toggleItemSelection}
-                          />
-                          {/* Insert carousel after every 8 items */}
-                          {(index + 1) % ITEMS_PER_PAGE === 0 && index < apparelItems.length - 1 && (
-                            <div className="col-span-2 my-4 -mx-4 px-4">
-                              <CategoryCarousel isInlineVariant userGender={currentUser?.gender} />
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Desktop: Regular masonry grid */}
-                  <div className="hidden md:block">
-                    <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
-                      {apparelItems.map((item, index) => (
+                      {filteredApparelItems.map((item, index) => (
                         <ApparelItemCard
                           key={item._id}
                           item={item}
@@ -673,6 +724,28 @@ export default function DiscoverPage() {
                           isSelectionMode={isSelectionMode}
                           isSelected={selectedItemIds.has(item._id)}
                           onSelect={toggleItemSelection}
+                          isInfiniteScrollLoad={index >= ITEMS_PER_PAGE}
+                          isLiked={likedItemIdsSet.has(item._id)}
+                          onToggleLike={handleToggleLike}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Desktop: Regular masonry grid */}
+                  <div className="hidden md:block">
+                    <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
+                      {filteredApparelItems.map((item, index) => (
+                        <ApparelItemCard
+                          key={item._id}
+                          item={item}
+                          index={index}
+                          isSelectionMode={isSelectionMode}
+                          isSelected={selectedItemIds.has(item._id)}
+                          onSelect={toggleItemSelection}
+                          isInfiniteScrollLoad={index >= ITEMS_PER_PAGE}
+                          isLiked={likedItemIdsSet.has(item._id)}
+                          onToggleLike={handleToggleLike}
                         />
                       ))}
                     </div>
@@ -686,9 +759,12 @@ export default function DiscoverPage() {
                         <span className="text-sm">Loading more...</span>
                       </div>
                     )}
-                    {!isLoadingMore && !paginationRef.current.hasMore && apparelItems.length > 0 && (
+                    {!isLoadingMore && !paginationRef.current.hasMore && filteredApparelItems.length > 0 && (
                       <p className="text-sm text-muted-foreground">
-                        You&apos;ve seen all {apparelItems.length} items
+                        {apparelSearchQuery.trim()
+                          ? `Found ${filteredApparelItems.length} item${filteredApparelItems.length !== 1 ? 's' : ''}`
+                          : `You've seen all ${filteredApparelItems.length} items`
+                        }
                       </p>
                     )}
                   </div>
@@ -749,8 +825,8 @@ export default function DiscoverPage() {
                       Complete your onboarding to get personalized looks curated by Nima.
                       Your custom looks will appear in your Lookbooks.
                     </p>
-                    <Link 
-                      href="/onboarding" 
+                    <Link
+                      href="/onboarding"
                       className="inline-flex mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
                     >
                       Complete Onboarding
@@ -862,10 +938,10 @@ export default function DiscoverPage() {
 }
 
 // Custom generating screen that shows progress
-function GeneratingScreen({ 
+function GeneratingScreen({
   generationProgress,
   viewState,
-}: { 
+}: {
   generationProgress: { pending: number; processing: number; completed: number; total: number } | null;
   viewState: ViewState;
 }) {
@@ -1081,17 +1157,16 @@ function GeneratingScreen({
               {[...Array(generationProgress.total)].map((_, i) => {
                 const isCompleted = i < generationProgress.completed;
                 const isProcessing = i === generationProgress.completed && generationProgress.processing > 0;
-                
+
                 return (
                   <div
                     key={i}
-                    className={`w-16 h-24 rounded-lg overflow-hidden border ${
-                      isCompleted 
-                        ? 'bg-primary/20 border-primary/50' 
-                        : isProcessing 
-                          ? 'bg-secondary/20 border-secondary/50' 
+                    className={`w-16 h-24 rounded-lg overflow-hidden border ${isCompleted
+                        ? 'bg-primary/20 border-primary/50'
+                        : isProcessing
+                          ? 'bg-secondary/20 border-secondary/50'
                           : 'bg-surface-alt border-border/50'
-                    }`}
+                      }`}
                   >
                     {isCompleted ? (
                       <div className="w-full h-full flex items-center justify-center">

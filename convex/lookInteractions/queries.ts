@@ -130,7 +130,12 @@ export const getUserInteractionForLook = query({
  */
 const activityNotificationValidator = v.object({
   _id: v.id('look_interactions'),
-  interactionType: v.union(v.literal('love'), v.literal('dislike'), v.literal('save')),
+  interactionType: v.union(
+    v.literal('love'),
+    v.literal('dislike'),
+    v.literal('save'),
+    v.literal('recreate')
+  ),
   createdAt: v.number(),
   seenByOwner: v.boolean(),
   look: v.object({
@@ -162,7 +167,7 @@ export const getActivityNotifications = query({
     }
   ): Promise<Array<{
     _id: Id<'look_interactions'>;
-    interactionType: 'love' | 'dislike' | 'save';
+    interactionType: 'love' | 'dislike' | 'save' | 'recreate';
     createdAt: number;
     seenByOwner: boolean;
     look: {
@@ -227,7 +232,7 @@ export const getActivityNotifications = query({
     // Enrich with look and user data
     const notifications: Array<{
       _id: Id<'look_interactions'>;
-      interactionType: 'love' | 'dislike' | 'save';
+      interactionType: 'love' | 'dislike' | 'save' | 'recreate';
       createdAt: number;
       seenByOwner: boolean;
       look: {

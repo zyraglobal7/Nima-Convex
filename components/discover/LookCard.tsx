@@ -79,11 +79,41 @@ export function LookCard({ look, index }: LookCardProps) {
                 <p className="mt-3 text-xs text-muted-foreground">Generating look...</p>
               </div>
             ) : generationFailed ? (
-              /* Failed State UI */
-              <div className="w-full h-full bg-gradient-to-br from-surface-alt to-surface flex flex-col items-center justify-center">
-                <AlertCircle className="w-8 h-8 text-muted-foreground mb-2" />
-                <p className="text-xs text-muted-foreground">Generation failed</p>
-                <p className="text-xs text-muted-foreground/70 mt-1">Tap to retry</p>
+              /* Failed State UI - More user-friendly */
+              <div className="w-full h-full bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 flex flex-col items-center justify-center p-4">
+                <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center mb-3">
+                  <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                </div>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200 text-center">
+                  Image generation failed
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-400 text-center mt-1">
+                  Tap to view look and retry
+                </p>
+                {/* Show product preview */}
+                <div className="flex gap-1 mt-3">
+                  {look.products.slice(0, 3).map((product) => (
+                    <div
+                      key={product.id}
+                      className="w-10 h-10 rounded-lg bg-white/50 dark:bg-background/50 border border-amber-200 dark:border-amber-700/50 overflow-hidden relative"
+                    >
+                      {product.imageUrl ? (
+                        <Image
+                          src={product.imageUrl}
+                          alt={product.name}
+                          fill
+                          sizes="40px"
+                          unoptimized
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+                          {product.category.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : (
               /* Fallback - show items preview */

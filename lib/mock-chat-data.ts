@@ -1,5 +1,5 @@
 // Mock data for Ask Nima chat feature
-import { Look, mockLooks, type Product } from './mock-data';
+import { Look, type Product } from './mock-data';
 
 // ============================================================================
 // Types
@@ -151,68 +151,11 @@ export const searchingMessages = [
 ];
 
 // ============================================================================
-// Mock Try-On Images (using fashion model images as placeholders)
-// ============================================================================
-
-const tryOnImages = [
-  'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=600&h=900&fit=crop',
-  'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&h=900&fit=crop',
-  'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=600&h=900&fit=crop',
-  'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=600&h=900&fit=crop',
-  'https://images.unsplash.com/photo-1485968579580-b6d095142e6e?w=600&h=900&fit=crop',
-  'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=600&h=900&fit=crop',
-];
-
-// ============================================================================
 // Mock Search Sessions (Fitting Room Results)
+// NOTE: Mock sessions have been removed - all session data should come from the database
 // ============================================================================
 
-function createFittingLook(look: Look, tryOnIndex: number): FittingLook {
-  return {
-    ...look,
-    userTryOnImageUrl: tryOnImages[tryOnIndex % tryOnImages.length],
-    isLiked: false,
-    isSaved: false,
-  };
-}
-
-export const mockSearchSessions: SearchSession[] = [
-  {
-    id: 'session-001',
-    chatId: 'chat-001',
-    query: 'Wedding guest outfit - garden party, semi-formal',
-    looks: [
-      createFittingLook(mockLooks[0], 0),
-      createFittingLook(mockLooks[4], 1),
-      createFittingLook(mockLooks[5], 2),
-      createFittingLook(mockLooks[10], 3),
-    ],
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-  },
-  {
-    id: 'session-002',
-    chatId: 'chat-001',
-    query: 'Casual Friday office look',
-    looks: [
-      createFittingLook(mockLooks[1], 2),
-      createFittingLook(mockLooks[3], 3),
-      createFittingLook(mockLooks[7], 4),
-    ],
-    createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
-  },
-  {
-    id: 'session-003',
-    chatId: 'chat-002',
-    query: 'Birthday dinner outfit - upscale restaurant',
-    looks: [
-      createFittingLook(mockLooks[2], 1),
-      createFittingLook(mockLooks[5], 3),
-      createFittingLook(mockLooks[8], 5),
-      createFittingLook(mockLooks[11], 0),
-    ],
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // Yesterday
-  },
-];
+export const mockSearchSessions: SearchSession[] = [];
 
 // ============================================================================
 // Mock Chat Conversations
@@ -468,17 +411,13 @@ export function createNewConversation(): ChatConversation {
 }
 
 // Generate mock fitting results for a new search
+// NOTE: This function now returns an empty session - real data should come from the database
 export function generateMockFittingResults(chatId: string, query: string): SearchSession {
-  // Pick 3-5 random looks from mockLooks
-  const numLooks = 3 + Math.floor(Math.random() * 3);
-  const shuffled = [...mockLooks].sort(() => Math.random() - 0.5);
-  const selectedLooks = shuffled.slice(0, numLooks);
-
   return {
     id: generateSessionId(),
     chatId,
     query,
-    looks: selectedLooks.map((look, index) => createFittingLook(look, index)),
+    looks: [], // No mock looks - data comes from database
     createdAt: new Date(),
   };
 }

@@ -12,12 +12,16 @@ import {
   Sparkles,
   X,
   Loader2,
-  Plus
+  Plus,
+  AlertTriangle,
+  ShoppingCart,
+  Check
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
+import { CartIcon } from '@/components/cart/CartIcon';
 import { NimaChatBubble, ProductCard } from '@/components/discover';
 import { ShareLookModal } from '@/components/looks/ShareLookModal';
 import { FriendRequestPopup } from '@/components/friends/FriendRequestPopup';
@@ -138,6 +142,8 @@ export default function LookDetailPage() {
   const [newLookbookName, setNewLookbookName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isAddingLookToCart, setIsAddingLookToCart] = useState(false);
+  const [lookAddedToCart, setLookAddedToCart] = useState(false);
 
   // Determine if we're dealing with a public ID or internal ID
   const isPublic = lookId ? isPublicId(lookId) : false;
@@ -166,6 +172,9 @@ export default function LookDetailPage() {
   // Mutations for lookbook operations
   const addToLookbookMutation = useMutation(api.lookbooks.mutations.addToLookbook);
   const createLookbookMutation = useMutation(api.lookbooks.mutations.createLookbook);
+  
+  // Cart mutation
+  const addToCartMutation = useMutation(api.cart.mutations.addToCart);
 
   // Look interactions - queries
   const userInteraction = useQuery(
@@ -262,9 +271,11 @@ export default function LookDetailPage() {
     return 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&h=900&fit=crop';
   }, [lookData?.lookImage?.imageUrl, products]);
 
-  // Check if image is being generated
+  // Check if image is being generated or failed
   const isGenerating = lookData?.look?.generationStatus === 'pending' || 
                      lookData?.look?.generationStatus === 'processing';
+  const generationFailed = lookData?.look?.generationStatus === 'failed' ||
+                          lookData?.lookImage?.status === 'failed';
 
   // Safe navigation helper
   const safeGoBack = useCallback(() => {
@@ -394,6 +405,48 @@ export default function LookDetailPage() {
     }
   };
 
+  // Handle adding entire look to cart
+  const handleAddLookToCart = async () => {
+    if (isAddingLookToCart || lookAddedToCart || products.length === 0) return;
+    
+    setIsAddingLookToCart(true);
+    let successCount = 0;
+    let failCount = 0;
+    
+    try {
+      // Add each product to cart
+      for (const product of products) {
+        try {
+          const result = await addToCartMutation({ itemId: product.id as Id<'items'> });
+          if (result.success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch {
+          failCount++;
+        }
+      }
+      
+      if (successCount > 0) {
+        setLookAddedToCart(true);
+        if (failCount > 0) {
+          toast.success(`Added ${successCount} items to cart (${failCount} failed)`);
+        } else {
+          toast.success(`Added all ${successCount} items to cart!`);
+        }
+        // Reset after 3 seconds
+        setTimeout(() => setLookAddedToCart(false), 3000);
+      } else {
+        toast.error('Failed to add items to cart');
+      }
+    } catch (error) {
+      toast.error('Failed to add look to cart');
+    } finally {
+      setIsAddingLookToCart(false);
+    }
+  };
+
   // Loading state
   if (lookData === undefined) {
     return (
@@ -448,6 +501,7 @@ export default function LookDetailPage() {
 
             {/* Actions */}
             <div className="flex items-center gap-1">
+              <CartIcon />
               <ThemeToggle />
               <MessagesIcon />
               <button
@@ -477,6 +531,45 @@ export default function LookDetailPage() {
                 <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
                 <p className="text-sm font-medium text-foreground">Generating your look...</p>
                 <p className="text-xs text-muted-foreground mt-1">This may take a few moments</p>
+              </div>
+            ) : generationFailed ? (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 p-6">
+                <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center mb-4">
+                  <AlertTriangle className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+                </div>
+                <p className="text-lg font-medium text-amber-800 dark:text-amber-200 text-center mb-2">
+                  Image Generation Failed
+                </p>
+                <p className="text-sm text-amber-600 dark:text-amber-400 text-center mb-4 max-w-xs">
+                  We couldn&apos;t generate the look image. You can still view the items and recreate this look.
+                </p>
+                {/* Show product preview */}
+                <div className="flex gap-2 mb-4">
+                  {products.slice(0, 4).map((product) => (
+                    <div
+                      key={product.id}
+                      className="w-16 h-16 rounded-xl bg-white/50 dark:bg-background/50 border border-amber-200 dark:border-amber-700/50 overflow-hidden relative shadow-sm"
+                    >
+                      {product.imageUrl ? (
+                        <Image
+                          src={product.imageUrl}
+                          alt={product.name}
+                          fill
+                          sizes="64px"
+                          unoptimized
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
+                          {product.category.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
+                  {products.length} items in this look
+                </p>
               </div>
             ) : (
               <Image
@@ -645,13 +738,52 @@ export default function LookDetailPage() {
           className="space-y-3"
         >
           <h3 className="text-lg font-medium text-foreground mb-4">Shop this look</h3>
-          {products.map((product, index) => (
-            <ProductCard key={product.id} product={product} index={index} />
-          ))}
+          
+          {/* Show unavailable items notice if some/all items are missing */}
+          {(() => {
+            const totalItems = look.itemIds.length;
+            const availableItems = products.length;
+            const unavailableCount = totalItems - availableItems;
+            
+            if (unavailableCount > 0) {
+              return (
+                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl mb-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-amber-800 dark:text-amber-200">
+                        {availableItems === 0 
+                          ? 'Items no longer available'
+                          : `${unavailableCount} item${unavailableCount > 1 ? 's' : ''} no longer available`
+                        }
+                      </p>
+                      <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                        {availableItems === 0
+                          ? 'All items in this look have been removed or are no longer in stock. This look cannot be recreated.'
+                          : `Some items from this look have been removed or are no longer in stock. You can still shop the available items below.`
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
+          
+          {products.length > 0 ? (
+            products.map((product, index) => (
+              <ProductCard key={product.id} product={product} index={index} />
+            ))
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">No items available to display.</p>
+            </div>
+          )}
         </motion.div>
 
-        {/* Recreate Look Button */}
-        {look.creatorUserId && currentUser && look.creatorUserId !== currentUser._id && (
+        {/* Recreate Look Button - only show if items are available */}
+        {look.creatorUserId && currentUser && look.creatorUserId !== currentUser._id && products.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -669,13 +801,45 @@ export default function LookDetailPage() {
 
       {/* Fixed bottom CTA */}
       <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/50 p-4">
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-3xl mx-auto flex gap-3">
+          {/* Add to Cart button */}
+          <button 
+            onClick={handleAddLookToCart}
+            disabled={isAddingLookToCart || lookAddedToCart || products.length === 0}
+            className={`flex-1 h-14 rounded-full font-medium text-base transition-all duration-300 flex items-center justify-center gap-2 ${
+              lookAddedToCart
+                ? 'bg-green-600 text-white'
+                : 'bg-surface border border-border hover:border-primary/30 text-foreground'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            {isAddingLookToCart ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Adding...</span>
+              </>
+            ) : lookAddedToCart ? (
+              <>
+                <Check className="w-5 h-5" />
+                <span>Added to Cart</span>
+              </>
+            ) : (
+              <>
+                <ShoppingCart className="w-5 h-5" />
+                <span>Add to Cart</span>
+              </>
+            )}
+          </button>
+          
+          {/* Buy All button */}
           <button 
             onClick={handleBuyClick}
-            className="w-full h-14 bg-primary hover:bg-primary-hover text-primary-foreground rounded-full font-medium text-base transition-all duration-300 hover:shadow-lg flex items-center justify-center gap-2"
+            disabled={products.length === 0}
+            className="flex-1 h-14 bg-primary hover:bg-primary-hover text-primary-foreground rounded-full font-medium text-base transition-all duration-300 hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Sparkles className="w-5 h-5" />
-            Buy all {products.length} items • {formatPrice(look.totalPrice, look.currency)}
+            <span className="hidden sm:inline">Buy all {products.length} items</span>
+            <span className="sm:hidden">Buy All</span>
+            <span>• {formatPrice(look.totalPrice, look.currency)}</span>
           </button>
         </div>
       </div>
