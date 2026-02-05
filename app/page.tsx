@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Authenticated, Unauthenticated, useQuery } from 'convex/react';
 import { GateSplash, OnboardingWizard } from '@/components/onboarding';
 import { useOnboardingCompletion } from '@/lib/hooks/useOnboardingCompletion';
@@ -242,60 +243,22 @@ function NeedsOnboardingPrompt({ onboardingState }: { onboardingState: Onboardin
 }
 
 /**
- * Placeholder for the main feed (to be implemented)
+ * Redirect authenticated users with completed onboarding to /discover
  */
 function MainFeedPlaceholder() {
-  const user = useQuery(api.users.queries.getCurrentUser);
+  const router = useRouter();
 
+  useEffect(() => {
+    // Redirect to discover page for authenticated users
+    router.replace('/discover');
+  }, [router]);
+
+  // Show brief loading while redirecting
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
       <div className="max-w-md text-center space-y-6">
-        <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-          <span className="text-3xl">🎉</span>
-        </div>
-        <h1 className="text-3xl font-serif font-semibold text-foreground">
-          Welcome back{user?.firstName ? `, ${user.firstName}` : ''}!
-        </h1>
-        <p className="text-muted-foreground">
-          Your personalized feed is coming soon. Check back later!
-        </p>
-
-        {/* Profile Summary */}
-        {user && (
-          <div className="bg-surface rounded-xl p-4 text-left space-y-2 text-sm">
-            <p className="font-medium text-foreground">Your Profile</p>
-            {user.stylePreferences.length > 0 && (
-              <p className="text-muted-foreground">
-                Style: {user.stylePreferences.slice(0, 3).join(', ')}
-              </p>
-            )}
-            {user.budgetRange && (
-              <p className="text-muted-foreground">
-                Budget:{' '}
-                {user.budgetRange === 'low'
-                  ? 'Smart Saver'
-                  : user.budgetRange === 'mid'
-                    ? 'Best of Both'
-                    : 'Treat Yourself'}
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="flex flex-col gap-3">
-          <a
-            href="/discover"
-            className="inline-block px-6 py-3 bg-primary text-primary-foreground rounded-full hover:bg-primary-hover transition-colors"
-          >
-            Explore Looks
-          </a>
-          <a
-            href="/sign-out"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Sign out
-          </a>
-        </div>
+        <Loader2 className="w-12 h-12 mx-auto text-primary animate-spin" />
+        <p className="text-muted-foreground">Taking you to your feed...</p>
       </div>
     </div>
   );

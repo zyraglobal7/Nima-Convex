@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Sparkles, Heart, Users, ArrowLeft, User } from 'lucide-react';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
+import { CartIcon } from '@/components/cart/CartIcon';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery } from 'convex/react';
@@ -46,6 +47,7 @@ export default function ExplorePage() {
 
             {/* Right actions */}
             <div className="flex items-center gap-2">
+              <CartIcon />
               <ThemeToggle />
               <MessagesIcon />
             </div>
@@ -143,6 +145,9 @@ export default function ExplorePage() {
           >
             {publicLooksData.looks
               .filter((lookData) => {
+                // Filter out looks with 0 items (deleted/inactive items)
+                if (lookData.itemCount === 0) return false;
+                
                 if (selectedFilter === 'All') return true;
                 const occasion = lookData.look.occasion?.toLowerCase() || '';
                 const tags = lookData.look.styleTags.map(t => t.toLowerCase());

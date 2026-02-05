@@ -143,6 +143,7 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   const [generationProgress, setGenerationProgress] = useState<string>('');
   const [createdLookIds, setCreatedLookIds] = useState<Id<'looks'>[]>([]);
   const [scenario, setScenario] = useState<'fresh' | 'remix'>('fresh');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const remainingSearches = Math.max(0, 20 - (currentUser.dailyTryOnCount || 0));
 
@@ -174,6 +175,8 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   const createLooksFromChat = useMutation(api.chat.mutations.createLooksFromChat);
   const createRemixedLook = useMutation(api.chat.mutations.createRemixedLook);
   const generateChatLookImages = useAction(api.chat.actions.generateChatLookImages);
+  const generateUploadUrl = useMutation(api.userImages.mutations.generateUploadUrl);
+  const findSimilarItems = useAction(api.search.visualSearch.findSimilarItems);
   
   // Query user's recent looks for AI context
   const userRecentLooks = useQuery(api.chat.queries.getUserRecentLooks, { limit: 10 });
@@ -423,6 +426,54 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
       });
   };
 
+  // Handle image upload for visual search
+  const handleImageUpload = async (file: File) => {
+    try {
+      setIsUploadingImage(true);
+      
+      // 1. Get upload URL
+      const uploadUrl = await generateUploadUrl();
+      
+      // 2. Upload the file to Convex storage
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to upload image');
+      }
+      
+      const { storageId } = await response.json();
+      
+      // 3. Call visual search action
+      const result = await findSimilarItems({ imageStorageId: storageId });
+      
+      if (!result.success || result.items.length === 0) {
+        // No matches found - add a message to chat
+        setViewState('chatting');
+        setChatState('no_matches');
+        // The UI will show a "no matches" state
+        return;
+      }
+      
+      // 4. Start a conversation with the search results context
+      const searchDescription = result.extractedAttributes?.description || 'uploaded image';
+      const itemNames = result.items.slice(0, 3).map(item => item.name).join(', ');
+      
+      // Switch to chatting view and send a contextual message
+      setViewState('chatting');
+      handleSendMessage(`I'm looking for items similar to this: ${searchDescription}. I found some matches like ${itemNames}. Can you help me style these?`);
+      
+    } catch (error) {
+      console.error('[Visual Search] Error:', error);
+      // Could show a toast error here
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   const handlePromptSelect = (prompt: string) => {
     handleSendMessage(prompt);
   };
@@ -669,7 +720,12 @@ We're always adding new items, so check back soon! ✨`,
         {/* Fixed bottom input */}
         <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-md border-t border-border/50 p-4">
           <div className="max-w-3xl mx-auto">
-            <ChatInput onSend={handleSendMessage} placeholder="Describe what you're looking for..." />
+            <ChatInput 
+              onSend={handleSendMessage} 
+              onImageUpload={handleImageUpload}
+              isUploadingImage={isUploadingImage}
+              placeholder="Describe what you're looking for..." 
+            />
           </div>
         </div>
 
@@ -833,6 +889,8 @@ We're always adding new items, so check back soon! ✨`,
         <div className="max-w-3xl mx-auto">
           <ChatInput
             onSend={handleSendMessage}
+            onImageUpload={handleImageUpload}
+            isUploadingImage={isUploadingImage}
             disabled={chatState === 'curating' || chatState === 'generating' || isAiLoading}
             placeholder={
               chatState === 'curating'

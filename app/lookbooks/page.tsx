@@ -1,19 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Plus, Settings, User, Heart, FolderOpen } from 'lucide-react';
+import { Sparkles, Plus, Settings, User, Heart, FolderOpen, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useQuery } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LookbookCard } from '@/components/lookbooks/LookbookCard';
 import { CreateLookbookModal } from '@/components/lookbooks/CreateLookbookModal';
 import { LookCard } from '@/components/discover';
-import type { Doc } from '@/convex/_generated/dataModel';
+import { ApparelItemCard, type ApparelItem } from '@/components/discover/ApparelItemCard';
+import type { Doc, Id } from '@/convex/_generated/dataModel';
 import type { Look, Product } from '@/lib/mock-data';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
+import { formatPrice } from '@/lib/utils/format';
 
 // Extended Look type with generation status
 interface LookWithStatus extends Look {
@@ -21,7 +23,7 @@ interface LookWithStatus extends Look {
   generationFailed: boolean;
 }
 
-// Wrapper component that fetches cover image
+// Wrapper component that fetches cover image and item previews
 function LookbookCardWithCover({ lookbook, index }: { lookbook: Doc<'lookbooks'>; index: number }) {
   const lookbookWithCover = useQuery(api.lookbooks.queries.getLookbookWithCover, {
     lookbookId: lookbook._id,
@@ -31,12 +33,13 @@ function LookbookCardWithCover({ lookbook, index }: { lookbook: Doc<'lookbooks'>
     <LookbookCard
       lookbook={lookbook}
       coverImageUrl={lookbookWithCover?.coverImageUrl || null}
+      itemImageUrls={lookbookWithCover?.itemImageUrls || []}
       index={index}
     />
   );
 }
 
-type TabType = 'saved-looks' | 'lookbooks';
+type TabType = 'saved-looks' | 'liked-items' | 'lookbooks';
 
 export default function LookbooksPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -44,6 +47,29 @@ export default function LookbooksPage() {
   
   const lookbooks = useQuery(api.lookbooks.queries.listUserLookbooks, { includeArchived: false });
   const savedLooksData = useQuery(api.looks.queries.getSavedLooks, { limit: 50 });
+  
+  // Query for liked items
+  const likedItemsData = useQuery(api.items.likes.getLikedItems, { limit: 50 });
+  const toggleLikeMutation = useMutation(api.items.likes.toggleLike);
+  
+  // Handle toggling item likes
+  const handleToggleLike = useCallback(async (itemId: Id<'items'>) => {
+    await toggleLikeMutation({ itemId });
+  }, [toggleLikeMutation]);
+  
+  // Transform liked items to ApparelItem format
+  const likedItems: ApparelItem[] = likedItemsData?.map((item) => ({
+    _id: item._id,
+    publicId: item.publicId,
+    name: item.name,
+    brand: item.brand,
+    category: item.category,
+    price: item.price,
+    currency: item.currency,
+    originalPrice: item.originalPrice,
+    colors: item.colors,
+    primaryImageUrl: item.primaryImageUrl,
+  })) ?? [];
 
   // Transform saved looks data to LookWithStatus format
   const [savedLooks, setSavedLooks] = useState<LookWithStatus[]>([]);
@@ -94,6 +120,7 @@ export default function LookbooksPage() {
   }, [savedLooksData]);
 
   const savedLooksCount = savedLooks.length;
+  const likedItemsCount = likedItems.length;
   const lookbooksCount = lookbooks?.length ?? 0;
 
   return (
@@ -134,10 +161,12 @@ export default function LookbooksPage() {
           <div className="relative bg-surface-alt rounded-full p-1 flex">
             {/* Sliding background */}
             <motion.div
-              className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-primary rounded-full"
+              className="absolute top-1 bottom-1 w-[calc(33.33%-4px)] bg-primary rounded-full"
               initial={false}
               animate={{
-                x: activeTab === 'saved-looks' ? 0 : 'calc(100% + 4px)',
+                x: activeTab === 'saved-looks' ? 0 
+                  : activeTab === 'liked-items' ? 'calc(100% + 4px)' 
+                  : 'calc(200% + 8px)',
               }}
               transition={{ type: 'spring', stiffness: 500, damping: 30 }}
             />
@@ -146,21 +175,37 @@ export default function LookbooksPage() {
             <button
               onClick={() => setActiveTab('saved-looks')}
               className={`
-                relative z-10 px-5 py-2 rounded-full text-sm font-medium transition-colors duration-200
+                relative z-10 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200
                 flex items-center gap-2
                 ${activeTab === 'saved-looks' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}
               `}
             >
               <Heart className="w-4 h-4" />
-              Saved Looks
+              <span className="hidden sm:inline">Saved Looks</span>
+              <span className="sm:hidden">Looks</span>
               <span className={`text-xs ${activeTab === 'saved-looks' ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                 ({savedLooksCount})
               </span>
             </button>
             <button
+              onClick={() => setActiveTab('liked-items')}
+              className={`
+                relative z-10 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200
+                flex items-center gap-2
+                ${activeTab === 'liked-items' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}
+              `}
+            >
+              <ShoppingBag className="w-4 h-4" />
+              <span className="hidden sm:inline">Liked Items</span>
+              <span className="sm:hidden">Items</span>
+              <span className={`text-xs ${activeTab === 'liked-items' ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                ({likedItemsCount})
+              </span>
+            </button>
+            <button
               onClick={() => setActiveTab('lookbooks')}
               className={`
-                relative z-10 px-5 py-2 rounded-full text-sm font-medium transition-colors duration-200
+                relative z-10 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200
                 flex items-center gap-2
                 ${activeTab === 'lookbooks' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}
               `}
@@ -212,6 +257,51 @@ export default function LookbooksPage() {
                 <div className="text-center py-16">
                   <div className="w-8 h-8 mx-auto mb-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                   <p className="text-muted-foreground">Loading saved looks...</p>
+                </div>
+              )}
+            </motion.div>
+          ) : activeTab === 'liked-items' ? (
+            <motion.div
+              key="liked-items"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.2 }}
+            >
+              {/* Liked Items Grid */}
+              {likedItems.length > 0 ? (
+                <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
+                  {likedItems.map((item, index) => (
+                    <ApparelItemCard
+                      key={item._id}
+                      item={item}
+                      index={index}
+                      isLiked={true}
+                      onToggleLike={handleToggleLike}
+                    />
+                  ))}
+                </div>
+              ) : likedItemsData && likedItemsData.length === 0 ? (
+                <div className="text-center py-16">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-alt flex items-center justify-center">
+                    <ShoppingBag className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-medium text-foreground mb-2">No liked items yet</h3>
+                  <p className="text-muted-foreground max-w-md mx-auto mb-6">
+                    Items you like from the Apparel section will appear here.
+                  </p>
+                  <Link
+                    href="/discover?tab=apparel"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Browse Apparel
+                  </Link>
+                </div>
+              ) : (
+                <div className="text-center py-16">
+                  <div className="w-8 h-8 mx-auto mb-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  <p className="text-muted-foreground">Loading liked items...</p>
                 </div>
               )}
             </motion.div>

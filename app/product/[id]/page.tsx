@@ -24,6 +24,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { formatPrice } from '@/lib/utils/format';
 import { toast } from 'sonner';
+import { CartIcon } from '@/components/cart/CartIcon';
 
 type TryOnStatus = 'idle' | 'starting' | 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -38,6 +39,7 @@ export default function ProductDetailPage() {
   const [tryOnId, setTryOnId] = useState<Id<'item_try_ons'> | null>(null);
   const [showTryOnResult, setShowTryOnResult] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [addedToCart, setAddedToCart] = useState(false);
 
   // Queries
   const itemData = useQuery(api.items.queries.getItemWithImage, { itemId });
@@ -154,12 +156,20 @@ export default function ProductDetailPage() {
   };
 
   const handleAddToCart = async () => {
+    if (addedToCart) return; // Already added
+    
     setIsAddingToCart(true);
     try {
-      await addToCart({ itemId });
-      toast.success('Added to cart!');
-      setShowTryOnResult(false);
-      // Don't auto-redirect - let user continue browsing
+      const result = await addToCart({ itemId });
+      if (result.success) {
+        setAddedToCart(true);
+        toast.success('Added to cart!');
+        setShowTryOnResult(false);
+        // Reset the "added" state after 3 seconds so user can add again
+        setTimeout(() => setAddedToCart(false), 3000);
+      } else {
+        toast.error(result.message || 'Failed to add to cart');
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to add to cart');
     } finally {
@@ -191,6 +201,7 @@ export default function ProductDetailPage() {
           </button>
 
           <div className="flex items-center gap-2">
+            <CartIcon />
             <button
               onClick={handleShare}
               className="p-2 rounded-full hover:bg-surface-alt transition-colors"
@@ -393,13 +404,22 @@ export default function ProductDetailPage() {
           {/* Add to Cart button - accessible without trying on */}
           <button
             onClick={handleAddToCart}
-            disabled={isAddingToCart || !item.inStock}
-            className="flex-1 py-4 rounded-xl font-medium text-base transition-all duration-300 flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:bg-primary-hover active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isAddingToCart || !item.inStock || addedToCart}
+            className={`flex-1 py-4 rounded-xl font-medium text-base transition-all duration-300 flex items-center justify-center gap-2 active:scale-[0.98] disabled:cursor-not-allowed ${
+              addedToCart
+                ? 'bg-green-600 text-white'
+                : 'bg-primary text-primary-foreground hover:bg-primary-hover disabled:opacity-50'
+            }`}
           >
             {isAddingToCart ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
                 <span>Adding...</span>
+              </>
+            ) : addedToCart ? (
+              <>
+                <Check className="w-5 h-5" />
+                <span>Added to Cart</span>
               </>
             ) : !item.inStock ? (
               <>
@@ -506,13 +526,22 @@ export default function ProductDetailPage() {
 
                 <button
                   onClick={handleAddToCart}
-                  disabled={isAddingToCart}
-                  className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary-hover transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  disabled={isAddingToCart || addedToCart}
+                  className={`w-full py-3 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
+                    addedToCart
+                      ? 'bg-green-600 text-white'
+                      : 'bg-primary text-primary-foreground hover:bg-primary-hover'
+                  }`}
                 >
                   {isAddingToCart ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
                       Adding...
+                    </>
+                  ) : addedToCart ? (
+                    <>
+                      <Check className="w-5 h-5" />
+                      Added to Cart
                     </>
                   ) : (
                     <>
