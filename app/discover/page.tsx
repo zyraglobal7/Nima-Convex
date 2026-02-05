@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CreateLookSheet, LookCardWithCreator, LookCard, useFloatingLoader, CategoryCarousel, ApparelSearchBar } from '@/components/discover';
 import { ApparelItemCard, type ApparelItem } from '@/components/discover/ApparelItemCard';
@@ -45,7 +45,7 @@ interface LookWithStatus extends Look {
 // Items per page for infinite scroll
 const ITEMS_PER_PAGE = 8;
 
-export default function DiscoverPage() {
+function DiscoverPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -1205,5 +1205,26 @@ function GeneratingScreen({
         </div>
       </div>
     </div>
+  );
+}
+
+// Loading fallback for Suspense boundary
+function DiscoverLoadingFallback() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-muted-foreground text-sm">Loading discover...</p>
+      </div>
+    </div>
+  );
+}
+
+// Wrapper component with Suspense boundary for useSearchParams
+export default function DiscoverPage() {
+  return (
+    <Suspense fallback={<DiscoverLoadingFallback />}>
+      <DiscoverPageContent />
+    </Suspense>
   );
 }
