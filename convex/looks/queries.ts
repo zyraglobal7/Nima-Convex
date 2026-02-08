@@ -68,6 +68,7 @@ const itemValidator = v.object({
     v.literal('bottom'),
     v.literal('dress'),
     v.literal('outfit'),
+    v.literal('swimwear'),
     v.literal('outerwear'),
     v.literal('shoes'),
     v.literal('accessory'),

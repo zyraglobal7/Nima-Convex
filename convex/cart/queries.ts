@@ -8,6 +8,7 @@ const categoryValidator = v.union(
   v.literal('bottom'),
   v.literal('dress'),
   v.literal('outfit'),
+  v.literal('swimwear'),
   v.literal('outerwear'),
   v.literal('shoes'),
   v.literal('accessory'),
@@ -72,7 +73,7 @@ export const getCart = query({
         price: number;
         currency: string;
         originalPrice?: number;
-        category: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+        category: 'top' | 'bottom' | 'dress' | 'outfit' | 'swimwear' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
         gender: 'male' | 'female' | 'unisex';
         colors: string[];
         sizes: string[];
