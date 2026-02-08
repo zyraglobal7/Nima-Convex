@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams} from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft,
   Heart,
   Share2,
   ExternalLink,
@@ -16,6 +15,8 @@ import {
   AlertCircle,
   ShoppingBag,
   ShoppingCart,
+  Bookmark,
+  BookmarkCheck,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -24,13 +25,11 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { formatPrice } from '@/lib/utils/format';
 import { toast } from 'sonner';
-import { CartIcon } from '@/components/cart/CartIcon';
 
 type TryOnStatus = 'idle' | 'starting' | 'pending' | 'processing' | 'completed' | 'failed';
 
 export default function ProductDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const itemId = params.id as Id<'items'>;
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -40,6 +39,7 @@ export default function ProductDetailPage() {
   const [showTryOnResult, setShowTryOnResult] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
+  const [isSavingTryOn, setIsSavingTryOn] = useState(false);
 
   // Queries
   const itemData = useQuery(api.items.queries.getItemWithImage, { itemId });
@@ -49,23 +49,24 @@ export default function ProductDetailPage() {
   // Mutations
   const startTryOn = useMutation(api.workflows.index.startItemTryOn);
   const quickSave = useMutation(api.lookbooks.mutations.quickSave);
+  const saveTryOn = useMutation(api.lookbooks.mutations.saveTryOnToLookbook);
   const addToCart = useMutation(api.cart.mutations.addToCart);
 
   // Poll for try-on status if we have a tryOnId
   const tryOnResult = useQuery(
     api.itemTryOns.queries.getItemTryOnWithDetails,
-    tryOnId ? { itemTryOnId: tryOnId } : 'skip'
+    tryOnId ? { itemTryOnId: tryOnId } : 'skip',
   );
+
+  // Check if this try-on is already saved
+  const isSaved = useQuery(api.lookbooks.queries.isTryOnSaved, tryOnId ? { itemTryOnId: tryOnId } : 'skip');
 
   // Check for existing completed try-on
   useEffect(() => {
     if (existingTryOn?.tryOn.status === 'completed' && existingTryOn.imageUrl) {
       setTryOnId(existingTryOn.tryOn._id);
       setTryOnStatus('completed');
-    } else if (
-      existingTryOn?.tryOn.status === 'pending' ||
-      existingTryOn?.tryOn.status === 'processing'
-    ) {
+    } else if (existingTryOn?.tryOn.status === 'pending' || existingTryOn?.tryOn.status === 'processing') {
       setTryOnId(existingTryOn.tryOn._id);
       setTryOnStatus(existingTryOn.tryOn.status);
     }
@@ -157,7 +158,7 @@ export default function ProductDetailPage() {
 
   const handleAddToCart = async () => {
     if (addedToCart) return; // Already added
-    
+
     setIsAddingToCart(true);
     try {
       const result = await addToCart({ itemId });
@@ -177,6 +178,23 @@ export default function ProductDetailPage() {
     }
   };
 
+  const handleSaveTryOn = async () => {
+    if (!tryOnId) return;
+    setIsSavingTryOn(true);
+    try {
+      const result = await saveTryOn({ itemTryOnId: tryOnId });
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.error('Failed to save to lookbook');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save');
+    } finally {
+      setIsSavingTryOn(false);
+    }
+  };
+
   if (!itemData) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -190,39 +208,17 @@ export default function ProductDetailPage() {
 
   return (
     <div className="min-h-screen bg-background pb-32">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
-          <button
-            onClick={() => router.back()}
-            className="p-2 -ml-2 rounded-full hover:bg-surface-alt transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 text-foreground" />
-          </button>
+      {/* Header removed - replaced by global Navigation */}
 
-          <div className="flex items-center gap-2">
-            <CartIcon />
-            <button
-              onClick={handleShare}
-              className="p-2 rounded-full hover:bg-surface-alt transition-colors"
-            >
-              <Share2 className="w-5 h-5 text-foreground" />
-            </button>
-            <button
-              onClick={handleFavorite}
-              className={`p-2 rounded-full transition-colors ${
-                isLiked ? 'text-destructive' : 'hover:bg-surface-alt'
-              }`}
-            >
-              <Heart
-                className={`w-5 h-5 ${isLiked ? 'fill-destructive text-destructive' : 'text-foreground'}`}
-              />
-            </button>
-          </div>
-        </div>
-      </header>
+      <main className="max-w-2xl mx-auto relative">
+        {/* Share button - floating top right */}
+        <button
+          onClick={handleShare}
+          className="absolute top-4 right-4 z-10 p-3 rounded-full bg-background/80 backdrop-blur-md border border-border shadow-sm hover:bg-background transition-colors"
+        >
+          <Share2 className="w-5 h-5 text-foreground" />
+        </button>
 
-      <main className="max-w-2xl mx-auto">
         {/* Image Carousel */}
         <div className="relative aspect-[3/4] bg-surface">
           <AnimatePresence mode="wait">
@@ -240,9 +236,7 @@ export default function ProductDetailPage() {
                   alt={item.name}
                   fill
                   priority
-                  unoptimized={
-                    currentImage.includes('convex.cloud') || currentImage.includes('convex.site')
-                  }
+                  unoptimized={currentImage.includes('convex.cloud') || currentImage.includes('convex.site')}
                   className="object-cover"
                 />
               </motion.div>
@@ -272,9 +266,7 @@ export default function ProductDetailPage() {
                     key={index}
                     onClick={() => setCurrentImageIndex(index)}
                     className={`w-2 h-2 rounded-full transition-all ${
-                      index === currentImageIndex
-                        ? 'bg-primary w-4'
-                        : 'bg-foreground/30 hover:bg-foreground/50'
+                      index === currentImageIndex ? 'bg-primary w-4' : 'bg-foreground/30 hover:bg-foreground/50'
                     }`}
                   />
                 ))}
@@ -288,18 +280,14 @@ export default function ProductDetailPage() {
           {/* Brand & Name */}
           <div>
             {item.brand && (
-              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                {item.brand}
-              </p>
+              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">{item.brand}</p>
             )}
             <h1 className="text-2xl font-semibold text-foreground">{item.name}</h1>
           </div>
 
           {/* Price */}
           <div className="flex items-baseline gap-3">
-            <span className="text-2xl font-bold text-foreground">
-              {formatPrice(item.price, item.currency)}
-            </span>
+            <span className="text-2xl font-bold text-foreground">{formatPrice(item.price, item.currency)}</span>
             {item.originalPrice && item.originalPrice > item.price && (
               <>
                 <span className="text-lg text-muted-foreground line-through">
@@ -313,9 +301,7 @@ export default function ProductDetailPage() {
           </div>
 
           {/* Description */}
-          {item.description && (
-            <p className="text-muted-foreground leading-relaxed">{item.description}</p>
-          )}
+          {item.description && <p className="text-muted-foreground leading-relaxed">{item.description}</p>}
 
           {/* Colors */}
           {item.colors.length > 0 && (
@@ -361,10 +347,7 @@ export default function ProductDetailPage() {
               {item.category}
             </span>
             {item.tags.slice(0, 4).map((tag, index) => (
-              <span
-                key={index}
-                className="px-3 py-1 bg-surface text-muted-foreground text-sm rounded-full"
-              >
+              <span key={index} className="px-3 py-1 bg-surface text-muted-foreground text-sm rounded-full">
                 {tag}
               </span>
             ))}
@@ -387,12 +370,12 @@ export default function ProductDetailPage() {
       </main>
 
       {/* Fixed Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border p-4 z-40">
+      <div className="fixed bottom-[4.5rem] md:bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border p-4 z-40">
         <div className="max-w-2xl mx-auto flex gap-3">
           <button
             onClick={handleFavorite}
             disabled={isLiked}
-            className={`flex-shrink-0 p-4 rounded-xl border transition-all ${
+            className={`flex-0 p-4 rounded-xl border transition-all ${
               isLiked
                 ? 'bg-destructive/10 border-destructive/30 text-destructive'
                 : 'bg-surface border-border hover:border-primary/30'
@@ -510,46 +493,63 @@ export default function ProductDetailPage() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="font-medium text-foreground">{item.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatPrice(item.price, item.currency)}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{formatPrice(item.price, item.currency)}</p>
                   </div>
                   <button
                     onClick={handleFavorite}
                     className="p-2 rounded-full bg-background hover:bg-surface-alt transition-colors"
                   >
-                    <Heart
-                      className={`w-5 h-5 ${isLiked ? 'fill-destructive text-destructive' : 'text-foreground'}`}
-                    />
+                    <Heart className={`w-5 h-5 ${isLiked ? 'fill-destructive text-destructive' : 'text-foreground'}`} />
                   </button>
                 </div>
 
-                <button
-                  onClick={handleAddToCart}
-                  disabled={isAddingToCart || addedToCart}
-                  className={`w-full py-3 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
-                    addedToCart
-                      ? 'bg-green-600 text-white'
-                      : 'bg-primary text-primary-foreground hover:bg-primary-hover'
-                  }`}
-                >
-                  {isAddingToCart ? (
-                    <>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleSaveTryOn}
+                    disabled={isSavingTryOn || isSaved}
+                    className={`flex-1 py-3 rounded-xl font-medium border transition-colors flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-not-allowed ${
+                      isSaved
+                        ? 'bg-green-600 border-green-600 text-white'
+                        : 'bg-surface border-border text-foreground hover:bg-surface-alt'
+                    }`}
+                  >
+                    {isSavingTryOn ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      Adding...
-                    </>
-                  ) : addedToCart ? (
-                    <>
-                      <Check className="w-5 h-5" />
-                      Added to Cart
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart className="w-5 h-5" />
-                      Add to Cart
-                    </>
-                  )}
-                </button>
+                    ) : isSaved ? (
+                      <BookmarkCheck className="w-5 h-5" />
+                    ) : (
+                      <Bookmark className="w-5 h-5" />
+                    )}
+                    <span>{isSaved ? 'Saved' : 'Save Look'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleAddToCart}
+                    disabled={isAddingToCart || addedToCart}
+                    className={`flex-1 py-3 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
+                      addedToCart
+                        ? 'bg-green-600 text-white'
+                        : 'bg-primary text-primary-foreground hover:bg-primary-hover'
+                    }`}
+                  >
+                    {isAddingToCart ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Adding...
+                      </>
+                    ) : addedToCart ? (
+                      <>
+                        <Check className="w-5 h-5" />
+                        Added to Cart
+                      </>
+                    ) : (
+                      <>
+                        <ShoppingCart className="w-5 h-5" />
+                        Add to Cart
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -558,4 +558,3 @@ export default function ProductDetailPage() {
     </div>
   );
 }
-

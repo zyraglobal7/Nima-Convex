@@ -2,16 +2,19 @@
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import type { Id } from '@/convex/_generated/dataModel';
+import type { ApparelItem } from '@/components/discover/ApparelItemCard';
 
 interface SelectionContextValue {
   /** Whether selection mode is active */
   isSelectionMode: boolean;
   /** Set of selected item IDs */
   selectedItemIds: Set<Id<'items'>>;
+  /** Map of selected items (id -> item) */
+  selectedItems: Map<string, ApparelItem>;
   /** Enable or disable selection mode */
   setSelectionMode: (mode: boolean) => void;
   /** Toggle an item's selection state */
-  toggleItemSelection: (itemId: Id<'items'>) => void;
+  toggleItemSelection: (item: ApparelItem) => void;
   /** Clear all selections and exit selection mode */
   clearSelection: () => void;
   /** Get the count of selected items */
@@ -24,47 +27,50 @@ const MAX_SELECTION_SIZE = 6;
 
 export function SelectionProvider({ children }: { children: ReactNode }) {
   const [isSelectionMode, setIsSelectionModeState] = useState(false);
-  const [selectedItemIds, setSelectedItemIds] = useState<Set<Id<'items'>>>(new Set());
+  // We keep a Map of items to preserve their data even if they're not on the current page
+  const [selectedItems, setSelectedItems] = useState<Map<string, ApparelItem>>(new Map());
 
   const setSelectionMode = useCallback((mode: boolean) => {
     setIsSelectionModeState(mode);
     if (!mode) {
       // Clear selections when exiting selection mode
-      setSelectedItemIds(new Set());
+      setSelectedItems(new Map());
     }
   }, []);
 
-  const toggleItemSelection = useCallback((itemId: Id<'items'>) => {
-    setSelectedItemIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId);
-      } else if (newSet.size < MAX_SELECTION_SIZE) {
-        newSet.add(itemId);
+  const toggleItemSelection = useCallback((item: ApparelItem) => {
+    setSelectedItems((prev) => {
+      const newMap = new Map(prev);
+      const itemId = item._id;
+
+      if (newMap.has(itemId)) {
+        newMap.delete(itemId);
+      } else if (newMap.size < MAX_SELECTION_SIZE) {
+        newMap.set(itemId, item);
       }
-      return newSet;
+      return newMap;
     });
   }, []);
 
   const clearSelection = useCallback(() => {
-    setSelectedItemIds(new Set());
+    setSelectedItems(new Map());
     setIsSelectionModeState(false);
   }, []);
 
+  // Derived Set for easy ID lookup
+  const selectedItemIds = new Set(Array.from(selectedItems.keys()) as Id<'items'>[]);
+
   const value: SelectionContextValue = {
     isSelectionMode,
-    selectedItemIds,
+    selectedItemIds, // Compatible with existing code that needs quick lookup
+    selectedItems,
     setSelectionMode,
     toggleItemSelection,
     clearSelection,
-    selectedCount: selectedItemIds.size,
+    selectedCount: selectedItems.size,
   };
 
-  return (
-    <SelectionContext.Provider value={value}>
-      {children}
-    </SelectionContext.Provider>
-  );
+  return <SelectionContext.Provider value={value}>{children}</SelectionContext.Provider>;
 }
 
 export function useSelection(): SelectionContextValue {
@@ -82,6 +88,3 @@ export function useSelection(): SelectionContextValue {
 export function useSelectionOptional(): SelectionContextValue | null {
   return useContext(SelectionContext);
 }
-
-
-

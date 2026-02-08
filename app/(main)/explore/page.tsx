@@ -2,10 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ThemeToggle } from '@/components/theme-toggle';
-import { Sparkles, Heart, Users, ArrowLeft, User } from 'lucide-react';
-import { MessagesIcon } from '@/components/messages/MessagesIcon';
-import { CartIcon } from '@/components/cart/CartIcon';
+import { Sparkles, Heart, Users } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery } from 'convex/react';
@@ -28,47 +25,14 @@ export default function ExplorePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            {/* Back button */}
-            <Link href="/ask" className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors">
-              <ArrowLeft className="w-5 h-5 text-foreground" />
-            </Link>
-
-            {/* Page title - center */}
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-primary" />
-              <h1 className="text-lg font-medium text-foreground">
-                Explore
-              </h1>
-            </div>
-
-            {/* Right actions */}
-            <div className="flex items-center gap-2">
-              <CartIcon />
-              <ThemeToggle />
-              <MessagesIcon />
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* Header removed - replaced by global Navigation */}
 
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         {/* Page intro */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-        >
-          <h2 className="text-2xl md:text-3xl font-serif text-foreground">
-            Explore ✨
-          </h2>
-          <p className="text-muted-foreground mt-1">
-            Discover outfits shared by other people
-          </p>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+          <h2 className="text-2xl md:text-3xl font-serif text-foreground">Explore ✨</h2>
+          <p className="text-muted-foreground mt-1">Discover outfits shared by other people</p>
         </motion.div>
 
         {/* Filter tags */}
@@ -85,9 +49,10 @@ export default function ExplorePage() {
               className={`
                 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
                 transition-all duration-200
-                ${selectedFilter === filter
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-surface hover:bg-surface-alt text-foreground border border-border/50 hover:border-primary/30'
+                ${
+                  selectedFilter === filter
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-surface hover:bg-surface-alt text-foreground border border-border/50 hover:border-primary/30'
                 }
               `}
             >
@@ -100,30 +65,20 @@ export default function ExplorePage() {
         {!publicLooksData && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {[...Array(8)].map((_, i) => (
-              <div
-                key={i}
-                className="aspect-[3/4] rounded-2xl bg-surface-alt animate-pulse"
-              />
+              <div key={i} className="aspect-[3/4] rounded-2xl bg-surface-alt animate-pulse" />
             ))}
           </div>
         )}
 
         {/* Empty state */}
         {publicLooksData && publicLooksData.looks.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center py-16"
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-16">
             <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-alt flex items-center justify-center">
               <Users className="w-10 h-10 text-muted-foreground" />
             </div>
-            <h3 className="text-xl font-medium text-foreground mb-2">
-              No public looks yet
-            </h3>
+            <h3 className="text-xl font-medium text-foreground mb-2">No public looks yet</h3>
             <p className="text-muted-foreground max-w-md mx-auto mb-6">
-              Be the first to share your style! Create a look and make it public 
-              to inspire others.
+              Be the first to share your style! Create a look and make it public to inspire others.
             </p>
             <Link
               href="/ask"
@@ -147,19 +102,15 @@ export default function ExplorePage() {
               .filter((lookData) => {
                 // Filter out looks with 0 items (deleted/inactive items)
                 if (lookData.itemCount === 0) return false;
-                
+
                 if (selectedFilter === 'All') return true;
                 const occasion = lookData.look.occasion?.toLowerCase() || '';
-                const tags = lookData.look.styleTags.map(t => t.toLowerCase());
+                const tags = lookData.look.styleTags.map((t) => t.toLowerCase());
                 const filterLower = selectedFilter.toLowerCase();
-                return occasion.includes(filterLower) || tags.some(t => t.includes(filterLower));
+                return occasion.includes(filterLower) || tags.some((t) => t.includes(filterLower));
               })
               .map((lookData, index) => (
-                <PublicLookCard
-                  key={lookData.look._id}
-                  look={lookData}
-                  index={index}
-                />
+                <PublicLookCard key={lookData.look._id} look={lookData} index={index} />
               ))}
           </motion.div>
         )}
@@ -179,32 +130,7 @@ export default function ExplorePage() {
         )}
       </main>
 
-      {/* Bottom navigation (mobile) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/50 py-2 px-4 z-40">
-        <div className="flex items-center justify-around">
-          <Link href="/discover" className="flex flex-col items-center gap-1 p-2">
-            <Sparkles className="w-5 h-5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Discover</span>
-          </Link>
-          <Link href="/explore" className="flex flex-col items-center gap-1 p-2">
-            <Users className="w-5 h-5 text-primary" />
-            <span className="text-xs text-primary font-medium">Explore</span>
-          </Link>
-          <Link href="/ask" className="flex flex-col items-center gap-1 p-2">
-            <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            <span className="text-xs text-muted-foreground">Ask Nima</span>
-          </Link>
-          <Link href="/profile" className="flex flex-col items-center gap-1 p-2">
-            <User className="w-5 h-5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Profile</span>
-          </Link>
-        </div>
-      </nav>
-
-      {/* Spacer for mobile nav */}
-      <div className="h-20 md:hidden" />
+      {/* Mobile Nav removed - replaced by global Navigation */}
     </div>
   );
 }
@@ -243,8 +169,8 @@ function PublicLookCard({ look, index }: PublicLookCardProps) {
   const heights = ['aspect-[3/4]', 'aspect-[3/5]', 'aspect-[4/5]', 'aspect-[3/4]'];
   const heightClass = heights[index % heights.length];
 
-  const imageUrl = look.lookImage?.imageUrl || 
-    'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&h=900&fit=crop';
+  const imageUrl =
+    look.lookImage?.imageUrl || 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&h=900&fit=crop';
 
   const creatorName = look.creator?.firstName || look.creator?.username || 'Anonymous';
   const creatorInitial = creatorName.charAt(0).toUpperCase();
@@ -279,9 +205,7 @@ function PublicLookCard({ look, index }: PublicLookCardProps) {
               setIsLiked(!isLiked);
             }}
             className={`absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 ${
-              isLiked
-                ? 'bg-red-500 text-white'
-                : 'bg-black/30 backdrop-blur-sm text-white hover:bg-black/50'
+              isLiked ? 'bg-red-500 text-white' : 'bg-black/30 backdrop-blur-sm text-white hover:bg-black/50'
             }`}
           >
             <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
@@ -295,7 +219,10 @@ function PublicLookCard({ look, index }: PublicLookCardProps) {
                 alt={creatorName}
                 width={20}
                 height={20}
-                unoptimized={look.creator.profileImageUrl.includes('convex.cloud') || look.creator.profileImageUrl.includes('convex.site')}
+                unoptimized={
+                  look.creator.profileImageUrl.includes('convex.cloud') ||
+                  look.creator.profileImageUrl.includes('convex.site')
+                }
                 className="rounded-full"
               />
             ) : (
@@ -303,9 +230,7 @@ function PublicLookCard({ look, index }: PublicLookCardProps) {
                 <span className="text-[10px] font-medium text-white">{creatorInitial}</span>
               </div>
             )}
-            <span className="text-xs text-white font-medium truncate max-w-[80px]">
-              {creatorName}
-            </span>
+            <span className="text-xs text-white font-medium truncate max-w-[80px]">{creatorName}</span>
           </div>
 
           {/* Bottom info */}
@@ -324,12 +249,8 @@ function PublicLookCard({ look, index }: PublicLookCardProps) {
 
             {/* Price and items */}
             <div className="flex items-center justify-between">
-              <span className="text-white font-medium">
-                {formatPrice(look.look.totalPrice, look.look.currency)}
-              </span>
-              <span className="text-white/70 text-xs">
-                {look.itemCount} items
-              </span>
+              <span className="text-white font-medium">{formatPrice(look.look.totalPrice, look.look.currency)}</span>
+              <span className="text-white/70 text-xs">{look.itemCount} items</span>
             </div>
           </div>
         </div>
