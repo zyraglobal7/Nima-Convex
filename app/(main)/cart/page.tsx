@@ -284,17 +284,19 @@ export default function CartPage() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="text-foreground">
-                    {formatPrice(cartTotal?.subtotal || 0, cartTotal?.currency || 'USD')}
+                    {formatPrice(cartTotal?.subtotal || 0, cartTotal?.currency || 'KES')}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Nima Service Fee (10%)</span>
-                  <span className="text-foreground">{formatPrice(serviceFee, cartTotal?.currency || 'USD')}</span>
+                  <span className="text-foreground">
+                    {formatPrice(serviceFee, cartTotal?.currency || 'USD')}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Est. Shipping</span>
                   <span className="text-foreground">
-                    {formatPrice(estimatedShipping, cartTotal?.currency || 'USD')}
+                    {formatPrice(estimatedShipping, cartTotal?.currency || 'KES')}
                   </span>
                 </div>
               </div>
@@ -303,7 +305,7 @@ export default function CartPage() {
                 <div className="flex justify-between">
                   <span className="font-medium text-foreground">Total</span>
                   <span className="font-semibold text-lg text-foreground">
-                    {formatPrice(total, cartTotal?.currency || 'USD')}
+                    {formatPrice(total, cartTotal?.currency || 'KES')}
                   </span>
                 </div>
               </div>
@@ -322,7 +324,9 @@ export default function CartPage() {
             >
               <ShoppingBag className="w-5 h-5" />
               Proceed to Checkout
-              <span className="text-primary-foreground/80">({formatPrice(total, cartTotal?.currency || 'USD')})</span>
+              <span className="text-primary-foreground/80">
+                ({formatPrice(total, cartTotal?.currency || 'USD')})
+              </span>
             </Link>
           </div>
         </div>

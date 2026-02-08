@@ -58,7 +58,7 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
             price: result.data.suggestedPriceRange
               ? String(Math.round((result.data.suggestedPriceRange.min + result.data.suggestedPriceRange.max) / 2))
               : '',
-            currency: 'USD',
+            currency: 'KES',
             originalPrice: '',
             colors: result.data.colors,
             sizes: [],
