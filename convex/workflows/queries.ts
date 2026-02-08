@@ -182,6 +182,7 @@ export const getLookWithItemImages = internalQuery({
             v.literal('bottom'),
             v.literal('dress'),
             v.literal('outfit'),
+            v.literal('swimwear'),
             v.literal('outerwear'),
             v.literal('shoes'),
             v.literal('accessory'),
@@ -212,6 +213,7 @@ export const getLookWithItemImages = internalQuery({
         | 'bottom'
         | 'dress'
         | 'outfit'
+        | 'swimwear'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -272,6 +274,7 @@ export const getLookWithItemImages = internalQuery({
         | 'bottom'
         | 'dress'
         | 'outfit'
+        | 'swimwear'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -334,6 +337,7 @@ export const searchItemsForAI = internalQuery({
         v.literal('bottom'),
         v.literal('dress'),
         v.literal('outfit'),
+        v.literal('swimwear'),
         v.literal('outerwear'),
         v.literal('shoes'),
         v.literal('accessory'),
@@ -364,6 +368,7 @@ export const searchItemsForAI = internalQuery({
         | 'bottom'
         | 'dress'
         | 'outfit'
+        | 'swimwear'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -414,6 +419,7 @@ export const getAllItemsForAI = internalQuery({
         v.literal('bottom'),
         v.literal('dress'),
         v.literal('outfit'),
+        v.literal('swimwear'),
         v.literal('outerwear'),
         v.literal('shoes'),
         v.literal('accessory'),
@@ -434,6 +440,7 @@ export const getAllItemsForAI = internalQuery({
         v.literal('bottom'),
         v.literal('dress'),
         v.literal('outfit'),
+        v.literal('swimwear'),
         v.literal('outerwear'),
         v.literal('shoes'),
         v.literal('accessory'),
@@ -455,6 +462,7 @@ export const getAllItemsForAI = internalQuery({
         | 'bottom'
         | 'dress'
         | 'outfit'
+        | 'swimwear'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -473,6 +481,7 @@ export const getAllItemsForAI = internalQuery({
         | 'bottom'
         | 'dress'
         | 'outfit'
+        | 'swimwear'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -549,6 +558,7 @@ export const getItemWithPrimaryImage = internalQuery({
           v.literal('bottom'),
           v.literal('dress'),
           v.literal('outfit'),
+          v.literal('swimwear'),
           v.literal('outerwear'),
           v.literal('shoes'),
           v.literal('accessory'),
@@ -577,6 +587,7 @@ export const getItemWithPrimaryImage = internalQuery({
         | 'bottom'
         | 'dress'
         | 'outfit'
+        | 'swimwear'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
