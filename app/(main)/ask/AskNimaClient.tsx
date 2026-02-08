@@ -33,7 +33,7 @@ function getMessageText(message: UIMessage): string {
   if (!message.parts) return '';
   return message.parts
     .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
-    .map(part => part.text)
+    .map((part) => part.text)
     .join('');
 }
 
@@ -90,8 +90,8 @@ export default function AskNimaClient({ authExpired = false }: AskNimaClientProp
       <div className="h-screen flex flex-col items-center justify-center gap-4 bg-background">
         <Sparkles className="w-12 h-12 text-primary" />
         <p className="text-foreground">Please sign in to chat with Nima</p>
-        <Link 
-          href="/sign-in" 
+        <Link
+          href="/sign-in"
           className="px-6 py-2 bg-primary text-primary-foreground rounded-full hover:opacity-90 transition-opacity"
         >
           Sign In
@@ -115,13 +115,7 @@ export default function AskNimaClient({ authExpired = false }: AskNimaClientProp
     currency: currentUser.currency,
   };
 
-  return (
-    <AskNimaInner
-      authExpired={authExpired}
-      userData={userData}
-      currentUser={currentUser}
-    />
-  );
+  return <AskNimaInner authExpired={authExpired} userData={userData} currentUser={currentUser} />;
 }
 
 // Inner component - handles both welcome and chat views
@@ -148,24 +142,27 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   const remainingSearches = Math.max(0, 20 - (currentUser.dailyTryOnCount || 0));
 
   // Safe navigation helper
-  const safeNavigate = useCallback((path: string, replace = false) => {
-    requestAnimationFrame(() => {
-      try {
-        if (replace) {
-          router.replace(path);
-        } else {
-          router.push(path);
+  const safeNavigate = useCallback(
+    (path: string, replace = false) => {
+      requestAnimationFrame(() => {
+        try {
+          if (replace) {
+            router.replace(path);
+          } else {
+            router.push(path);
+          }
+        } catch (error) {
+          console.warn('Router navigation failed, using fallback:', error);
+          if (replace) {
+            window.location.replace(path);
+          } else {
+            window.location.href = path;
+          }
         }
-      } catch (error) {
-        console.warn('Router navigation failed, using fallback:', error);
-        if (replace) {
-          window.location.replace(path);
-        } else {
-          window.location.href = path;
-        }
-      }
-    });
-  }, [router]);
+      });
+    },
+    [router],
+  );
 
   // Mutations and Actions
   const startConversation = useMutation(api.messages.mutations.startConversation);
@@ -177,15 +174,12 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   const generateChatLookImages = useAction(api.chat.actions.generateChatLookImages);
   const generateUploadUrl = useMutation(api.userImages.mutations.generateUploadUrl);
   const findSimilarItems = useAction(api.search.visualSearch.findSimilarItems);
-  
+
   // Query user's recent looks for AI context
   const userRecentLooks = useQuery(api.chat.queries.getUserRecentLooks, { limit: 10 });
 
   // Query messages for the thread when it exists (for stable timestamps)
-  const messagesData = useQuery(
-    api.messages.queries.getAllMessages,
-    threadId ? { threadId } : 'skip'
-  );
+  const messagesData = useQuery(api.messages.queries.getAllMessages, threadId ? { threadId } : 'skip');
 
   // useChat for AI streaming
   const {
@@ -204,7 +198,7 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
     onFinish: async ({ message }) => {
       console.log('[Chat] onFinish called');
       const messageContent = getMessageText(message);
-      
+
       // Save assistant message to Convex
       const targetThreadId = pendingThreadIdRef.current || threadId;
       if (targetThreadId) {
@@ -264,141 +258,148 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   }, [messagesData, aiMessages, chatState, viewState]);
 
   // Handle item matching
-  const handleMatchItems = useCallback(async (occasion: string) => {
-    const targetThreadId = threadId || pendingThreadIdRef.current;
-    console.log('[Chat] handleMatchItems starting:', { occasion, threadId: targetThreadId });
-    
-    setChatState('curating');
-    setGenerationProgress('Curating based on your preferences...');
+  const handleMatchItems = useCallback(
+    async (occasion: string) => {
+      const targetThreadId = threadId || pendingThreadIdRef.current;
+      console.log('[Chat] handleMatchItems starting:', { occasion, threadId: targetThreadId });
 
-    try {
-      const result = await createLooksFromChat({ occasion, context: occasion });
-      console.log('[Chat] createLooksFromChat result:', result);
+      setChatState('curating');
+      setGenerationProgress('Curating based on your preferences...');
 
-      if (!result.success) {
-        if (result.message === 'no_matches' || result.message === 'no_photo') {
-          console.log('[Chat] No matching items found for occasion:', occasion);
-          setChatState('no_matches');
-          
-          if (targetThreadId) {
-            try {
-              await saveNoMatchesMessage({ threadId: targetThreadId, occasion });
-              console.log('[Chat] Saved no-matches message');
-            } catch (error) {
-              console.error('[Chat] Failed to save no-matches message:', error);
+      try {
+        const result = await createLooksFromChat({ occasion, context: occasion });
+        console.log('[Chat] createLooksFromChat result:', result);
+
+        if (!result.success) {
+          if (result.message === 'no_matches' || result.message === 'no_photo') {
+            console.log('[Chat] No matching items found for occasion:', occasion);
+            setChatState('no_matches');
+
+            if (targetThreadId) {
+              try {
+                await saveNoMatchesMessage({ threadId: targetThreadId, occasion });
+                console.log('[Chat] Saved no-matches message');
+              } catch (error) {
+                console.error('[Chat] Failed to save no-matches message:', error);
+              }
             }
+          } else {
+            console.warn('[Chat] Match items failed:', result.message);
+            setChatState('idle');
           }
-        } else {
-          console.warn('[Chat] Match items failed:', result.message);
-          setChatState('idle');
+          return;
         }
-        return;
-      }
 
-      // Get scenario from result
-      const resultScenario = 'scenario' in result ? result.scenario : 'fresh';
-      setScenario(resultScenario as 'fresh' | 'remix');
+        // Get scenario from result
+        const resultScenario = 'scenario' in result ? result.scenario : 'fresh';
+        setScenario(resultScenario as 'fresh' | 'remix');
 
-      // Generate images
-      const lookIds = result.lookIds;
-      setCreatedLookIds(lookIds);
-      setChatState('generating');
-      setGenerationProgress('Creating the new you...');
-      
-      console.log('[Chat] Starting image generation for', lookIds.length, 'looks, scenario:', resultScenario);
+        // Generate images
+        const lookIds = result.lookIds;
+        setCreatedLookIds(lookIds);
+        setChatState('generating');
+        setGenerationProgress('Creating the new you...');
 
-      const genResult = await generateChatLookImages({ lookIds });
-      console.log('[Chat] Image generation result:', genResult);
+        console.log('[Chat] Starting image generation for', lookIds.length, 'looks, scenario:', resultScenario);
 
-      if (targetThreadId) {
-        try {
-          await saveFittingReadyMessage({
-            threadId: targetThreadId,
-            lookIds,
-            content: resultScenario === 'remix'
-              ? `Found ${lookIds.length} looks - some remixed from your previous styles!`
-              : `Found ${lookIds.length} perfect looks for you!`,
-          });
-          console.log('[Chat] Saved fitting-ready message');
-        } catch (error) {
-          console.error('[Chat] Failed to save fitting-ready message:', error);
+        const genResult = await generateChatLookImages({ lookIds });
+        console.log('[Chat] Image generation result:', genResult);
+
+        if (targetThreadId) {
+          try {
+            await saveFittingReadyMessage({
+              threadId: targetThreadId,
+              lookIds,
+              content:
+                resultScenario === 'remix'
+                  ? `Found ${lookIds.length} looks - some remixed from your previous styles!`
+                  : `Found ${lookIds.length} perfect looks for you!`,
+            });
+            console.log('[Chat] Saved fitting-ready message');
+          } catch (error) {
+            console.error('[Chat] Failed to save fitting-ready message:', error);
+          }
         }
+
+        setChatState('idle');
+      } catch (error) {
+        console.error('[Chat] Error in item matching flow:', error);
+        setChatState('idle');
       }
-      
-      setChatState('idle');
-    } catch (error) {
-      console.error('[Chat] Error in item matching flow:', error);
-      setChatState('idle');
-    }
-  }, [createLooksFromChat, generateChatLookImages, saveFittingReadyMessage, saveNoMatchesMessage, threadId]);
+    },
+    [createLooksFromChat, generateChatLookImages, saveFittingReadyMessage, saveNoMatchesMessage, threadId],
+  );
 
   // Handle remix look
-  const handleRemixLook = useCallback(async (sourceOccasion: string, twist: string) => {
-    const targetThreadId = threadId || pendingThreadIdRef.current;
-    console.log('[Chat] handleRemixLook starting:', { sourceOccasion, twist });
-    
-    setChatState('curating');
-    setGenerationProgress('Remixing your look...');
-    setScenario('remix');
+  const handleRemixLook = useCallback(
+    async (sourceOccasion: string, twist: string) => {
+      const targetThreadId = threadId || pendingThreadIdRef.current;
+      console.log('[Chat] handleRemixLook starting:', { sourceOccasion, twist });
 
-    try {
-      const matchingLook = userRecentLooks?.find(
-        (look) => look.occasion?.toLowerCase().includes(sourceOccasion.toLowerCase())
-      );
+      setChatState('curating');
+      setGenerationProgress('Remixing your look...');
+      setScenario('remix');
 
-      if (!matchingLook) {
-        console.log('[Chat] No matching look found for remix');
-        setChatState('idle');
-        return;
-      }
+      try {
+        const matchingLook = userRecentLooks?.find((look) =>
+          look.occasion?.toLowerCase().includes(sourceOccasion.toLowerCase()),
+        );
 
-      const result = await createRemixedLook({
-        sourceLookId: matchingLook._id,
-        twist,
-        occasion: sourceOccasion,
-      });
-
-      if (!result.success) {
-        console.warn('[Chat] Remix failed:', result.message);
-        setChatState('idle');
-        return;
-      }
-
-      setCreatedLookIds([result.lookId]);
-      setChatState('generating');
-      setGenerationProgress('Creating your remixed look...');
-
-      const genResult = await generateChatLookImages({ lookIds: [result.lookId] });
-      console.log('[Chat] Remix image generation result:', genResult);
-
-      if (targetThreadId) {
-        try {
-          await saveFittingReadyMessage({
-            threadId: targetThreadId,
-            lookIds: [result.lookId],
-            content: `I've remixed your look with a ${twist} twist!`,
-          });
-        } catch (error) {
-          console.error('[Chat] Failed to save fitting-ready message:', error);
+        if (!matchingLook) {
+          console.log('[Chat] No matching look found for remix');
+          setChatState('idle');
+          return;
         }
-      }
 
-      setChatState('idle');
-    } catch (error) {
-      console.error('[Chat] Error in remix flow:', error);
-      setChatState('idle');
-    }
-  }, [createRemixedLook, generateChatLookImages, saveFittingReadyMessage, threadId, userRecentLooks]);
+        const result = await createRemixedLook({
+          sourceLookId: matchingLook._id,
+          twist,
+          occasion: sourceOccasion,
+        });
+
+        if (!result.success) {
+          console.warn('[Chat] Remix failed:', result.message);
+          setChatState('idle');
+          return;
+        }
+
+        setCreatedLookIds([result.lookId]);
+        setChatState('generating');
+        setGenerationProgress('Creating your remixed look...');
+
+        const genResult = await generateChatLookImages({ lookIds: [result.lookId] });
+        console.log('[Chat] Remix image generation result:', genResult);
+
+        if (targetThreadId) {
+          try {
+            await saveFittingReadyMessage({
+              threadId: targetThreadId,
+              lookIds: [result.lookId],
+              content: `I've remixed your look with a ${twist} twist!`,
+            });
+          } catch (error) {
+            console.error('[Chat] Failed to save fitting-ready message:', error);
+          }
+        }
+
+        setChatState('idle');
+      } catch (error) {
+        console.error('[Chat] Error in remix flow:', error);
+        setChatState('idle');
+      }
+    },
+    [createRemixedLook, generateChatLookImages, saveFittingReadyMessage, threadId, userRecentLooks],
+  );
 
   // Handle sending a message - switches from welcome to chatting view
   const handleSendMessage = async (content: string) => {
     if (!content.trim()) return;
-    
+
     // Reset no_matches state when user tries again
     if (chatState === 'no_matches') {
       setChatState('idle');
     }
-    
+
     if (chatState !== 'idle' && chatState !== 'no_matches') {
       console.log('[Chat] Blocked - chatState:', chatState);
       return;
@@ -430,26 +431,26 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   const handleImageUpload = async (file: File) => {
     try {
       setIsUploadingImage(true);
-      
+
       // 1. Get upload URL
       const uploadUrl = await generateUploadUrl();
-      
+
       // 2. Upload the file to Convex storage
       const response = await fetch(uploadUrl, {
         method: 'POST',
         headers: { 'Content-Type': file.type },
         body: file,
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to upload image');
       }
-      
+
       const { storageId } = await response.json();
-      
+
       // 3. Call visual search action
       const result = await findSimilarItems({ imageStorageId: storageId });
-      
+
       if (!result.success || result.items.length === 0) {
         // No matches found - add a message to chat
         setViewState('chatting');
@@ -457,15 +458,19 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
         // The UI will show a "no matches" state
         return;
       }
-      
+
       // 4. Start a conversation with the search results context
       const searchDescription = result.extractedAttributes?.description || 'uploaded image';
-      const itemNames = result.items.slice(0, 3).map(item => item.name).join(', ');
-      
+      const itemNames = result.items
+        .slice(0, 3)
+        .map((item) => item.name)
+        .join(', ');
+
       // Switch to chatting view and send a contextual message
       setViewState('chatting');
-      handleSendMessage(`I'm looking for items similar to this: ${searchDescription}. I found some matches like ${itemNames}. Can you help me style these?`);
-      
+      handleSendMessage(
+        `I'm looking for items similar to this: ${searchDescription}. I found some matches like ${itemNames}. Can you help me style these?`,
+      );
     } catch (error) {
       console.error('[Visual Search] Error:', error);
       // Could show a toast error here
@@ -545,7 +550,10 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   if (lastAiMessage && lastAiMessage.role === 'assistant' && status === 'streaming') {
     const streamingContent = cleanContent(getMessageText(lastAiMessage));
     // Only add if not already in displayMessages (check by content since ID differs)
-    if (streamingContent && !displayMessages.some(m => m.role === 'nima' && cleanContent(m.content) === streamingContent)) {
+    if (
+      streamingContent &&
+      !displayMessages.some((m) => m.role === 'nima' && cleanContent(m.content) === streamingContent)
+    ) {
       displayMessages.push({
         id: 'streaming-' + lastAiMessage.id,
         role: 'nima',
@@ -557,11 +565,11 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   }
 
   // Add pending user message (just sent, not yet in DB)
-  const pendingUserMessages = aiMessages.filter(m => m.role === 'user');
+  const pendingUserMessages = aiMessages.filter((m) => m.role === 'user');
   pendingUserMessages.forEach((userMsg) => {
     const userContent = getMessageText(userMsg);
     // Only add if not already in displayMessages from DB
-    if (userContent && !displayMessages.some(m => m.role === 'user' && m.content === userContent)) {
+    if (userContent && !displayMessages.some((m) => m.role === 'user' && m.content === userContent)) {
       displayMessages.push({
         id: 'pending-' + userMsg.id,
         role: 'user',
@@ -573,13 +581,14 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   });
 
   // Add fitting-ready message if looks were created (before it's saved to DB)
-  if (createdLookIds.length > 0 && chatState === 'idle' && !displayMessages.some(m => m.type === 'fitting-ready')) {
+  if (createdLookIds.length > 0 && chatState === 'idle' && !displayMessages.some((m) => m.type === 'fitting-ready')) {
     displayMessages.push({
       id: 'fitting-ready',
       role: 'nima',
-      content: scenario === 'remix'
-        ? `Found ${createdLookIds.length} looks - some remixed from your previous styles!`
-        : `Found ${createdLookIds.length} perfect looks for you!`,
+      content:
+        scenario === 'remix'
+          ? `Found ${createdLookIds.length} looks - some remixed from your previous styles!`
+          : `Found ${createdLookIds.length} perfect looks for you!`,
       timestamp: new Date(),
       type: 'fitting-ready',
       sessionId: createdLookIds.join(','),
@@ -588,7 +597,7 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   }
 
   // Add no-matches message if in that state (before it's saved to DB)
-  if (chatState === 'no_matches' && !displayMessages.some(m => m.content.includes("couldn't find enough items"))) {
+  if (chatState === 'no_matches' && !displayMessages.some((m) => m.content.includes("couldn't find enough items"))) {
     displayMessages.push({
       id: 'no-matches',
       role: 'nima',
@@ -607,11 +616,11 @@ We're always adding new items, so check back soon! ✨`,
 
   // Add initial greeting for chatting view
   if (viewState === 'chatting' && displayMessages.length === 0 && !isAiLoading) {
-    const userName = currentUser?.firstName ? `Hey ${currentUser.firstName}` : "Hey there";
-    const styleNote = currentUser?.stylePreferences?.length 
+    const userName = currentUser?.firstName ? `Hey ${currentUser.firstName}` : 'Hey there';
+    const styleNote = currentUser?.stylePreferences?.length
       ? `I already know you're into ${currentUser.stylePreferences.slice(0, 2).join(' and ')} styles.`
       : "I've got your style profile ready.";
-    
+
     displayMessages.push({
       id: 'greeting',
       role: 'nima',
@@ -624,14 +633,14 @@ We're always adding new items, so check back soon! ✨`,
   // Sort all messages by timestamp (must be done AFTER all messages are added)
   displayMessages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
-  const title = displayMessages.find(m => m.role === 'user')?.content.slice(0, 40) || 'Ask Nima';
+  const title = displayMessages.find((m) => m.role === 'user')?.content.slice(0, 40) || 'Ask Nima';
 
   // Render welcome view
   if (viewState === 'welcome') {
     return (
       <div className="h-screen flex flex-col relative overflow-hidden bg-background">
         {authExpired && <AuthExpiredModal />}
-        
+
         {/* Animated Background */}
         <div
           className="fixed inset-0 animate-rising-sun pointer-events-none"
@@ -663,30 +672,10 @@ We're always adding new items, so check back soon! ✨`,
           transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
         />
 
-        {/* Header */}
-        <header className="flex-shrink-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
-          <div className="max-w-3xl mx-auto px-4 py-3">
-            <div className="flex items-center justify-between">
-              <Link href="/discover" className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors">
-                <ArrowLeft className="w-5 h-5 text-foreground" />
-              </Link>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                  <Sparkles className="w-3 h-3 text-primary-foreground" />
-                </div>
-                <h1 className="text-lg font-medium text-foreground">Ask Nima</h1>
-              </div>
-              <div className="flex items-center gap-1">
-                <ThemeToggle />
-                <MessagesIcon />
-                <ChatHistoryButton onNewChat={handleNewChat} />
-              </div>
-            </div>
-          </div>
-        </header>
+        {/* Header removed - replaced by global Navigation */}
 
         {/* Main content */}
-        <main className="flex-1 overflow-y-auto relative z-10">
+        <main className="flex-1 overflow-y-auto relative z-10 pb-20 md:pb-0">
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -717,45 +706,19 @@ We're always adding new items, so check back soon! ✨`,
           <div className="h-32 md:h-24" />
         </main>
 
-        {/* Fixed bottom input */}
-        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-md border-t border-border/50 p-4">
+        {/* Fixed bottom input - position adjusted to sit above global mobile nav */}
+        <div className="fixed bottom-[4.5rem] md:bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-md border-t border-border/50 p-4">
           <div className="max-w-3xl mx-auto">
-            <ChatInput 
-              onSend={handleSendMessage} 
+            <ChatInput
+              onSend={handleSendMessage}
               onImageUpload={handleImageUpload}
               isUploadingImage={isUploadingImage}
-              placeholder="Describe what you're looking for..." 
+              placeholder="Describe what you're looking for..."
             />
           </div>
         </div>
 
-        {/* Bottom navigation (mobile) */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/50 py-2 px-4 z-30">
-          <div className="flex items-center justify-around">
-            <Link href="/discover" className="flex flex-col items-center gap-1 p-2">
-              <Sparkles className="w-5 h-5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Discover</span>
-            </Link>
-            <Link href="/ask" className="flex flex-col items-center gap-1 p-2">
-              <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-              <span className="text-xs text-primary font-medium">Ask Nima</span>
-            </Link>
-            <Link href="/lookbooks" className="flex flex-col items-center gap-1 p-2">
-              <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              <span className="text-xs text-muted-foreground">Lookbooks</span>
-            </Link>
-            <Link href="/profile" className="flex flex-col items-center gap-1 p-2">
-              <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              <span className="text-xs text-muted-foreground">Profile</span>
-            </Link>
-          </div>
-        </nav>
+        {/* Mobile Nav removed - replaced by global Navigation */}
       </div>
     );
   }
@@ -764,15 +727,12 @@ We're always adding new items, so check back soon! ✨`,
   return (
     <div className="h-screen flex flex-col bg-background">
       {authExpired && <AuthExpiredModal />}
-      
+
       {/* Header */}
       <header className="flex-shrink-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <button
-              onClick={handleNewChat}
-              className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors"
-            >
+            <button onClick={handleNewChat} className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors">
               <ArrowLeft className="w-5 h-5 text-foreground" />
             </button>
             <div className="flex-1 text-center px-4">
@@ -780,9 +740,7 @@ We're always adding new items, so check back soon! ✨`,
                 <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
                   <Sparkles className="w-3 h-3 text-primary-foreground" />
                 </div>
-                <h1 className="text-sm font-medium text-foreground truncate max-w-[180px]">
-                  {title}
-                </h1>
+                <h1 className="text-sm font-medium text-foreground truncate max-w-[180px]">{title}</h1>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -818,9 +776,7 @@ We're always adding new items, so check back soon! ✨`,
           </AnimatePresence>
 
           {/* Typing indicator */}
-          <AnimatePresence>
-            {(chatState === 'typing' || isAiLoading) && <TypingIndicator />}
-          </AnimatePresence>
+          <AnimatePresence>{(chatState === 'typing' || isAiLoading) && <TypingIndicator />}</AnimatePresence>
 
           {/* Curating/Generating state */}
           <AnimatePresence>
@@ -843,9 +799,10 @@ We're always adding new items, so check back soon! ✨`,
                       {chatState === 'curating' ? 'Curating your looks...' : 'Creating the new you...'}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {generationProgress || (chatState === 'curating' 
-                        ? 'Finding the perfect items for your style' 
-                        : 'Generating your personalized try-on images')}
+                      {generationProgress ||
+                        (chatState === 'curating'
+                          ? 'Finding the perfect items for your style'
+                          : 'Generating your personalized try-on images')}
                     </p>
                   </div>
                 </div>
@@ -862,12 +819,10 @@ We're always adding new items, so check back soon! ✨`,
           </AnimatePresence>
 
           {/* No matches - explore card */}
-          <AnimatePresence>
-            {chatState === 'no_matches' && <ExploreCard />}
-          </AnimatePresence>
+          <AnimatePresence>{chatState === 'no_matches' && <ExploreCard />}</AnimatePresence>
 
           {/* Quick prompts */}
-          {chatState === 'idle' && displayMessages.some(m => m.type === 'fitting-ready') && (
+          {chatState === 'idle' && displayMessages.some((m) => m.type === 'fitting-ready') && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -880,7 +835,7 @@ We're always adding new items, so check back soon! ✨`,
 
           <div ref={messagesEndRef} />
         </div>
-        
+
         <div className="h-32 md:h-24" />
       </main>
 
@@ -896,10 +851,10 @@ We're always adding new items, so check back soon! ✨`,
               chatState === 'curating'
                 ? 'Curating your looks...'
                 : chatState === 'generating'
-                ? 'Creating your try-on images...'
-                : isAiLoading
-                ? 'Nima is typing...'
-                : 'Type your message...'
+                  ? 'Creating your try-on images...'
+                  : isAiLoading
+                    ? 'Nima is typing...'
+                    : 'Type your message...'
             }
           />
         </div>
@@ -914,19 +869,34 @@ We're always adding new items, so check back soon! ✨`,
           </Link>
           <Link href="/ask" className="flex flex-col items-center gap-1 p-2">
             <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+              />
             </svg>
             <span className="text-xs text-primary font-medium">Ask Nima</span>
           </Link>
           <Link href="/lookbooks" className="flex flex-col items-center gap-1 p-2">
             <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+              />
             </svg>
             <span className="text-xs text-muted-foreground">Lookbooks</span>
           </Link>
           <Link href="/profile" className="flex flex-col items-center gap-1 p-2">
             <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+              />
             </svg>
             <span className="text-xs text-muted-foreground">Profile</span>
           </Link>

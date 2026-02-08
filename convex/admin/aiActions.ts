@@ -16,7 +16,8 @@ const categoryValidator = v.union(
   v.literal('shoes'),
   v.literal('accessory'),
   v.literal('bag'),
-  v.literal('jewelry')
+  v.literal('jewelry'),
+  v.literal('swimwear')
 );
 
 const genderValidator = v.union(v.literal('male'), v.literal('female'), v.literal('unisex'));
@@ -29,8 +30,8 @@ const productDetailsSchema = z.object({
     .string()
     .describe('A detailed, engaging product description for an e-commerce listing (2-3 sentences)'),
   category: z
-    .enum(['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory', 'bag', 'jewelry'])
-    .describe('The primary category of the fashion item'),
+    .enum(['top', 'bottom', 'dress', 'outfit', 'outerwear', 'shoes', 'accessory', 'bag', 'jewelry', 'swimwear'])
+    .describe('The primary category. IMPORTANT: Use "swimwear" for ANY bathing suit, bikini, or swim trunks, even if it is a set of items. Use "outfit" for non-swimwear sets (e.g., suit, tracksuit).'),
   subcategory: z
     .string()
     .optional()

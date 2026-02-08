@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CreateLookSheet, LookCardWithCreator, LookCard, useFloatingLoader, CategoryCarousel, ApparelSearchBar } from '@/components/discover';
+import {
+  CreateLookSheet,
+  LookCardWithCreator,
+  LookCard,
+  useFloatingLoader,
+  CategoryCarousel,
+  ApparelSearchBar,
+} from '@/components/discover';
 import { ApparelItemCard, type ApparelItem } from '@/components/discover/ApparelItemCard';
 import { Sparkles, User, Shirt, Loader2 } from 'lucide-react';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
@@ -48,36 +55,39 @@ const ITEMS_PER_PAGE = 8;
 function DiscoverPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   const [viewState, setViewState] = useState<ViewState>('ready');
   const [showWelcome, setShowWelcome] = useState(true);
   const [workflowStarted, setWorkflowStarted] = useState(false);
-  
+
   // Get active filter from URL params, default to 'my-look'
   // Also check for 'from=apparel' param (used when returning from category pages)
   const tabFromUrl = searchParams.get('tab') as FilterType | null;
   const fromParam = searchParams.get('from');
-  const initialFilter: FilterType = 
-    (tabFromUrl && ['my-look', 'explore', 'apparel'].includes(tabFromUrl))
-      ? tabFromUrl 
-      : fromParam === 'apparel' 
+  const initialFilter: FilterType =
+    tabFromUrl && ['my-look', 'explore', 'apparel'].includes(tabFromUrl)
+      ? tabFromUrl
+      : fromParam === 'apparel'
         ? 'apparel'
         : 'my-look';
   const [activeFilter, setActiveFilterState] = useState<FilterType>(initialFilter);
-  
+
   // Track if we initialized from a category return (to preserve selection)
   const isReturningFromCategory = fromParam === 'apparel';
-  
+
   // Update activeFilter and URL when changing tabs
-  const setActiveFilter = useCallback((filter: FilterType, preserveSelection: boolean = false) => {
-    setActiveFilterState(filter);
-    // Update URL without navigation
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('tab', filter);
-    // Clear the 'from' param as it's no longer needed
-    params.delete('from');
-    router.replace(`/discover?${params.toString()}`, { scroll: false });
-  }, [searchParams, router]);
+  const setActiveFilter = useCallback(
+    (filter: FilterType, preserveSelection: boolean = false) => {
+      setActiveFilterState(filter);
+      // Update URL without navigation
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('tab', filter);
+      // Clear the 'from' param as it's no longer needed
+      params.delete('from');
+      router.replace(`/discover?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router],
+  );
 
   // Infinite scroll state for Apparel tab
   const [apparelCursor, setApparelCursor] = useState<string | null>(null);
@@ -116,8 +126,9 @@ function DiscoverPageContent() {
     setTimeout(() => setShowWelcome(false), 8000);
   }, []);
 
-  // Selection mode for Create a Look (using shared context)
-  const { isSelectionMode, selectedItemIds, setSelectionMode, toggleItemSelection, clearSelection } = useSelection();
+  // Get selected items for CreateLookSheet (using context's selectedItems Map)
+  const { isSelectionMode, selectedItemIds, selectedItems, setSelectionMode, toggleItemSelection, clearSelection } =
+    useSelection();
   const [showCreateLookSheet, setShowCreateLookSheet] = useState(false);
 
   // Convex queries and mutations - use useStableValue to prevent UI flicker
@@ -133,9 +144,8 @@ function DiscoverPageContent() {
 
   // Derive gender filter from user preferences
   // Only filter by gender if user has explicitly set male/female (not prefer-not-to-say)
-  const userGenderFilter = currentUser?.gender === 'male' || currentUser?.gender === 'female'
-    ? currentUser.gender
-    : undefined;
+  const userGenderFilter =
+    currentUser?.gender === 'male' || currentUser?.gender === 'female' ? currentUser.gender : undefined;
 
   // Items for Apparel tab - paginated with cursor, filtered by user's gender
   // Note: We use rawItemsData directly for pagination to avoid stale data issues with useStableValue
@@ -143,20 +153,20 @@ function DiscoverPageContent() {
     api.items.queries.listItemsWithImages,
     activeFilter === 'apparel'
       ? { gender: userGenderFilter, limit: ITEMS_PER_PAGE, cursor: apparelCursor ?? undefined }
-      : 'skip'
+      : 'skip',
   );
 
   // Explore tab now includes both public looks and friends' looks with friend status
   const rawPublicLooks = useQuery(
     api.looks.queries.getPublicLooks,
-    activeFilter === 'explore' ? { limit: 50 } : 'skip'
+    activeFilter === 'explore' ? { limit: 50 } : 'skip',
   );
   const publicLooks = useStableValue(rawPublicLooks, { looks: [], nextCursor: null, hasMore: false });
 
   // My Looks query (for My Look tab) - only show system-generated (Nima) looks
   const rawMyLooksData = useQuery(
     api.looks.queries.getMyLooksByCreator,
-    activeFilter === 'my-look' ? { createdBy: 'system', limit: 50 } : 'skip'
+    activeFilter === 'my-look' ? { createdBy: 'system', limit: 50 } : 'skip',
   );
   const myLooksData = useStableValue(rawMyLooksData, []);
 
@@ -166,11 +176,14 @@ function DiscoverPageContent() {
 
   // Toggle like mutation
   const toggleLikeMutation = useMutation(api.items.likes.toggleLike);
-  
+
   // Handler for toggling item likes
-  const handleToggleLike = useCallback(async (itemId: Id<'items'>) => {
-    await toggleLikeMutation({ itemId });
-  }, [toggleLikeMutation]);
+  const handleToggleLike = useCallback(
+    async (itemId: Id<'items'>) => {
+      await toggleLikeMutation({ itemId });
+    },
+    [toggleLikeMutation],
+  );
 
   const startWorkflow = useMutation(api.workflows.index.startOnboardingWorkflow);
 
@@ -212,9 +225,8 @@ function DiscoverPageContent() {
     // Update pagination ref with latest values
     paginationRef.current = {
       hasMore: rawItemsData.hasMore,
-      nextCursor: rawItemsData.nextCursor
+      nextCursor: rawItemsData.nextCursor,
     };
-
 
     const newItems: ApparelItem[] = rawItemsData.items.map((item) => ({
       _id: item._id,
@@ -263,7 +275,7 @@ function DiscoverPageContent() {
           setApparelCursor(nextCursor);
         }
       },
-      { threshold: 0.1, rootMargin: '200px' }
+      { threshold: 0.1, rootMargin: '200px' },
     );
 
     const currentRef = loadMoreRef.current;
@@ -382,7 +394,7 @@ function DiscoverPageContent() {
         currency: lookData.look.currency,
         styleTags: lookData.look.styleTags,
         occasion: lookData.look.occasion || 'Everyday',
-        nimaNote: lookData.look.nimaComment || "A beautifully curated look!",
+        nimaNote: lookData.look.nimaComment || 'A beautifully curated look!',
         createdAt: new Date(lookData.look._creationTime),
         height: heights[index % heights.length],
         isLiked: false,
@@ -429,7 +441,7 @@ function DiscoverPageContent() {
         currency: lookData.look.currency,
         styleTags: lookData.look.styleTags,
         occasion: lookData.look.occasion || 'Everyday',
-        nimaNote: lookData.look.nimaComment || "A look curated just for you!",
+        nimaNote: lookData.look.nimaComment || 'A look curated just for you!',
         createdAt: new Date(lookData.look._creationTime),
         height: heights[index % heights.length],
         isLiked: false,
@@ -451,22 +463,23 @@ function DiscoverPageContent() {
     if (!apparelSearchQuery.trim()) return apparelItems;
 
     const query = apparelSearchQuery.toLowerCase().trim();
-    return apparelItems.filter((item) =>
-      item.name.toLowerCase().includes(query) ||
-      item.brand?.toLowerCase().includes(query) ||
-      item.category.toLowerCase().includes(query)
+    return apparelItems.filter(
+      (item) =>
+        item.name.toLowerCase().includes(query) ||
+        item.brand?.toLowerCase().includes(query) ||
+        item.category.toLowerCase().includes(query),
     );
   }, [apparelItems, apparelSearchQuery]);
 
-  // Get selected items for CreateLookSheet (using context's selectedItemIds)
-  const selectedItemsArray = filteredApparelItems.filter((item) => selectedItemIds.has(item._id));
+  // Get selected items for CreateLookSheet directly from context
+  const selectedItemsArray = Array.from(selectedItems.values());
 
+  // Handle welcome message dismissal for users who already have looks
   // Handle welcome message dismissal for users who already have looks
   // (Centralized - uses scheduleWelcomeDismiss instead of raw setTimeout)
   useEffect(() => {
     if (shouldStartWorkflow && !shouldStartWorkflow.shouldStart) {
-      if (shouldStartWorkflow.reason === 'Looks already generated' ||
-        shouldStartWorkflow.completedCount > 0) {
+      if (shouldStartWorkflow.reason === 'Looks already generated' || shouldStartWorkflow.completedCount > 0) {
         scheduleWelcomeDismiss();
       }
     }
@@ -475,62 +488,15 @@ function DiscoverPageContent() {
   // Loading screen - only shown during initial load (not during generation)
   // Generation progress is now shown in the floating loader
   if (viewState === 'loading') {
-    return (
-      <GeneratingScreen
-        generationProgress={null}
-        viewState={viewState}
-      />
-    );
+    return <GeneratingScreen generationProgress={null} viewState={viewState} />;
   }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            {/* Logo */}
-            <div className="flex items-center">
-              <Link href="/discover" className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-primary-foreground" />
-                </div>
-                <span className="text-xl font-serif font-semibold text-foreground">Nima</span>
-              </Link>
-
-              {/* Desktop Navigation - hidden on mobile */}
-              <nav className="hidden md:flex items-center gap-6 ml-8">
-                <Link href="/discover" className="text-sm font-medium text-primary">
-                  Discover
-                </Link>
-                <Link href="/ask" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                  Ask Nima
-                </Link>
-                <Link href="/lookbooks" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                  Lookbooks
-                </Link>
-                <Link href="/orders" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                  Orders
-                </Link>
-                <Link href="/profile" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                  Profile
-                </Link>
-              </nav>
-            </div>
-
-            {/* Right actions */}
-            <div className="flex items-center gap-2">
-              <CartIcon />
-              <ActivityIcon />
-              <MessagesIcon />
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* Header removed - replaced by global Navigation */}
 
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-
         {/* Welcome chat bubble */}
         {/* <AnimatePresence>
           {showWelcome && (
@@ -564,14 +530,11 @@ function DiscoverPageContent() {
               transition={{ duration: 0.5, delay: 0.3 }}
               className="mb-6 hidden md:block"
             >
-              <h2 className="text-2xl md:text-3xl font-serif text-foreground">
-                Shop the collection ✨
-              </h2>
+              <h2 className="text-2xl md:text-3xl font-serif text-foreground">Shop the collection ✨</h2>
               <p className="text-muted-foreground mt-1">
                 {apparelItems.length > 0
                   ? `${apparelItems.length} items${paginationRef.current.hasMore ? '+' : ''}`
-                  : 'Browse apparel items'
-                }
+                  : 'Browse apparel items'}
               </p>
             </motion.div>
           </>
@@ -583,10 +546,7 @@ function DiscoverPageContent() {
             className="mb-6"
           >
             <h2 className="text-2xl md:text-3xl font-serif text-foreground">
-              {activeFilter === 'my-look'
-                ? 'Your curated looks ✨'
-                : 'Discover new styles ✨'
-              }
+              {activeFilter === 'my-look' ? 'Your curated looks ✨' : 'Discover new styles ✨'}
             </h2>
             <p className="text-muted-foreground mt-1">
               {activeFilter === 'my-look'
@@ -595,8 +555,7 @@ function DiscoverPageContent() {
                   : 'Looks curated by Nima for you'
                 : exploreLooks.length > 0
                   ? `${exploreLooks.length} looks from the community`
-                  : 'Explore looks shared by others'
-              }
+                  : 'Explore looks shared by others'}
             </p>
           </motion.div>
         )}
@@ -625,16 +584,17 @@ function DiscoverPageContent() {
               className={`
                 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
                 transition-all duration-200
-                ${activeFilter === filter.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-surface hover:bg-surface-alt text-foreground border border-border/50 hover:border-primary/30'
+                ${
+                  activeFilter === filter.id
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-surface hover:bg-surface-alt text-foreground border border-border/50 hover:border-primary/30'
                 }
               `}
             >
               {filter.label}
             </button>
           ))}
-          
+
           {/* Create a Look button - shown inline after Apparel tab */}
           {activeFilter === 'apparel' && (
             <button
@@ -648,9 +608,10 @@ function DiscoverPageContent() {
               className={`
                 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
                 transition-all duration-200 flex items-center gap-2
-                ${isSelectionMode
-                  ? 'bg-destructive text-destructive-foreground'
-                  : 'bg-secondary text-secondary-foreground hover:bg-secondary-hover'
+                ${
+                  isSelectionMode
+                    ? 'bg-destructive text-destructive-foreground'
+                    : 'bg-secondary text-secondary-foreground hover:bg-secondary-hover'
                 }
               `}
             >
@@ -669,17 +630,13 @@ function DiscoverPageContent() {
           >
             <p className="text-sm text-primary font-medium">
               Select 2-6 items to create your look
-              {selectedItemIds.size > 0 && ` (${selectedItemIds.size} selected)`}
+              {selectedItems.size > 0 && ` (${selectedItems.size} selected)`}
             </p>
           </motion.div>
         )}
 
         {/* Looks grid / Apparel grid */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.5 }}
-        >
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.5 }}>
           {activeFilter === 'apparel' ? (
             // Apparel section with infinite scroll and category carousels
             <div>
@@ -698,12 +655,12 @@ function DiscoverPageContent() {
               {/* Apparel grid with infinite scroll */}
               {apparelItems.length === 0 && rawItemsData === undefined ? (
                 // Loading skeleton
-                <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {[...Array(8)].map((_, i) => (
-                    <div key={i} className="break-inside-avoid mb-4">
-                      <div className="rounded-2xl bg-surface-alt border border-border/30 overflow-hidden animate-pulse">
+                    <div key={i} className="h-full">
+                      <div className="rounded-2xl bg-surface-alt border border-border/30 overflow-hidden animate-pulse h-full flex flex-col">
                         <div className="aspect-[3/4] bg-surface" />
-                        <div className="p-3 space-y-2">
+                        <div className="p-3 space-y-2 flex-1">
                           <div className="h-3 bg-surface rounded w-1/3" />
                           <div className="h-4 bg-surface rounded w-2/3" />
                         </div>
@@ -715,7 +672,7 @@ function DiscoverPageContent() {
                 <>
                   {/* Mobile: Grid (carousel is now at top, not interleaved) */}
                   <div className="md:hidden">
-                    <div className="columns-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       {filteredApparelItems.map((item, index) => (
                         <ApparelItemCard
                           key={item._id}
@@ -734,7 +691,7 @@ function DiscoverPageContent() {
 
                   {/* Desktop: Regular masonry grid */}
                   <div className="hidden md:block">
-                    <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                       {filteredApparelItems.map((item, index) => (
                         <ApparelItemCard
                           key={item._id}
@@ -763,8 +720,7 @@ function DiscoverPageContent() {
                       <p className="text-sm text-muted-foreground">
                         {apparelSearchQuery.trim()
                           ? `Found ${filteredApparelItems.length} item${filteredApparelItems.length !== 1 ? 's' : ''}`
-                          : `You've seen all ${filteredApparelItems.length} items`
-                        }
+                          : `You've seen all ${filteredApparelItems.length} items`}
                       </p>
                     )}
                   </div>
@@ -776,9 +732,7 @@ function DiscoverPageContent() {
                     <Shirt className="w-8 h-8 text-muted-foreground" />
                   </div>
                   <h3 className="text-lg font-medium text-foreground mb-2">No items yet</h3>
-                  <p className="text-muted-foreground max-w-md mx-auto">
-                    Check back soon for new apparel items.
-                  </p>
+                  <p className="text-muted-foreground max-w-md mx-auto">Check back soon for new apparel items.</p>
                 </div>
               )}
             </div>
@@ -818,12 +772,10 @@ function DiscoverPageContent() {
                     <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-alt flex items-center justify-center">
                       <Sparkles className="w-8 h-8 text-muted-foreground" />
                     </div>
-                    <h3 className="text-lg font-medium text-foreground mb-2">
-                      No looks from Nima yet
-                    </h3>
+                    <h3 className="text-lg font-medium text-foreground mb-2">No looks from Nima yet</h3>
                     <p className="text-muted-foreground max-w-md mx-auto">
-                      Complete your onboarding to get personalized looks curated by Nima.
-                      Your custom looks will appear in your Lookbooks.
+                      Complete your onboarding to get personalized looks curated by Nima. Your custom looks will appear
+                      in your Lookbooks.
                     </p>
                     <Link
                       href="/onboarding"
@@ -835,42 +787,39 @@ function DiscoverPageContent() {
                 )}
               </motion.div>
             </AnimatePresence>
-          ) : (
-            // Explore grid with creator info
-            publicLooks === undefined ? (
-              // Loading skeleton
-              <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className="break-inside-avoid mb-4">
-                    <div className="rounded-2xl bg-surface-alt border border-border/30 overflow-hidden animate-pulse">
-                      <div className="aspect-[3/4] bg-surface" />
-                      <div className="p-3 space-y-2">
-                        <div className="h-3 bg-surface rounded w-1/3" />
-                        <div className="h-4 bg-surface rounded w-2/3" />
-                      </div>
+          ) : // Explore grid with creator info
+          publicLooks === undefined ? (
+            // Loading skeleton
+            <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="break-inside-avoid mb-4">
+                  <div className="rounded-2xl bg-surface-alt border border-border/30 overflow-hidden animate-pulse">
+                    <div className="aspect-[3/4] bg-surface" />
+                    <div className="p-3 space-y-2">
+                      <div className="h-3 bg-surface rounded w-1/3" />
+                      <div className="h-4 bg-surface rounded w-2/3" />
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : exploreLooks.length > 0 ? (
-              <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
-                {exploreLooks.map((look, index) => (
-                  <LookCardWithCreator key={look.id} look={look} index={index} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-16">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-alt flex items-center justify-center">
-                  <Sparkles className="w-8 h-8 text-muted-foreground" />
                 </div>
-                <h3 className="text-lg font-medium text-foreground mb-2">
-                  No looks to explore yet
-                </h3>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  Looks shared by other users and friends will appear here. Share your own looks to help others discover new styles!
-                </p>
+              ))}
+            </div>
+          ) : exploreLooks.length > 0 ? (
+            <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
+              {exploreLooks.map((look, index) => (
+                <LookCardWithCreator key={look.id} look={look} index={index} />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-16">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-alt flex items-center justify-center">
+                <Sparkles className="w-8 h-8 text-muted-foreground" />
               </div>
-            )
+              <h3 className="text-lg font-medium text-foreground mb-2">No looks to explore yet</h3>
+              <p className="text-muted-foreground max-w-md mx-auto">
+                Looks shared by other users and friends will appear here. Share your own looks to help others discover
+                new styles!
+              </p>
+            </div>
           )}
         </motion.div>
       </main>
@@ -914,13 +863,23 @@ function DiscoverPageContent() {
           </Link>
           <Link href="/ask" className="flex flex-col items-center gap-1 p-2">
             <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+              />
             </svg>
             <span className="text-xs text-muted-foreground">Ask Nima</span>
           </Link>
           <Link href="/lookbooks" className="flex flex-col items-center gap-1 p-2">
             <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+              />
             </svg>
             <span className="text-xs text-muted-foreground">Lookbooks</span>
           </Link>
@@ -949,19 +908,22 @@ function GeneratingScreen({
   const [key, setKey] = useState(0);
 
   const loadingMessages = [
-    "Curating your perfect looks...",
-    "Learning your unique style...",
-    "Finding fits that complement you...",
-    "Matching outfits to your preferences...",
-    "Creating your personalized feed...",
-    "Generating try-on images...",
-    "Almost there...",
+    'Curating your perfect looks...',
+    'Learning your unique style...',
+    'Finding fits that complement you...',
+    'Matching outfits to your preferences...',
+    'Creating your personalized feed...',
+    'Generating try-on images...',
+    'Almost there...',
   ];
 
   // Calculate progress
-  const progress = generationProgress && generationProgress.total > 0
-    ? Math.round((generationProgress.completed / generationProgress.total) * 100)
-    : viewState === 'loading' ? 10 : 30;
+  const progress =
+    generationProgress && generationProgress.total > 0
+      ? Math.round((generationProgress.completed / generationProgress.total) * 100)
+      : viewState === 'loading'
+        ? 10
+        : 30;
 
   // Cycle through messages
   useEffect(() => {
@@ -1060,17 +1022,9 @@ function GeneratingScreen({
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative z-10">
         <div className="max-w-md text-center space-y-10">
           {/* Logo */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <h1 className="text-4xl md:text-5xl font-serif font-semibold tracking-tight text-foreground">
-              Nima
-            </h1>
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground mt-2 font-light">
-              AI Stylist
-            </p>
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+            <h1 className="text-4xl md:text-5xl font-serif font-semibold tracking-tight text-foreground">Nima</h1>
+            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground mt-2 font-light">AI Stylist</p>
           </motion.div>
 
           {/* Title */}
@@ -1080,14 +1034,11 @@ function GeneratingScreen({
             transition={{ duration: 0.6, delay: 0.2 }}
             className="space-y-2"
           >
-            <h2 className="text-2xl md:text-3xl font-serif text-foreground">
-              Creating your looks
-            </h2>
+            <h2 className="text-2xl md:text-3xl font-serif text-foreground">Creating your looks</h2>
             <p className="text-muted-foreground">
               {generationProgress && generationProgress.total > 0
                 ? `${generationProgress.completed} of ${generationProgress.total} looks ready`
-                : 'This will just take a moment...'
-              }
+                : 'This will just take a moment...'}
             </p>
           </motion.div>
 
@@ -1101,8 +1052,18 @@ function GeneratingScreen({
             <div className="bg-surface/90 backdrop-blur-md border border-border/50 rounded-2xl px-6 py-4 shadow-lg">
               <div className="flex items-center gap-4">
                 <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                  <svg className="w-5 h-5 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  <svg
+                    className="w-5 h-5 text-primary-foreground"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                    />
                   </svg>
                 </div>
                 <div className="text-left min-w-[200px]">
@@ -1141,9 +1102,7 @@ function GeneratingScreen({
                 transition={{ duration: 0.5, ease: 'easeOut' }}
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              {progress}% complete
-            </p>
+            <p className="text-xs text-muted-foreground">{progress}% complete</p>
           </motion.div>
 
           {/* Generation status cards */}
@@ -1161,12 +1120,13 @@ function GeneratingScreen({
                 return (
                   <div
                     key={i}
-                    className={`w-16 h-24 rounded-lg overflow-hidden border ${isCompleted
+                    className={`w-16 h-24 rounded-lg overflow-hidden border ${
+                      isCompleted
                         ? 'bg-primary/20 border-primary/50'
                         : isProcessing
                           ? 'bg-secondary/20 border-secondary/50'
                           : 'bg-surface-alt border-border/50'
-                      }`}
+                    }`}
                   >
                     {isCompleted ? (
                       <div className="w-full h-full flex items-center justify-center">

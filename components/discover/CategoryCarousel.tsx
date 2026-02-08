@@ -16,10 +16,7 @@ interface CategoryCarouselProps {
 
 export function CategoryCarousel({ isInlineVariant = false, userGender }: CategoryCarouselProps) {
   // Use gender-aware query if user gender is provided
-  const categorySamples = useQuery(
-    api.items.queries.getCategorySamplesWithGender,
-    { userGender }
-  );
+  const categorySamples = useQuery(api.items.queries.getCategorySamplesWithGender, { userGender });
 
   // Loading skeleton - different for mobile vs desktop
   if (categorySamples === undefined) {
@@ -28,9 +25,7 @@ export function CategoryCarousel({ isInlineVariant = false, userGender }: Catego
         {/* Mobile: Vertical full-width skeleton cards */}
         <div className="md:hidden">
           <div className={`${isInlineVariant ? 'py-4' : 'mb-6'}`}>
-            {!isInlineVariant && (
-              <h3 className="text-lg font-medium text-foreground mb-3">Shop by Category</h3>
-            )}
+            {!isInlineVariant && <h3 className="text-lg font-medium text-foreground mb-3">Shop by Category</h3>}
             <div className="flex gap-4 overflow-x-auto scrollbar-hide -mx-4 px-4">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="flex-shrink-0 flex flex-col items-center gap-2 w-20 animate-pulse">
@@ -45,15 +40,10 @@ export function CategoryCarousel({ isInlineVariant = false, userGender }: Catego
         {/* Desktop: Horizontal carousel skeleton */}
         <div className="hidden md:block">
           <div className={`${isInlineVariant ? 'py-4' : 'mb-6'}`}>
-            {!isInlineVariant && (
-              <h3 className="text-lg font-medium text-foreground mb-3">Shop by Category</h3>
-            )}
+            {!isInlineVariant && <h3 className="text-lg font-medium text-foreground mb-3">Shop by Category</h3>}
             <div className="flex gap-3 overflow-x-auto scrollbar-hide">
               {[...Array(6)].map((_, i) => (
-                <div
-                  key={i}
-                  className="flex-shrink-0 w-28 animate-pulse"
-                >
+                <div key={i} className="flex-shrink-0 w-28 animate-pulse">
                   <div className="aspect-square rounded-xl bg-surface-alt" />
                   <div className="mt-2 h-4 bg-surface-alt rounded w-3/4 mx-auto" />
                 </div>
@@ -85,9 +75,7 @@ export function CategoryCarousel({ isInlineVariant = false, userGender }: Catego
             <h3 className="text-lg font-medium text-foreground">
               {isInlineVariant ? 'Explore Categories' : 'Shop by Category'}
             </h3>
-            <span className="text-xs text-muted-foreground">
-              {categorySamples.length} categories
-            </span>
+            <span className="text-xs text-muted-foreground">{categorySamples.length} categories</span>
           </div>
 
           {/* Horizontal scrolling circular categories */}
@@ -100,11 +88,7 @@ export function CategoryCarousel({ isInlineVariant = false, userGender }: Catego
                 : `/discover/category/${category.category}?from=apparel`;
 
               return (
-                <Link
-                  key={category.category}
-                  href={href}
-                  className="flex-shrink-0 group"
-                >
+                <Link key={category.category} href={href} className="flex-shrink-0 group">
                   <motion.div
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -112,10 +96,13 @@ export function CategoryCarousel({ isInlineVariant = false, userGender }: Catego
                     className="flex flex-col items-center gap-2 w-20"
                   >
                     {/* Circular image container */}
-                    <div className={`relative w-16 h-16 rounded-full overflow-hidden bg-surface-alt border-2 transition-all duration-200 group-hover:shadow-md ${isGenderCategory
-                      ? 'border-primary/50 group-hover:border-primary'
-                      : 'border-border/30 group-hover:border-primary/50'
-                      }`}>
+                    <div
+                      className={`relative w-16 h-16 rounded-full overflow-hidden bg-surface-alt border-2 transition-all duration-200 group-hover:shadow-md ${
+                        isGenderCategory
+                          ? 'border-primary/50 group-hover:border-primary'
+                          : 'border-border/30 group-hover:border-primary/50'
+                      }`}
+                    >
                       {category.sampleImageUrl ? (
                         <Image
                           src={category.sampleImageUrl}
@@ -126,9 +113,7 @@ export function CategoryCarousel({ isInlineVariant = false, userGender }: Catego
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-surface to-surface-alt">
-                          <span className="text-2xl opacity-60">
-                            {getCategoryEmoji(category.category)}
-                          </span>
+                          <span className="text-2xl opacity-60">{getCategoryEmoji(category.category)}</span>
                         </div>
                       )}
 
@@ -142,10 +127,13 @@ export function CategoryCarousel({ isInlineVariant = false, userGender }: Catego
                     </div>
 
                     {/* Label */}
-                    <span className={`text-xs font-medium text-center leading-tight transition-colors ${isGenderCategory
-                      ? 'text-primary group-hover:text-primary-hover'
-                      : 'text-foreground group-hover:text-primary'
-                      }`}>
+                    <span
+                      className={`text-xs font-medium text-center leading-tight transition-colors ${
+                        isGenderCategory
+                          ? 'text-primary group-hover:text-primary-hover'
+                          : 'text-foreground group-hover:text-primary'
+                      }`}
+                    >
                       {category.label}
                     </span>
                   </motion.div>
@@ -170,9 +158,7 @@ export function CategoryCarousel({ isInlineVariant = false, userGender }: Catego
               {isInlineVariant ? 'Explore Categories' : 'Shop by Category'}
             </h3>
             {!isInlineVariant && (
-              <span className="text-xs text-muted-foreground">
-                {categorySamples.length} categories
-              </span>
+              <span className="text-xs text-muted-foreground">{categorySamples.length} categories</span>
             )}
           </div>
 
@@ -186,11 +172,7 @@ export function CategoryCarousel({ isInlineVariant = false, userGender }: Catego
                 : `/discover/category/${category.category}?from=apparel`;
 
               return (
-                <Link
-                  key={category.category}
-                  href={href}
-                  className="flex-shrink-0 group"
-                >
+                <Link key={category.category} href={href} className="flex-shrink-0 group">
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -198,10 +180,13 @@ export function CategoryCarousel({ isInlineVariant = false, userGender }: Catego
                     className="w-28"
                   >
                     {/* Image container */}
-                    <div className={`relative aspect-square rounded-xl overflow-hidden bg-surface-alt border transition-all duration-200 group-hover:shadow-md ${isGenderCategory
-                      ? 'border-primary/50 group-hover:border-primary'
-                      : 'border-border/30 group-hover:border-primary/50'
-                      }`}>
+                    <div
+                      className={`relative aspect-square rounded-xl overflow-hidden bg-surface-alt border transition-all duration-200 group-hover:shadow-md ${
+                        isGenderCategory
+                          ? 'border-primary/50 group-hover:border-primary'
+                          : 'border-border/30 group-hover:border-primary/50'
+                      }`}
+                    >
                       {category.sampleImageUrl ? (
                         <Image
                           src={category.sampleImageUrl}
@@ -212,9 +197,7 @@ export function CategoryCarousel({ isInlineVariant = false, userGender }: Catego
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-surface to-surface-alt">
-                          <span className="text-3xl opacity-50">
-                            {getCategoryEmoji(category.category)}
-                          </span>
+                          <span className="text-3xl opacity-50">{getCategoryEmoji(category.category)}</span>
                         </div>
                       )}
 
@@ -236,10 +219,13 @@ export function CategoryCarousel({ isInlineVariant = false, userGender }: Catego
 
                     {/* Label */}
                     <div className="mt-2 flex items-center justify-center gap-1">
-                      <span className={`text-sm font-medium transition-colors ${isGenderCategory
-                        ? 'text-primary group-hover:text-primary-hover'
-                        : 'text-foreground group-hover:text-primary'
-                        }`}>
+                      <span
+                        className={`text-sm font-medium transition-colors ${
+                          isGenderCategory
+                            ? 'text-primary group-hover:text-primary-hover'
+                            : 'text-foreground group-hover:text-primary'
+                        }`}
+                      >
                         {category.label}
                       </span>
                       <ChevronRight className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity -ml-0.5" />
@@ -269,6 +255,7 @@ function getCategoryEmoji(category: string): string {
     // Gender categories
     male: '👔',
     female: '👗',
+    swimwear: '👙',
   };
   return emojis[category] || '✨';
 }

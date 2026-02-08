@@ -2,16 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  ArrowLeft,
-  Minus,
-  Plus,
-  Trash2,
-  ShoppingBag,
-  Sparkles,
-  Loader2,
-  ExternalLink,
-} from 'lucide-react';
+import { ArrowLeft, Minus, Plus, Trash2, ShoppingBag, Sparkles, Loader2, ExternalLink } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -100,21 +91,7 @@ export default function CartPage() {
 
   return (
     <div className="min-h-screen bg-background pb-32">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
-          <button
-            onClick={() => router.back()}
-            className="p-2 -ml-2 rounded-full hover:bg-surface-alt transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 text-foreground" />
-          </button>
-
-          <h1 className="text-lg font-semibold text-foreground">Your Cart</h1>
-
-          <div className="w-9" /> {/* Spacer for centering */}
-        </div>
-      </header>
+      {/* Header removed - replaced by global Navigation */}
 
       <main className="max-w-2xl mx-auto px-4 py-6">
         {/* Loading State */}
@@ -187,8 +164,7 @@ export default function CartPage() {
                           alt={cartItem.item.name}
                           fill
                           unoptimized={
-                            cartItem.imageUrl.includes('convex.cloud') ||
-                            cartItem.imageUrl.includes('convex.site')
+                            cartItem.imageUrl.includes('convex.cloud') || cartItem.imageUrl.includes('convex.site')
                           }
                           className="object-cover"
                         />
@@ -293,8 +269,8 @@ export default function CartPage() {
                 <div>
                   <h3 className="font-medium text-foreground">Nima Delivers</h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    We handle everything! Nima purchases items from multiple stores and delivers them
-                    straight to you in one package.
+                    We handle everything! Nima purchases items from multiple stores and delivers them straight to you in
+                    one package.
                   </p>
                 </div>
               </div>
@@ -313,9 +289,7 @@ export default function CartPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Nima Service Fee (10%)</span>
-                  <span className="text-foreground">
-                    {formatPrice(serviceFee, cartTotal?.currency || 'USD')}
-                  </span>
+                  <span className="text-foreground">{formatPrice(serviceFee, cartTotal?.currency || 'USD')}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Est. Shipping</span>
@@ -338,9 +312,9 @@ export default function CartPage() {
         )}
       </main>
 
-      {/* Fixed Bottom Checkout Bar */}
+      {/* Fixed Bottom Checkout Bar - adjusted to sit above global mobile nav */}
       {!isLoading && cartItems && cartItems.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border p-4 z-40">
+        <div className="fixed bottom-[4.5rem] md:bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border p-4 z-40">
           <div className="max-w-2xl mx-auto">
             <Link
               href="/checkout"
@@ -348,74 +322,13 @@ export default function CartPage() {
             >
               <ShoppingBag className="w-5 h-5" />
               Proceed to Checkout
-              <span className="text-primary-foreground/80">
-                ({formatPrice(total, cartTotal?.currency || 'USD')})
-              </span>
+              <span className="text-primary-foreground/80">({formatPrice(total, cartTotal?.currency || 'USD')})</span>
             </Link>
           </div>
         </div>
       )}
 
-      {/* Bottom navigation (mobile) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/50 py-2 px-4 z-30">
-        <div className="flex items-center justify-around">
-          <Link href="/discover" className="flex flex-col items-center gap-1 p-2">
-            <Sparkles className="w-5 h-5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Discover</span>
-          </Link>
-          <Link href="/ask" className="flex flex-col items-center gap-1 p-2">
-            <svg
-              className="w-5 h-5 text-muted-foreground"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-              />
-            </svg>
-            <span className="text-xs text-muted-foreground">Ask Nima</span>
-          </Link>
-          <Link href="/lookbooks" className="flex flex-col items-center gap-1 p-2">
-            <svg
-              className="w-5 h-5 text-muted-foreground"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-              />
-            </svg>
-            <span className="text-xs text-muted-foreground">Lookbooks</span>
-          </Link>
-          <Link href="/profile" className="flex flex-col items-center gap-1 p-2">
-            <svg
-              className="w-5 h-5 text-muted-foreground"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-              />
-            </svg>
-            <span className="text-xs text-muted-foreground">Profile</span>
-          </Link>
-        </div>
-      </nav>
+      {/* Mobile Nav removed - replaced by global Navigation */}
     </div>
   );
 }
-
-
-

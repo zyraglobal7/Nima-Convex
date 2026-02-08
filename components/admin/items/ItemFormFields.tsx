@@ -3,19 +3,23 @@
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { X, Plus } from 'lucide-react';
 import { useState } from 'react';
 
-type Category = 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+type Category =
+  | 'top'
+  | 'bottom'
+  | 'dress'
+  | 'outfit'
+  | 'outerwear'
+  | 'shoes'
+  | 'accessory'
+  | 'bag'
+  | 'jewelry'
+  | 'swimwear';
 type Gender = 'male' | 'female' | 'unisex';
 
 const categories: { value: Category; label: string }[] = [
@@ -28,6 +32,7 @@ const categories: { value: Category; label: string }[] = [
   { value: 'accessory', label: 'Accessory' },
   { value: 'bag', label: 'Bag' },
   { value: 'jewelry', label: 'Jewelry' },
+  { value: 'swimwear', label: 'Swimwear' },
 ];
 
 const genders: { value: Gender; label: string }[] = [
@@ -75,7 +80,7 @@ export function ItemFormFields({ data, onChange, disabled }: ItemFormFieldsProps
   const handleAddToArray = (
     field: 'colors' | 'sizes' | 'tags' | 'occasion' | 'season',
     value: string,
-    setter: (val: string) => void
+    setter: (val: string) => void,
   ) => {
     if (value.trim() && !data[field].includes(value.trim())) {
       onChange({
@@ -86,10 +91,7 @@ export function ItemFormFields({ data, onChange, disabled }: ItemFormFieldsProps
     setter('');
   };
 
-  const handleRemoveFromArray = (
-    field: 'colors' | 'sizes' | 'tags' | 'occasion' | 'season',
-    index: number
-  ) => {
+  const handleRemoveFromArray = (field: 'colors' | 'sizes' | 'tags' | 'occasion' | 'season', index: number) => {
     onChange({
       ...data,
       [field]: data[field].filter((_, i) => i !== index),
@@ -556,4 +558,3 @@ export const defaultFormData: ItemFormData = {
   sourceUrl: '',
   inStock: true,
 };
-

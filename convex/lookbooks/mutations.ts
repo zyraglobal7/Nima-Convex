@@ -1,7 +1,7 @@
-import { mutation, internalMutation, MutationCtx } from '../_generated/server';
+import { mutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id, Doc } from '../_generated/dataModel';
-import { generateShareToken, MAX_LOOKBOOK_ITEMS } from '../types';
+import { generateShareToken, generatePublicId, MAX_LOOKBOOK_ITEMS } from '../types';
 import { internal } from '../_generated/api';
 
 /**
@@ -578,4 +578,166 @@ export const quickSave = mutation({
     };
   },
 });
+
+/**
+ * Save a try-on result to a "Tried On Looks" lookbook
+ * Creates a new look from the try-on and saves it
+ */
+export const saveTryOnToLookbook = mutation({
+  args: {
+    itemTryOnId: v.id('item_try_ons'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    lookbookId: v.optional(v.id('lookbooks')),
+    lookId: v.optional(v.id('looks')),
+    message: v.string(),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { itemTryOnId: Id<'item_try_ons'> }
+  ): Promise<{
+    success: boolean;
+    lookbookId?: Id<'lookbooks'>;
+    lookId?: Id<'looks'>;
+    message: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error('Not authenticated');
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Get the try-on
+    const tryOn = await ctx.db.get(args.itemTryOnId);
+    if (!tryOn) {
+      throw new Error('Try-on result not found');
+    }
+
+    // Verify ownership
+    if (tryOn.userId !== user._id) {
+      throw new Error('Not authorized to save this try-on');
+    }
+
+    // Ensure it's completed and has a storage ID
+    if (tryOn.status !== 'completed' || !tryOn.storageId) {
+      throw new Error('Try-on is not completed or is missing image');
+    }
+
+    // Get the item details
+    const item = await ctx.db.get(tryOn.itemId);
+    if (!item) {
+      throw new Error('Original item not found');
+    }
+
+    // 1. Find or create "Tried On Looks" lookbook
+    let triedOnLookbook = await ctx.db
+      .query('lookbooks')
+      .withIndex('by_user', (q) => q.eq('userId', user._id))
+      .filter((q) => q.eq(q.field('name'), 'Tried On Looks'))
+      .first();
+
+    if (!triedOnLookbook) {
+      const now = Date.now();
+      const lookbookId = await ctx.db.insert('lookbooks', {
+        userId: user._id,
+        name: 'Tried On Looks',
+        description: 'My virtual try-on history',
+        isPublic: false,
+        shareToken: generateShareToken(),
+        itemCount: 0,
+        isArchived: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      triedOnLookbook = await ctx.db.get(lookbookId);
+    }
+
+    if (!triedOnLookbook) {
+      throw new Error('Failed to create lookbook');
+    }
+
+    // 2. Create a new Look
+    const now = Date.now();
+    const publicId = generatePublicId('look');
+
+    const lookId = await ctx.db.insert('looks', {
+      publicId,
+      itemIds: [tryOn.itemId],
+      totalPrice: item.price,
+      currency: item.currency,
+      name: `Tried On: ${item.name}`,
+      styleTags: item.tags,
+      targetGender: item.gender,
+      isActive: true,
+      isFeatured: false,
+      isPublic: false, // Default to private
+      sharedWithFriends: false,
+      viewCount: 0,
+      saveCount: 1, // Start with 1 save (in this lookbook)
+      generationStatus: 'completed', // It's already generated via try-on
+      status: 'saved',
+      createdBy: 'user',
+      creatorUserId: user._id,
+      creationSource: 'apparel',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // 3. Link the try-on image to this look
+    await ctx.db.insert('look_images', {
+      lookId,
+      userId: user._id,
+      storageId: tryOn.storageId,
+      userImageId: tryOn.userImageId,
+      status: 'completed',
+      generationProvider: tryOn.generationProvider,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // 4. Add to the lookbook
+    // Check if already in lookbook to avoid partial duplicates if run multiple times (though button will disappear)
+    const existingItems = await ctx.db
+      .query('lookbook_items')
+      .withIndex('by_lookbook', (q) => q.eq('lookbookId', triedOnLookbook!._id))
+      .collect();
+      
+    // We can't easily check for "this specific try-on" because lookbook_items links to looks/items, not try-ons.
+    // But since we just created a NEW look ID, it won't be in there.
+
+    await ctx.db.insert('lookbook_items', {
+      lookbookId: triedOnLookbook._id,
+      userId: user._id,
+      itemType: 'look',
+      lookId,
+      sortOrder: existingItems.length,
+      createdAt: now,
+    });
+
+    // Update lookbook count
+    await ctx.db.patch(triedOnLookbook._id, {
+      itemCount: triedOnLookbook.itemCount + 1,
+      updatedAt: now,
+      // Update cover if empty
+      autoCoverItemId: triedOnLookbook.itemCount === 0 ? item._id : triedOnLookbook.autoCoverItemId,
+    });
+
+    return {
+      success: true,
+      lookbookId: triedOnLookbook._id,
+      lookId,
+      message: 'Saved to Tried On Looks',
+    };
+  },
+});
+
 

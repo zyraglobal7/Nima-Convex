@@ -3,12 +3,11 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  ArrowLeft, 
-  Heart, 
-  ThumbsDown, 
-  Bookmark, 
-  Share2, 
+import {
+  Heart,
+  ThumbsDown,
+  Bookmark,
+  Share2,
   Sparkles,
   X,
   Loader2,
@@ -19,9 +18,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ThemeToggle } from '@/components/theme-toggle';
-import { MessagesIcon } from '@/components/messages/MessagesIcon';
-import { CartIcon } from '@/components/cart/CartIcon';
 import { NimaChatBubble, ProductCard } from '@/components/discover';
 import { ShareLookModal } from '@/components/looks/ShareLookModal';
 import { FriendRequestPopup } from '@/components/friends/FriendRequestPopup';
@@ -78,9 +74,10 @@ function LookbookOption({
       disabled={disabled}
       className={`
         w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200
-        ${isSaved
-          ? 'bg-primary/10 border-2 border-primary'
-          : 'bg-surface border-2 border-border/50 hover:border-primary/30'
+        ${
+          isSaved
+            ? 'bg-primary/10 border-2 border-primary'
+            : 'bg-surface border-2 border-border/50 hover:border-primary/30'
         }
         ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
       `}
@@ -92,7 +89,10 @@ function LookbookOption({
             src={lookbookWithCover.coverImageUrl}
             alt={lookbook.name}
             fill
-            unoptimized={lookbookWithCover.coverImageUrl.includes('convex.cloud') || lookbookWithCover.coverImageUrl.includes('convex.site')}
+            unoptimized={
+              lookbookWithCover.coverImageUrl.includes('convex.cloud') ||
+              lookbookWithCover.coverImageUrl.includes('convex.site')
+            }
             className="object-cover"
           />
         ) : (
@@ -101,7 +101,7 @@ function LookbookOption({
           </div>
         )}
       </div>
-      
+
       {/* Info */}
       <div className="flex-1 text-left">
         <p className="font-medium text-foreground">{lookbook.name}</p>
@@ -150,40 +150,40 @@ export default function LookDetailPage() {
 
   // Fetch user's lookbooks
   const userLookbooks = useQuery(api.lookbooks.queries.listUserLookbooks, { includeArchived: false });
-  
+
   // Use the appropriate query based on ID type
   const lookDataByInternalId = useQuery(
     api.looks.queries.getLookWithFullDetails,
-    lookId && !isPublic ? { lookId: lookId as Id<'looks'> } : 'skip'
+    lookId && !isPublic ? { lookId: lookId as Id<'looks'> } : 'skip',
   );
   const lookDataByPublicId = useQuery(
     api.looks.queries.getLookWithFullDetailsByPublicId,
-    lookId && isPublic ? { publicId: lookId } : 'skip'
+    lookId && isPublic ? { publicId: lookId } : 'skip',
   );
-  
+
   // Use whichever query returned data
   const lookData = isPublic ? lookDataByPublicId : lookDataByInternalId;
   // Check which lookbooks this look is saved to
   const savedStatus = useQuery(
     api.lookbooks.queries.isItemSaved,
-    lookData?.look ? { itemType: 'look' as const, lookId: lookData.look._id } : 'skip'
+    lookData?.look ? { itemType: 'look' as const, lookId: lookData.look._id } : 'skip',
   );
 
   // Mutations for lookbook operations
   const addToLookbookMutation = useMutation(api.lookbooks.mutations.addToLookbook);
   const createLookbookMutation = useMutation(api.lookbooks.mutations.createLookbook);
-  
+
   // Cart mutation
   const addToCartMutation = useMutation(api.cart.mutations.addToCart);
 
   // Look interactions - queries
   const userInteraction = useQuery(
     api.lookInteractions.queries.getUserInteractionForLook,
-    lookData?.look ? { lookId: lookData.look._id } : 'skip'
+    lookData?.look ? { lookId: lookData.look._id } : 'skip',
   );
   const interactionCounts = useQuery(
     api.lookInteractions.queries.getLookInteractionCounts,
-    lookData?.look ? { lookId: lookData.look._id } : 'skip'
+    lookData?.look ? { lookId: lookData.look._id } : 'skip',
   );
 
   // Look interactions - mutations
@@ -206,7 +206,7 @@ export default function LookDetailPage() {
           publicId: lookId as string,
           sharedByUserId: sharedByUserId as Id<'users'>,
         }
-      : 'skip'
+      : 'skip',
   );
 
   // Show friend request popup if shared by non-friend
@@ -230,7 +230,7 @@ export default function LookDetailPage() {
   // Transform items to products format
   const products: TransformedProduct[] = useMemo(() => {
     if (!lookData?.items) return [];
-    
+
     return lookData.items.map((itemData) => {
       // Map category to expected type
       const categoryMap: Record<string, TransformedProduct['category']> = {
@@ -251,7 +251,9 @@ export default function LookDetailPage() {
         category: categoryMap[itemData.item.category] || 'accessory',
         price: itemData.item.price,
         currency: itemData.item.currency,
-        imageUrl: itemData.primaryImageUrl || 'https://images.unsplash.com/photo-1485462537746-965f33f7f6a7?w=400&h=500&fit=crop',
+        imageUrl:
+          itemData.primaryImageUrl ||
+          'https://images.unsplash.com/photo-1485462537746-965f33f7f6a7?w=400&h=500&fit=crop',
         storeUrl: itemData.item.sourceUrl || '#',
         storeName: itemData.item.sourceStore || itemData.item.brand || 'Store',
         color: itemData.item.colors[0] || 'Mixed',
@@ -272,10 +274,9 @@ export default function LookDetailPage() {
   }, [lookData?.lookImage?.imageUrl, products]);
 
   // Check if image is being generated or failed
-  const isGenerating = lookData?.look?.generationStatus === 'pending' || 
-                     lookData?.look?.generationStatus === 'processing';
-  const generationFailed = lookData?.look?.generationStatus === 'failed' ||
-                          lookData?.lookImage?.status === 'failed';
+  const isGenerating =
+    lookData?.look?.generationStatus === 'pending' || lookData?.look?.generationStatus === 'processing';
+  const generationFailed = lookData?.look?.generationStatus === 'failed' || lookData?.lookImage?.status === 'failed';
 
   // Safe navigation helper
   const safeGoBack = useCallback(() => {
@@ -311,9 +312,9 @@ export default function LookDetailPage() {
 
   const handleSaveToLookbook = async (lookbookId: Id<'lookbooks'>) => {
     if (isSaving) return;
-    
+
     const isCurrentlySaved = savedStatus?.lookbookIds.includes(lookbookId);
-    
+
     if (isCurrentlySaved) {
       // Already saved - for now just show a toast that it's already saved
       // Full unsave would require finding the lookbook_item ID and using removeFromLookbook
@@ -353,16 +354,16 @@ export default function LookDetailPage() {
       const newLookbookId = await createLookbookMutation({
         name: newLookbookName.trim(),
       });
-      
+
       // Auto-add the current look to the new lookbook
       if (lookData?.look) {
-      await addToLookbookMutation({
-        lookbookId: newLookbookId,
-        itemType: 'look',
+        await addToLookbookMutation({
+          lookbookId: newLookbookId,
+          itemType: 'look',
           lookId: lookData.look._id,
-      });
+        });
       }
-      
+
       toast.success(`Created "${newLookbookName}" and saved look!`);
       setNewLookbookName('');
     } catch (error) {
@@ -408,11 +409,11 @@ export default function LookDetailPage() {
   // Handle adding entire look to cart
   const handleAddLookToCart = async () => {
     if (isAddingLookToCart || lookAddedToCart || products.length === 0) return;
-    
+
     setIsAddingLookToCart(true);
     let successCount = 0;
     let failCount = 0;
-    
+
     try {
       // Add each product to cart
       for (const product of products) {
@@ -427,7 +428,7 @@ export default function LookDetailPage() {
           failCount++;
         }
       }
-      
+
       if (successCount > 0) {
         setLookAddedToCart(true);
         if (failCount > 0) {
@@ -469,8 +470,8 @@ export default function LookDetailPage() {
           </div>
           <p className="text-lg font-medium text-foreground mb-2">Look not found</p>
           <p className="text-muted-foreground mb-4">This look may have been removed or doesn&apos;t exist.</p>
-          <Link 
-            href="/discover" 
+          <Link
+            href="/discover"
             className="inline-flex px-6 py-3 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary-hover transition-colors"
           >
             Back to Discover
@@ -484,39 +485,21 @@ export default function LookDetailPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50">
-        <div className="max-w-3xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            {/* Back button */}
-            <button
-              onClick={safeGoBack}
-              className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5 text-foreground" />
-            </button>
-
-            {/* Title */}
-            <h1 className="text-lg font-medium text-foreground">Look Details</h1>
-
-            {/* Actions */}
-            <div className="flex items-center gap-1">
-              <CartIcon />
-              <ThemeToggle />
-              <MessagesIcon />
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="p-2 rounded-full hover:bg-surface transition-colors"
-              >
-                <Share2 className="w-5 h-5 text-muted-foreground" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* Header removed - replaced by global Navigation */}
 
       {/* Main content */}
       <main className="max-w-3xl mx-auto px-4 py-6 pb-32">
+        {/* Title and Share */}
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl font-serif font-semibold text-foreground">Look Details</h1>
+          <button
+            onClick={() => setShowShareModal(true)}
+            className="p-2 rounded-full hover:bg-surface border border-transparent hover:border-border/50 transition-colors"
+          >
+            <Share2 className="w-5 h-5 text-muted-foreground" />
+          </button>
+        </div>
+
         {/* Hero image */}
         <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
@@ -525,7 +508,6 @@ export default function LookDetailPage() {
           className="relative rounded-2xl overflow-hidden mb-6 bg-surface"
         >
           <div className="relative w-full aspect-[3/4]">
-
             {isGenerating ? (
               <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
                 <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
@@ -567,9 +549,7 @@ export default function LookDetailPage() {
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
-                  {products.length} items in this look
-                </p>
+                <p className="text-xs text-amber-600/80 dark:text-amber-400/80">{products.length} items in this look</p>
               </div>
             ) : (
               <Image
@@ -580,9 +560,8 @@ export default function LookDetailPage() {
                 className="object-cover"
               />
             )}
-
           </div>
-          
+
           {/* Style tags overlay - only show if not generating */}
           {!isGenerating && (
             <div className="absolute bottom-4 left-4 right-4 flex flex-wrap gap-2">
@@ -612,9 +591,10 @@ export default function LookDetailPage() {
             onClick={handleDislike}
             className={`
               flex flex-col items-center gap-1 p-4 rounded-2xl transition-all duration-200
-              ${isDisliked 
-                ? 'bg-destructive/10 border-2 border-destructive' 
-                : 'bg-surface border-2 border-border/50 hover:border-destructive/50'
+              ${
+                isDisliked
+                  ? 'bg-destructive/10 border-2 border-destructive'
+                  : 'bg-surface border-2 border-border/50 hover:border-destructive/50'
               }
             `}
           >
@@ -631,9 +611,10 @@ export default function LookDetailPage() {
             onClick={handleLike}
             className={`
               flex flex-col items-center gap-1 p-4 rounded-2xl transition-all duration-200
-              ${isLiked 
-                ? 'bg-destructive/10 border-2 border-destructive' 
-                : 'bg-surface border-2 border-border/50 hover:border-destructive/50'
+              ${
+                isLiked
+                  ? 'bg-destructive/10 border-2 border-destructive'
+                  : 'bg-surface border-2 border-border/50 hover:border-destructive/50'
               }
             `}
           >
@@ -650,13 +631,16 @@ export default function LookDetailPage() {
             onClick={() => setShowLookbookModal(true)}
             className={`
               flex flex-col items-center gap-1 p-4 rounded-2xl transition-all duration-200
-              ${savedStatus?.isSaved 
-                ? 'bg-primary/10 border-2 border-primary' 
-                : 'bg-surface border-2 border-border/50 hover:border-primary/50'
+              ${
+                savedStatus?.isSaved
+                  ? 'bg-primary/10 border-2 border-primary'
+                  : 'bg-surface border-2 border-border/50 hover:border-primary/50'
               }
             `}
           >
-            <Bookmark className={`w-6 h-6 ${savedStatus?.isSaved ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
+            <Bookmark
+              className={`w-6 h-6 ${savedStatus?.isSaved ? 'fill-primary text-primary' : 'text-muted-foreground'}`}
+            />
             <span className={`text-xs font-medium ${savedStatus?.isSaved ? 'text-primary' : 'text-muted-foreground'}`}>
               {savedStatus?.isSaved ? 'Saved' : 'Save'}
             </span>
@@ -674,13 +658,17 @@ export default function LookDetailPage() {
             {interactionCounts.loveCount > 0 && (
               <div className="flex items-center gap-1.5">
                 <Heart className="w-4 h-4 text-destructive fill-destructive" />
-                <span>{interactionCounts.loveCount} {interactionCounts.loveCount === 1 ? 'love' : 'loves'}</span>
+                <span>
+                  {interactionCounts.loveCount} {interactionCounts.loveCount === 1 ? 'love' : 'loves'}
+                </span>
               </div>
             )}
             {interactionCounts.saveCount > 0 && (
               <div className="flex items-center gap-1.5">
                 <Users className="w-4 h-4" />
-                <span>{interactionCounts.saveCount} {interactionCounts.saveCount === 1 ? 'save' : 'saves'}</span>
+                <span>
+                  {interactionCounts.saveCount} {interactionCounts.saveCount === 1 ? 'save' : 'saves'}
+                </span>
               </div>
             )}
             {/* Show dislike count only to owner */}
@@ -701,11 +689,7 @@ export default function LookDetailPage() {
             transition={{ duration: 0.4, delay: 0.3 }}
             className="mb-8"
           >
-            <NimaChatBubble
-              message={look.nimaComment}
-              animate={true}
-              size="md"
-            />
+            <NimaChatBubble message={look.nimaComment} animate={true} size="md" />
           </motion.div>
         )}
 
@@ -738,13 +722,13 @@ export default function LookDetailPage() {
           className="space-y-3"
         >
           <h3 className="text-lg font-medium text-foreground mb-4">Shop this look</h3>
-          
+
           {/* Show unavailable items notice if some/all items are missing */}
           {(() => {
             const totalItems = look.itemIds.length;
             const availableItems = products.length;
             const unavailableCount = totalItems - availableItems;
-            
+
             if (unavailableCount > 0) {
               return (
                 <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl mb-4">
@@ -752,16 +736,14 @@ export default function LookDetailPage() {
                     <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="font-medium text-amber-800 dark:text-amber-200">
-                        {availableItems === 0 
+                        {availableItems === 0
                           ? 'Items no longer available'
-                          : `${unavailableCount} item${unavailableCount > 1 ? 's' : ''} no longer available`
-                        }
+                          : `${unavailableCount} item${unavailableCount > 1 ? 's' : ''} no longer available`}
                       </p>
                       <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
                         {availableItems === 0
                           ? 'All items in this look have been removed or are no longer in stock. This look cannot be recreated.'
-                          : `Some items from this look have been removed or are no longer in stock. You can still shop the available items below.`
-                        }
+                          : `Some items from this look have been removed or are no longer in stock. You can still shop the available items below.`}
                       </p>
                     </div>
                   </div>
@@ -770,11 +752,9 @@ export default function LookDetailPage() {
             }
             return null;
           })()}
-          
+
           {products.length > 0 ? (
-            products.map((product, index) => (
-              <ProductCard key={product.id} product={product} index={index} />
-            ))
+            products.map((product, index) => <ProductCard key={product.id} product={product} index={index} />)
           ) : (
             <div className="text-center py-8">
               <p className="text-muted-foreground">No items available to display.</p>
@@ -790,11 +770,7 @@ export default function LookDetailPage() {
             transition={{ duration: 0.4, delay: 0.6 }}
             className="mt-8 flex justify-center"
           >
-            <RecreateLookButton
-              lookId={look._id}
-              creatorUserId={look.creatorUserId}
-              currentUserId={currentUser._id}
-            />
+            <RecreateLookButton lookId={look._id} creatorUserId={look.creatorUserId} currentUserId={currentUser._id} />
           </motion.div>
         )}
       </main>
@@ -803,7 +779,7 @@ export default function LookDetailPage() {
       <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/50 p-4">
         <div className="max-w-3xl mx-auto flex gap-3">
           {/* Add to Cart button */}
-          <button 
+          <button
             onClick={handleAddLookToCart}
             disabled={isAddingLookToCart || lookAddedToCart || products.length === 0}
             className={`flex-1 h-14 rounded-full font-medium text-base transition-all duration-300 flex items-center justify-center gap-2 ${
@@ -829,9 +805,9 @@ export default function LookDetailPage() {
               </>
             )}
           </button>
-          
+
           {/* Buy All button */}
-          <button 
+          <button
             onClick={handleBuyClick}
             disabled={products.length === 0}
             className="flex-1 h-14 bg-primary hover:bg-primary-hover text-primary-foreground rounded-full font-medium text-base transition-all duration-300 hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -882,9 +858,7 @@ export default function LookDetailPage() {
               <div className="space-y-6">
                 <div>
                   <h3 className="text-xl font-serif font-semibold text-foreground">Save to Lookbook</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Organize your favorite looks into collections
-                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">Organize your favorite looks into collections</p>
                 </div>
 
                 {/* Existing lookbooks */}
@@ -900,9 +874,7 @@ export default function LookDetailPage() {
                       <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-surface-alt flex items-center justify-center">
                         <Sparkles className="w-6 h-6 text-muted-foreground" />
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        No lookbooks yet. Create one below!
-                      </p>
+                      <p className="text-sm text-muted-foreground">No lookbooks yet. Create one below!</p>
                     </div>
                   ) : (
                     // Lookbook list
@@ -941,11 +913,7 @@ export default function LookDetailPage() {
                       disabled={!newLookbookName.trim() || isCreating}
                       className="h-12 px-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex items-center gap-2"
                     >
-                      {isCreating ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Plus className="w-4 h-4" />
-                      )}
+                      {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                       {isCreating ? 'Creating...' : 'Create'}
                     </button>
                   </div>
@@ -995,10 +963,7 @@ export default function LookDetailPage() {
       )}
 
       {/* Coming Soon Modal */}
-      <ComingSoonModal
-        open={showComingSoonModal}
-        onClose={() => setShowComingSoonModal(false)}
-      />
+      <ComingSoonModal open={showComingSoonModal} onClose={() => setShowComingSoonModal(false)} />
 
       {/* Items Unavailable Modal */}
       <ItemsUnavailableModal
