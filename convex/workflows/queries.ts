@@ -187,7 +187,8 @@ export const getLookWithItemImages = internalQuery({
             v.literal('shoes'),
             v.literal('accessory'),
             v.literal('bag'),
-            v.literal('jewelry')
+            v.literal('jewelry'),
+            v.literal('swimwear')
           ),
           colors: v.array(v.string()),
           primaryImageUrl: v.union(v.string(), v.null()),
@@ -342,7 +343,8 @@ export const searchItemsForAI = internalQuery({
         v.literal('shoes'),
         v.literal('accessory'),
         v.literal('bag'),
-        v.literal('jewelry')
+        v.literal('jewelry'),
+        v.literal('swimwear')
       ),
       colors: v.array(v.string()),
       tags: v.array(v.string()),
@@ -424,7 +426,8 @@ export const getAllItemsForAI = internalQuery({
         v.literal('shoes'),
         v.literal('accessory'),
         v.literal('bag'),
-        v.literal('jewelry')
+        v.literal('jewelry'),
+        v.literal('swimwear')
       )
     ),
     limit: v.optional(v.number()),
@@ -445,7 +448,8 @@ export const getAllItemsForAI = internalQuery({
         v.literal('shoes'),
         v.literal('accessory'),
         v.literal('bag'),
-        v.literal('jewelry')
+        v.literal('jewelry'),
+        v.literal('swimwear')
       ),
       colors: v.array(v.string()),
       tags: v.array(v.string()),
@@ -467,7 +471,8 @@ export const getAllItemsForAI = internalQuery({
         | 'shoes'
         | 'accessory'
         | 'bag'
-        | 'jewelry';
+        | 'jewelry'
+        | 'swimwear';
       limit?: number;
     }
   ): Promise<
@@ -563,7 +568,8 @@ export const getItemWithPrimaryImage = internalQuery({
           v.literal('shoes'),
           v.literal('accessory'),
           v.literal('bag'),
-          v.literal('jewelry')
+          v.literal('jewelry'),
+          v.literal('swimwear')
         ),
         colors: v.array(v.string()),
         price: v.number(),
