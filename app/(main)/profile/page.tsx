@@ -1,15 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion} from 'framer-motion';
 import { Sparkles, User, Camera, LogOut, ChevronRight, Save, Loader2, Users, ImageIcon, Heart, Check, Pencil, X, Moon, Sun, Trash2, Settings, Mail, Lock } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import type { Id } from '@/convex/_generated/dataModel';
-import { ThemeToggle } from '@/components/theme-toggle';
-import { MessagesIcon } from '@/components/messages/MessagesIcon';
+
 import { FriendsList } from '@/components/friends/FriendsList';
 import { AddFriendButton } from '@/components/friends/AddFriendButton';
 import { PhotosTab } from '@/components/profile';
@@ -88,7 +86,7 @@ export default function ProfilePage() {
   const [height, setHeight] = useState('');
   const [heightUnit, setHeightUnit] = useState<'cm' | 'ft'>('cm');
   const [budgetRange, setBudgetRange] = useState<'low' | 'mid' | 'premium'>('mid');
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState('KES');
 
   // Initialize form from user data when currentUser loads
   useEffect(() => {
@@ -103,7 +101,7 @@ export default function ProfilePage() {
       setHeight(currentUser.height || '');
       setHeightUnit((currentUser.heightUnit as 'cm' | 'ft') || 'cm');
       setBudgetRange((currentUser.budgetRange as 'low' | 'mid' | 'premium') || 'mid');
-      setCurrency(currentUser.currency || 'USD');
+      setCurrency(currentUser.currency || 'KES');
     }
   }, [currentUser]);
 
@@ -226,30 +224,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50">
-        <div className="max-w-3xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            {/* Logo */}
-            <Link href="/discover" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-serif font-semibold text-foreground">Nima</span>
-            </Link>
-
-            {/* Page title - center */}
-            <h1 className="absolute left-1/2 -translate-x-1/2 text-lg font-medium text-foreground">
-              Profile
-            </h1>
-
-            {/* Right actions */}
-            <div className="flex items-center gap-2">
-              <MessagesIcon />
-            </div>
-          </div>
-        </div>
-      </header>
+  
 
       {/* Main content */}
       <main className="max-w-3xl mx-auto px-4 py-6">

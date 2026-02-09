@@ -325,7 +325,7 @@ export default function CartPage() {
               <ShoppingBag className="w-5 h-5" />
               Proceed to Checkout
               <span className="text-primary-foreground/80">
-                ({formatPrice(total, cartTotal?.currency || 'USD')})
+                ({formatPrice(total, cartTotal?.currency || 'KES')})
               </span>
             </Link>
           </div>

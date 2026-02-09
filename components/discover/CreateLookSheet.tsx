@@ -50,7 +50,7 @@ export function CreateLookSheet({
 
   // Calculate total price
   const totalPrice = selectedItems.reduce((sum, item) => sum + item.price, 0);
-  const currency = selectedItems[0]?.currency || 'USD';
+  const currency = selectedItems[0]?.currency || 'KES';
 
   // Watch for look completion
   useEffect(() => {
