@@ -41,7 +41,7 @@ const genders: { value: Gender; label: string }[] = [
   { value: 'unisex', label: 'Unisex' },
 ];
 
-const currencies = ['USD', 'EUR', 'GBP', 'KES', 'NGN'];
+const currencies = ['KES', 'EUR', 'GBP', 'KES', 'NGN'];
 
 export interface ItemFormData {
   name: string;
@@ -546,7 +546,7 @@ export const defaultFormData: ItemFormData = {
   subcategory: '',
   gender: 'unisex',
   price: '',
-  currency: 'USD',
+  currency: 'KES',
   originalPrice: '',
   colors: [],
   sizes: [],

@@ -391,19 +391,19 @@ export default function CheckoutPage() {
                     Subtotal ({cartTotal?.itemCount} items)
                   </span>
                   <span className="text-foreground">
-                    {formatPrice(cartTotal?.subtotal || 0, cartTotal?.currency || 'USD')}
+                    {formatPrice(cartTotal?.subtotal || 0, cartTotal?.currency || 'KES')}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Nima Service Fee (10%)</span>
                   <span className="text-foreground">
-                    {formatPrice(serviceFee, cartTotal?.currency || 'USD')}
+                    {formatPrice(serviceFee, cartTotal?.currency || 'KES')}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Estimated Shipping</span>
                   <span className="text-foreground">
-                    {formatPrice(estimatedShipping, cartTotal?.currency || 'USD')}
+                    {formatPrice(estimatedShipping, cartTotal?.currency || 'KES')}
                   </span>
                 </div>
               </div>
@@ -412,7 +412,7 @@ export default function CheckoutPage() {
                 <div className="flex justify-between">
                   <span className="font-medium text-foreground">Total</span>
                   <span className="font-semibold text-lg text-foreground">
-                    {formatPrice(total, cartTotal?.currency || 'USD')}
+                    {formatPrice(total, cartTotal?.currency || 'KES')}
                   </span>
                 </div>
               </div>
@@ -438,7 +438,7 @@ export default function CheckoutPage() {
               ) : (
                 <>
                   <Check className="w-5 h-5" />
-                  Place Order ({formatPrice(total, cartTotal?.currency || 'USD')})
+                  Place Order ({formatPrice(total, cartTotal?.currency || 'KES')})
                 </>
               )}
             </button>

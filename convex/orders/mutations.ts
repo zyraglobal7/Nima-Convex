@@ -127,7 +127,7 @@ export const createOrder = mutation({
       serviceFee,
       shippingCost,
       total,
-      currency: 'USD',
+      currency: 'KES',
       paymentStatus: 'pending',
       status: 'pending',
       createdAt: now,

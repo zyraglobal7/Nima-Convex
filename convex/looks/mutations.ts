@@ -795,7 +795,7 @@ export const createLookFromSelectedItems = mutation({
 
     // Validate all items exist and are active, calculate total price
     let totalPrice = 0;
-    let currency = 'USD';
+    let currency = 'KES';
     const styleTags: string[] = [];
     const categories: string[] = [];
 

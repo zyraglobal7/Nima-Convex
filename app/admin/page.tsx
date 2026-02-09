@@ -86,7 +86,7 @@ export default function AdminDashboard() {
               <>
                 <div className="text-2xl font-bold">{stats.totalCartsWithItems}</div>
                 <p className="text-xs text-muted-foreground">
-                  {stats.totalCartItems} items • {formatPrice(stats.cartTotalValue, 'USD')}
+                  {stats.totalCartItems} items • {formatPrice(stats.cartTotalValue, 'KES')}
                 </p>
               </>
             ) : (
