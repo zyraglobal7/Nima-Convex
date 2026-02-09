@@ -3,11 +3,11 @@
  * Configures the Convex workflow component with retry policies
  */
 
-import { WorkflowManager, vWorkflowId } from '@convex-dev/workflow';
+import { WorkflowManager } from '@convex-dev/workflow';
 import { components, internal } from '../_generated/api';
 import { mutation, query, MutationCtx, QueryCtx } from '../_generated/server';
 import { v } from 'convex/values';
-import type { Id, Doc } from '../_generated/dataModel';
+import type { Id } from '../_generated/dataModel';
 
 /**
  * Global workflow manager instance
@@ -389,6 +389,8 @@ export const startGenerateMoreLooks = mutation({
 export const startItemTryOn = mutation({
   args: {
     itemId: v.id('items'),
+    selectedSize: v.optional(v.string()),
+    selectedColor: v.optional(v.string()),
   },
   returns: v.object({
     success: v.boolean(),
@@ -397,7 +399,11 @@ export const startItemTryOn = mutation({
   }),
   handler: async (
     ctx: MutationCtx,
-    args: { itemId: Id<'items'> }
+    args: { 
+      itemId: Id<'items'>; 
+      selectedSize?: string; 
+      selectedColor?: string; 
+    }
   ): Promise<{
     success: boolean;
     tryOnId?: Id<'item_try_ons'>;
@@ -474,6 +480,8 @@ export const startItemTryOn = mutation({
         status: 'pending',
         errorMessage: undefined,
         userImageId: userImage._id,
+        selectedSize: args.selectedSize,
+        selectedColor: args.selectedColor,
         updatedAt: now,
       });
 
@@ -497,6 +505,8 @@ export const startItemTryOn = mutation({
       userId: user._id,
       userImageId: userImage._id,
       status: 'pending',
+      selectedSize: args.selectedSize,
+      selectedColor: args.selectedColor,
       createdAt: now,
       updatedAt: now,
     });

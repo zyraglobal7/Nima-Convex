@@ -267,6 +267,10 @@ export default defineSchema({
     viewCount: v.optional(v.number()),
     saveCount: v.optional(v.number()),
 
+    // Variant info (for single-item looks like try-ons)
+    selectedSize: v.optional(v.string()), // e.g. "M", "US 10"
+    selectedColor: v.optional(v.string()), // e.g. "Red", "Navy"
+
     // Image generation status for workflow
     generationStatus: v.optional(
       v.union(
@@ -646,6 +650,10 @@ export default defineSchema({
 
     // Source info
     userImageId: v.id('user_images'), // Which user photo was used
+
+    // Variant selection
+    selectedSize: v.optional(v.string()), // e.g. "M"
+    selectedColor: v.optional(v.string()), // e.g. "Red"
 
     // Generation details
     status: v.union(

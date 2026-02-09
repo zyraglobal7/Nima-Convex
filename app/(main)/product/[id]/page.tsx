@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { useParams} from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart,
@@ -40,6 +40,10 @@ export default function ProductDetailPage() {
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
   const [isSavingTryOn, setIsSavingTryOn] = useState(false);
+
+  // Variant selection state
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
 
   // Queries
   const itemData = useQuery(api.items.queries.getItemWithImage, { itemId });
@@ -108,10 +112,24 @@ export default function ProductDetailPage() {
       return;
     }
 
+    if (item.colors.length > 0 && !selectedColor) {
+      toast.error('Please select a color first');
+      return;
+    }
+
+    if (item.sizes.length > 0 && !selectedSize) {
+      toast.error('Please select a size first');
+      return;
+    }
+
     setTryOnStatus('starting');
 
     try {
-      const result = await startTryOn({ itemId });
+      const result = await startTryOn({
+        itemId,
+        selectedSize: selectedSize || undefined,
+        selectedColor: selectedColor || undefined,
+      });
 
       if (result.success && result.tryOnId) {
         setTryOnId(result.tryOnId);
@@ -309,16 +327,25 @@ export default function ProductDetailPage() {
               <h3 className="text-sm font-medium text-foreground mb-2">Colors</h3>
               <div className="flex flex-wrap gap-2">
                 {item.colors.map((color, index) => (
-                  <div
+                  <button
                     key={index}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-surface rounded-full border border-border"
+                    onClick={() => setSelectedColor(color)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${
+                      selectedColor === color
+                        ? 'bg-primary/10 border-primary ring-1 ring-primary'
+                        : 'bg-surface border-border hover:border-primary/50'
+                    }`}
                   >
                     <div
                       className="w-4 h-4 rounded-full border border-border"
                       style={{ backgroundColor: color.toLowerCase() }}
                     />
-                    <span className="text-sm text-foreground">{color}</span>
-                  </div>
+                    <span
+                      className={`text-sm ${selectedColor === color ? 'font-medium text-primary' : 'text-foreground'}`}
+                    >
+                      {color}
+                    </span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -330,12 +357,17 @@ export default function ProductDetailPage() {
               <h3 className="text-sm font-medium text-foreground mb-2">Sizes</h3>
               <div className="flex flex-wrap gap-2">
                 {item.sizes.map((size, index) => (
-                  <span
+                  <button
                     key={index}
-                    className="px-4 py-2 bg-surface rounded-lg border border-border text-sm text-foreground hover:border-primary cursor-pointer transition-colors"
+                    onClick={() => setSelectedSize(size)}
+                    className={`px-4 py-2 rounded-lg border text-sm transition-all ${
+                      selectedSize === size
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-surface border-border text-foreground hover:border-primary/50'
+                    }`}
                   >
                     {size}
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -370,7 +402,7 @@ export default function ProductDetailPage() {
       </main>
 
       {/* Fixed Bottom Action Bar */}
-      <div className="fixed bottom-[4.5rem] md:bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border p-4 z-40">
+      <div className="fixed bottom-0 md:bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border p-4 z-40">
         <div className="max-w-2xl mx-auto flex gap-3">
           <button
             onClick={handleFavorite}

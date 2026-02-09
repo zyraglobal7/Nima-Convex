@@ -688,6 +688,8 @@ export const saveTryOnToLookbook = mutation({
       createdBy: 'user',
       creatorUserId: user._id,
       creationSource: 'apparel',
+      selectedSize: tryOn.selectedSize,
+      selectedColor: tryOn.selectedColor,
       createdAt: now,
       updatedAt: now,
     });
