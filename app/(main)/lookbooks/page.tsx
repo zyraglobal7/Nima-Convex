@@ -137,21 +137,6 @@ export default function LookbooksPage() {
         {/* Tab switcher */}
         <div className="flex justify-center mb-6">
           <div className="relative bg-surface-alt rounded-full p-1 flex">
-            {/* Sliding background */}
-            <motion.div
-              className="absolute top-1 bottom-1 w-[calc(33.33%-4px)] bg-primary rounded-full"
-              initial={false}
-              animate={{
-                x:
-                  activeTab === 'saved-looks'
-                    ? 0
-                    : activeTab === 'liked-items'
-                      ? 'calc(100% + 4px)'
-                      : 'calc(200% + 8px)',
-              }}
-              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-            />
-
             {/* Buttons */}
             <button
               onClick={() => setActiveTab('saved-looks')}
@@ -161,6 +146,14 @@ export default function LookbooksPage() {
                 ${activeTab === 'saved-looks' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}
               `}
             >
+              {activeTab === 'saved-looks' && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute inset-0 bg-primary rounded-full -z-10"
+                  initial={false}
+                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                />
+              )}
               <Heart className="w-4 h-4" />
               <span className="hidden sm:inline">Saved Looks</span>
               <span className="sm:hidden">Looks</span>
@@ -178,6 +171,14 @@ export default function LookbooksPage() {
                 ${activeTab === 'liked-items' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}
               `}
             >
+              {activeTab === 'liked-items' && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute inset-0 bg-primary rounded-full -z-10"
+                  initial={false}
+                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                />
+              )}
               <ShoppingBag className="w-4 h-4" />
               <span className="hidden sm:inline">Liked Items</span>
               <span className="sm:hidden">Items</span>
@@ -195,6 +196,14 @@ export default function LookbooksPage() {
                 ${activeTab === 'lookbooks' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}
               `}
             >
+              {activeTab === 'lookbooks' && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute inset-0 bg-primary rounded-full -z-10"
+                  initial={false}
+                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                />
+              )}
               <FolderOpen className="w-4 h-4" />
               Lookbooks
               <span

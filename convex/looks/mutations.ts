@@ -1139,3 +1139,154 @@ export const restoreLook = mutation({
   },
 });
 
+/**
+ * Retry look image generation
+ * Used when image generation fails
+ */
+export const retryLookGeneration = mutation({
+  args: {
+    lookId: v.id('looks'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    error: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { lookId: Id<'looks'> }
+  ): Promise<{ success: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        error: 'Please sign in to retry generation.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found.',
+      };
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look) {
+      return {
+        success: false,
+        error: 'Look not found.',
+      };
+    }
+
+    // Check ownership
+    if (look.creatorUserId !== user._id) {
+      return {
+        success: false,
+        error: 'You can only retry generation for your own looks.',
+      };
+    }
+
+    // Only allow retry if status is failed or pending/processing for too long (e.g. stuck)
+    // For now, let's allow it if it's failed or if user explicitly requests it
+    // We update status to pending to show loading state
+    await ctx.db.patch(args.lookId, {
+      generationStatus: 'pending',
+      updatedAt: Date.now(),
+    });
+
+    // Also update look image status if exists
+    const lookImage = await ctx.db
+      .query('look_images')
+      .withIndex('by_look', (q) => q.eq('lookId', args.lookId))
+      .first();
+
+    if (lookImage) {
+      await ctx.db.patch(lookImage._id, {
+        status: 'pending',
+        errorMessage: undefined,
+        updatedAt: Date.now(),
+      });
+    }
+
+    // Trigger image generation workflow
+    await ctx.scheduler.runAfter(0, internal.workflows.actions.generateLookImage, {
+      lookId: args.lookId,
+      userId: user._id,
+    });
+
+    return {
+      success: true,
+    };
+  },
+});
+
+/**
+ * Delete a look permanently (by user)
+ * Marks as inactive (soft delete)
+ */
+export const deleteLookByUser = mutation({
+  args: {
+    lookId: v.id('looks'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    error: v.optional(v.string()),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { lookId: Id<'looks'> }
+  ): Promise<{ success: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        success: false,
+        error: 'Please sign in to delete looks.',
+      };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found.',
+      };
+    }
+
+    const look = await ctx.db.get(args.lookId);
+    if (!look) {
+      return {
+        success: false,
+        error: 'Look not found.',
+      };
+    }
+
+    // Check ownership
+    if (look.creatorUserId !== user._id) {
+      return {
+        success: false,
+        error: 'You can only delete your own looks.',
+      };
+    }
+
+    // Soft delete
+    await ctx.db.patch(args.lookId, {
+      isActive: false,
+      status: 'discarded', // Also mark as discarded
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+    };
+  },
+});
+

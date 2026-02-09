@@ -3,10 +3,10 @@
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Package, ChevronRight, ShoppingBag } from 'lucide-react';
+import { ChevronRight, ShoppingBag } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 
 function formatPrice(amount: number, currency: string) {
@@ -43,7 +43,7 @@ export default function OrderHistoryPage() {
             </div>
             <h3 className="text-lg font-medium">No orders yet</h3>
             <p className="text-muted-foreground max-w-sm mx-auto">
-              You haven't placed any orders yet. Start shopping to find your perfect look.
+              You haven&apos;t placed any orders yet. Start shopping to find your perfect look.
             </p>
             <Button onClick={() => router.push('/')} className="mt-4">
               Start Shopping
@@ -53,12 +53,12 @@ export default function OrderHistoryPage() {
       ) : (
         <div className="space-y-4">
           {orders.map((order) => (
-            <Card 
-              key={order._id} 
-              className="group hover:border-primary/50 transition-colors cursor-pointer"
+            <Card
+              key={order._id}
+              className="group hover:border-primary/50 transition-colors cursor-pointer py-4"
               onClick={() => router.push(`/orders/${order.orderNumber}`)}
             >
-              <CardContent className="p-6">
+              <CardContent>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-3">
@@ -73,7 +73,10 @@ export default function OrderHistoryPage() {
                       <span>{formatPrice(order.total, order.currency)}</span>
                     </div>
                   </div>
-                  <Button variant="ghost" className="self-start md:self-center group-hover:translate-x-1 transition-transform">
+                  <Button
+                    variant="ghost"
+                    className="self-start md:self-center group-hover:translate-x-1 transition-transform"
+                  >
                     View Details <ChevronRight className="ml-2 h-4 w-4" />
                   </Button>
                 </div>

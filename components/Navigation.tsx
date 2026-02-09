@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { Sparkles, User, ShoppingBag, ArrowLeft } from 'lucide-react';
+import { Sparkles, User, ArrowLeft } from 'lucide-react';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import { CartIcon } from '@/components/cart/CartIcon';
 import { ActivityIcon } from '@/components/activity/ActivityIcon';
@@ -31,7 +31,7 @@ export function Navigation() {
   return (
     <>
       {/* Desktop Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50">
+      <header className={`sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50 ${pathname?.startsWith('/lookbooks/') ? 'hidden' : ''}`}>
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             {/* Left Section: Logo or Back Button */}
@@ -114,8 +114,8 @@ export function Navigation() {
         </div>
       </header>
 
-      {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/50 py-2 px-4 z-50">
+      {/* Mobile Bottom Navigation hidden on look id page as well as from md */}
+      <nav className={`md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/50 py-2 px-4 z-50 ${pathname?.startsWith('/look/')||pathname?.startsWith('/product/') ? 'hidden' : ''}`}>
         <div className="flex items-center justify-around">
           <Link href="/discover" className="flex flex-col items-center gap-1 p-2">
             <Sparkles className={cn('w-5 h-5', isActive('/discover') ? 'text-primary' : 'text-muted-foreground')} />
@@ -163,12 +163,7 @@ export function Navigation() {
               Lookbooks
             </span>
           </Link>
-          <Link href="/orders" className="flex flex-col items-center gap-1 p-2">
-            <ShoppingBag className={cn('w-5 h-5', isActive('/orders') ? 'text-primary' : 'text-muted-foreground')} />
-            <span className={cn('text-xs', isActive('/orders') ? 'text-primary font-medium' : 'text-muted-foreground')}>
-              Orders
-            </span>
-          </Link>
+      
           <Link href="/profile" className="flex flex-col items-center gap-1 p-2">
             <User className={cn('w-5 h-5', isActive('/profile') ? 'text-primary' : 'text-muted-foreground')} />
             <span
