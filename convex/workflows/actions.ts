@@ -284,8 +284,8 @@ CRITICAL: You MUST ALWAYS return a valid JSON array, even if you can only create
         throw new Error('No JSON array found in AI response');
       }
       lookCompositions = JSON.parse(jsonMatch[0]);
-    } catch (parseError) {
-      console.error(`[WORKFLOW:ONBOARDING] Failed to parse AI response:`, result.text);
+    } catch (error) {
+      console.error(`[WORKFLOW:ONBOARDING] Failed to parse AI response:`, result.text, error);
       // Fallback: create basic look from available items
       lookCompositions = createFallbackLooks(uniqueItems);
     }
@@ -914,7 +914,11 @@ export const generateItemTryOnImage = internalAction({
       console.log(`[WORKFLOW:ITEM_TRYON] Fetched images in ${fetchTime}ms`);
 
       // Build item description
-      const colorStr = itemData.item.colors.length > 0 ? itemData.item.colors.join('/') : '';
+      // Use selected color if available, otherwise fall back to first color
+      const tryOn = await ctx.runQuery(internal.itemTryOns.queries.getItemTryOn, { itemTryOnId: args.tryOnId });
+      const selectedColor = tryOn?.selectedColor;
+      
+      const colorStr = selectedColor ? selectedColor : (itemData.item.colors.length > 0 ? itemData.item.colors.join('/') : '');
       const itemDescription = `${colorStr} ${itemData.item.name}${itemData.item.brand ? ` by ${itemData.item.brand}` : ''}`.trim();
 
       // Generate the prompt

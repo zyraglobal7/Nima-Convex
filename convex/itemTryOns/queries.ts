@@ -1,4 +1,4 @@
-import { query, QueryCtx } from '../_generated/server';
+import { query, internalQuery, QueryCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id, Doc } from '../_generated/dataModel';
 
@@ -30,7 +30,7 @@ const itemTryOnValidator = v.object({
 /**
  * Get a single item try-on by ID
  */
-export const getItemTryOn = query({
+export const getItemTryOn = internalQuery({
   args: {
     itemTryOnId: v.id('item_try_ons'),
   },

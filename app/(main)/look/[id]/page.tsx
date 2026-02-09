@@ -14,7 +14,9 @@ import {
   Plus,
   AlertTriangle,
   ShoppingCart,
-  Check
+  Check,
+  ArrowLeft,
+  Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -24,6 +26,17 @@ import { FriendRequestPopup } from '@/components/friends/FriendRequestPopup';
 import { RecreateLookButton } from '@/components/looks/RecreateLookButton';
 import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
 import { ItemsUnavailableModal } from '@/components/ui/ItemsUnavailableModal';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { trackPurchaseAttempted, trackItemsUnavailableShown, trackLookDetailViewed } from '@/lib/analytics';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -190,6 +203,8 @@ export default function LookDetailPage() {
   const toggleLoveMutation = useMutation(api.lookInteractions.mutations.toggleLove);
   const toggleDislikeMutation = useMutation(api.lookInteractions.mutations.toggleDislike);
   const recordSaveMutation = useMutation(api.lookInteractions.mutations.recordSave);
+  const retryLookGeneration = useMutation(api.looks.mutations.retryLookGeneration);
+  const deleteLook = useMutation(api.looks.mutations.deleteLookByUser);
 
   // Derived state for like/dislike (from server)
   const isLiked = userInteraction?.isLoved ?? false;
@@ -491,7 +506,16 @@ export default function LookDetailPage() {
       <main className="max-w-3xl mx-auto px-4 py-6 pb-32">
         {/* Title and Share */}
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-serif font-semibold text-foreground">Look Details</h1>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.back()}
+              className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <h1 className="text-xl font-serif font-semibold text-foreground">Look Details</h1>
+          </div>
+
           <button
             onClick={() => setShowShareModal(true)}
             className="p-2 rounded-full hover:bg-surface border border-transparent hover:border-border/50 transition-colors"
@@ -576,6 +600,66 @@ export default function LookDetailPage() {
             </div>
           )}
         </motion.div>
+
+        {/* Retry/Delete Actions for Failed Generation */}
+        {generationFailed && look.creatorUserId === currentUser?._id && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-center gap-3 mb-8"
+          >
+            <button
+              onClick={async () => {
+                try {
+                  toast.loading('Starting generation...');
+                  await retryLookGeneration({ lookId: look._id });
+                  toast.dismiss();
+                  toast.success('Retrying generation!');
+                } catch {
+                  toast.error('Failed to retry generation');
+                }
+              }}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2"
+            >
+              <Sparkles className="w-4 h-4" />
+              Retry Generation
+            </button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button className="px-4 py-2 bg-surface border border-border/50 text-muted-foreground hover:text-destructive hover:border-destructive/30 rounded-full text-sm font-medium transition-colors flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  Delete Look
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this look?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. This will permanently delete the look and you will be redirected to
+                    the Discover page.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async () => {
+                      try {
+                        await deleteLook({ lookId: look._id });
+                        toast.success('Look deleted');
+                        router.push('/discover');
+                      } catch {
+                        toast.error('Failed to delete look');
+                      }
+                    }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </motion.div>
+        )}
 
         {/* Action buttons */}
         <motion.div
