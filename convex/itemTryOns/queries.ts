@@ -133,7 +133,8 @@ export const getUserItemTryOns = query({
             v.literal('shoes'),
             v.literal('accessory'),
             v.literal('bag'),
-            v.literal('jewelry')
+            v.literal('jewelry'),
+            v.literal('swimwear')
           ),
           price: v.number(),
           currency: v.string(),
@@ -305,7 +306,8 @@ export const getItemTryOnWithDetails = query({
           v.literal('shoes'),
           v.literal('accessory'),
           v.literal('bag'),
-          v.literal('jewelry')
+          v.literal('jewelry'),
+          v.literal('swimwear')
         ),
         price: v.number(),
         currency: v.string(),
