@@ -200,17 +200,7 @@ export function GateSplash({ onGetStarted }: GateSplashProps) {
             </p>
           </motion.div>
 
-          {/* Exclusive badge */}
-          <motion.div 
-            className="mb-10 px-4 py-2 rounded-full border border-secondary/30 bg-surface/50 backdrop-blur-sm"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, delay: 0.5 }}
-          >
-            <span className="text-xs uppercase tracking-widest text-secondary font-medium">
-              By Invitation Only
-            </span>
-          </motion.div>
+   
 
           {/* Primary CTA */}
           <motion.div
