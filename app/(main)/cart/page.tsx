@@ -290,7 +290,7 @@ export default function CartPage() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Nima Service Fee (10%)</span>
                   <span className="text-foreground">
-                    {formatPrice(serviceFee, cartTotal?.currency || 'USD')}
+                    {formatPrice(serviceFee, cartTotal?.currency || 'KES')}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -325,7 +325,7 @@ export default function CartPage() {
               <ShoppingBag className="w-5 h-5" />
               Proceed to Checkout
               <span className="text-primary-foreground/80">
-                ({formatPrice(total, cartTotal?.currency || 'USD')})
+                ({formatPrice(total, cartTotal?.currency || 'KES')})
               </span>
             </Link>
           </div>

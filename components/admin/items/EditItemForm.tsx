@@ -69,7 +69,7 @@ export function EditItemForm({ itemId, onSuccess, onCancel }: EditItemFormProps)
         subcategory: item.subcategory || '',
         gender: validGenders.includes(item.gender as typeof validGenders[number]) ? item.gender : 'unisex',
         price: item.price?.toString() || '0',
-        currency: item.currency?.trim() || 'USD',
+        currency: item.currency?.trim() || 'KES',
         originalPrice: item.originalPrice?.toString() || '',
         colors: item.colors || [],
         sizes: item.sizes || [],
