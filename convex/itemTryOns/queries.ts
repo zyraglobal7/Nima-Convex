@@ -128,11 +128,13 @@ export const getUserItemTryOns = query({
             v.literal('bottom'),
             v.literal('dress'),
             v.literal('outfit'),
+            v.literal('swimwear'),
             v.literal('outerwear'),
             v.literal('shoes'),
             v.literal('accessory'),
             v.literal('bag'),
-            v.literal('jewelry')
+            v.literal('jewelry'),
+            v.literal('swimwear')
           ),
           price: v.number(),
           currency: v.string(),
@@ -155,7 +157,7 @@ export const getUserItemTryOns = query({
         _id: Id<'items'>;
         name: string;
         brand?: string;
-        category: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+        category: 'top' | 'bottom' | 'dress' | 'outfit' | 'swimwear' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
         price: number;
         currency: string;
       } | null;
@@ -178,7 +180,7 @@ export const getUserItemTryOns = query({
     const limit = Math.min(args.limit ?? 50, 100);
 
     // Query try-ons for this user
-    let tryOnsQuery = ctx.db
+    const tryOnsQuery = ctx.db
       .query('item_try_ons')
       .withIndex('by_user', (q) => q.eq('userId', user._id));
 
@@ -299,11 +301,13 @@ export const getItemTryOnWithDetails = query({
           v.literal('bottom'),
           v.literal('dress'),
           v.literal('outfit'),
+          v.literal('swimwear'),
           v.literal('outerwear'),
           v.literal('shoes'),
           v.literal('accessory'),
           v.literal('bag'),
-          v.literal('jewelry')
+          v.literal('jewelry'),
+          v.literal('swimwear')
         ),
         price: v.number(),
         currency: v.string(),
@@ -326,7 +330,7 @@ export const getItemTryOnWithDetails = query({
       name: string;
       brand?: string;
       description?: string;
-      category: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+      category: 'top' | 'bottom' | 'dress' | 'outfit' | 'swimwear' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
       price: number;
       currency: string;
       colors: string[];

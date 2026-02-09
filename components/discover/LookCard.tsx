@@ -19,25 +19,27 @@ interface LookCardProps {
 }
 
 const heightClasses = {
-  short: 'h-[200px]',
-  medium: 'h-[280px]',
-  tall: 'h-[340px]',
+  'short': 'h-[200px]',
+  'medium': 'h-[280px]',
+  'tall': 'h-[340px]',
   'extra-tall': 'h-[400px]',
 };
 
 export function LookCard({ look, index }: LookCardProps) {
   const hasImage = look.imageUrl && look.imageUrl.length > 0;
-  const isGenerating = look.isGenerating || (!hasImage && !look.generationFailed);
+  // Only show generating if explicitly set to true. Do not assume "no image = generating"
+  // because some looks might simply not have an image (e.g. manually created looks)
+  const isGenerating = look.isGenerating;
   const generationFailed = look.generationFailed;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ 
-        duration: 0.5, 
+      transition={{
+        duration: 0.5,
         delay: index * 0.05,
-        ease: [0.25, 0.46, 0.45, 0.94]
+        ease: [0.25, 0.46, 0.45, 0.94],
       }}
       className="break-inside-avoid mb-4"
     >
@@ -55,13 +57,13 @@ export function LookCard({ look, index }: LookCardProps) {
                   loading={index < 4 ? 'eager' : 'lazy'}
                   priority={index < 2}
                   unoptimized={
-                    look.imageUrl.includes('convex.cloud') || 
+                    look.imageUrl.includes('convex.cloud') ||
                     look.imageUrl.includes('convex.site') ||
                     look.imageUrl.includes('workoscdn.com')
                   }
                   className="object-cover transition-transform duration-500 group-hover:scale-105"
                 />
-                
+
                 {/* Gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               </>
@@ -131,7 +133,7 @@ export function LookCard({ look, index }: LookCardProps) {
                           fill
                           sizes="48px"
                           unoptimized={
-                            product.imageUrl.includes('convex.cloud') || 
+                            product.imageUrl.includes('convex.cloud') ||
                             product.imageUrl.includes('convex.site') ||
                             product.imageUrl.includes('workoscdn.com')
                           }
@@ -148,14 +150,12 @@ export function LookCard({ look, index }: LookCardProps) {
                 <p className="text-xs text-muted-foreground">{look.products.length} items</p>
               </div>
             )}
-            
+
             {/* Price badge - always show */}
             <div className="absolute bottom-3 right-3 px-3 py-1.5 bg-background/90 backdrop-blur-sm rounded-full border border-border/50">
-              <span className="text-xs font-medium text-foreground">
-                {formatPrice(look.totalPrice, look.currency)}
-              </span>
+              <span className="text-xs font-medium text-foreground">{formatPrice(look.totalPrice, look.currency)}</span>
             </div>
-            
+
             {/* Quick like button - shows on hover (only when image is ready) */}
             {hasImage && (
               <motion.button
@@ -167,7 +167,9 @@ export function LookCard({ look, index }: LookCardProps) {
                   // Handle like
                 }}
               >
-                <Heart className={`w-4 h-4 ${look.isLiked ? 'fill-destructive text-destructive' : 'text-foreground'}`} />
+                <Heart
+                  className={`w-4 h-4 ${look.isLiked ? 'fill-destructive text-destructive' : 'text-foreground'}`}
+                />
               </motion.button>
             )}
 
@@ -197,4 +199,3 @@ export function LookCard({ look, index }: LookCardProps) {
     </motion.div>
   );
 }
-

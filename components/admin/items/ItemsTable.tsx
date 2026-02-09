@@ -4,24 +4,11 @@ import { useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,20 +27,20 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  MoreHorizontal,
-  Search,
-  Eye,
-  EyeOff,
-  Pencil,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-  Package,
-} from 'lucide-react';
+import { MoreHorizontal, Search, Eye, EyeOff, Pencil, Trash2, ChevronLeft, ChevronRight, Package } from 'lucide-react';
 import Image from 'next/image';
 
-type Category = 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+type Category =
+  | 'top'
+  | 'bottom'
+  | 'dress'
+  | 'outfit'
+  | 'outerwear'
+  | 'shoes'
+  | 'accessory'
+  | 'bag'
+  | 'jewelry'
+  | 'swimwear';
 type Gender = 'male' | 'female' | 'unisex';
 
 const categoryLabels: Record<Category, string> = {
@@ -66,6 +53,7 @@ const categoryLabels: Record<Category, string> = {
   accessory: 'Accessory',
   bag: 'Bag',
   jewelry: 'Jewelry',
+  swimwear: 'Swimwear',
 };
 
 const genderLabels: Record<Gender, string> = {
@@ -319,9 +307,7 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
                   <TableCell>
                     <div>
                       <p className="font-medium">{item.name}</p>
-                      {item.brand && (
-                        <p className="text-sm text-muted-foreground">{item.brand}</p>
-                      )}
+                      {item.brand && <p className="text-sm text-muted-foreground">{item.brand}</p>}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -331,9 +317,7 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
                     <span className="text-sm">{genderLabels[item.gender]}</span>
                   </TableCell>
                   <TableCell>
-                    <span className="font-mono text-sm">
-                      {formatPrice(item.price, item.currency)}
-                    </span>
+                    <span className="font-mono text-sm">{formatPrice(item.price, item.currency)}</span>
                   </TableCell>
                   <TableCell>
                     <Badge variant={item.isActive ? 'default' : 'secondary'}>
@@ -367,10 +351,7 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
                           )}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => handleDeleteClick(item._id)}
-                        >
+                        <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteClick(item._id)}>
                           <Trash2 className="mr-2 h-4 w-4" />
                           Delete
                         </DropdownMenuItem>
@@ -387,21 +368,11 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
       {/* Pagination */}
       {(cursor || itemsResult.hasMore) && (
         <div className="flex items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handlePrevPage}
-            disabled={!cursor}
-          >
+          <Button variant="outline" size="sm" onClick={handlePrevPage} disabled={!cursor}>
             <ChevronLeft className="h-4 w-4 mr-1" />
             Previous
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNextPage}
-            disabled={!itemsResult.hasMore}
-          >
+          <Button variant="outline" size="sm" onClick={handleNextPage} disabled={!itemsResult.hasMore}>
             Next
             <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
@@ -414,8 +385,8 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Item</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this item? This will deactivate the item.
-              It can be restored later by an admin.
+              Are you sure you want to delete this item? This will deactivate the item. It can be restored later by an
+              admin.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -432,4 +403,3 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
     </div>
   );
 }
-

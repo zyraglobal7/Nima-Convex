@@ -27,7 +27,7 @@ interface ApparelItemCardProps {
   index: number;
   isSelectionMode?: boolean;
   isSelected?: boolean;
-  onSelect?: (itemId: Id<'items'>) => void;
+  onSelect?: (item: ApparelItem) => void;
   isInfiniteScrollLoad?: boolean; // Flag for items loaded via infinite scroll
   isLiked?: boolean; // Whether the item is liked by the current user
   onToggleLike?: (itemId: Id<'items'>) => Promise<void>; // Callback to toggle like
@@ -49,7 +49,7 @@ export function ApparelItemCard({
   const handleClick = (e: React.MouseEvent) => {
     if (isSelectionMode && onSelect) {
       e.preventDefault();
-      onSelect(item._id);
+      onSelect(item);
     }
   };
 
@@ -67,16 +67,17 @@ export function ApparelItemCard({
         delay: animationDelay,
         ease: [0.25, 0.46, 0.45, 0.94],
       }}
-      className="break-inside-avoid mb-4"
+      className="h-full"
     >
       <div
         onClick={handleClick}
         className={`
           group relative overflow-hidden rounded-2xl bg-surface border transition-all duration-300
           ${isSelectionMode ? 'cursor-pointer' : ''}
-          ${isSelected
-            ? 'border-primary ring-2 ring-primary/30'
-            : 'border-border/30 hover:border-primary/30 hover:shadow-lg hover:-translate-y-1'
+          ${
+            isSelected
+              ? 'border-primary ring-2 ring-primary/30'
+              : 'border-border/30 hover:border-primary/30 hover:shadow-lg hover:-translate-y-1'
           }
         `}
       >
@@ -92,8 +93,7 @@ export function ApparelItemCard({
                 loading={index < 4 ? 'eager' : 'lazy'}
                 priority={index < 2}
                 unoptimized={
-                  item.primaryImageUrl!.includes('convex.cloud') ||
-                  item.primaryImageUrl!.includes('convex.site')
+                  item.primaryImageUrl!.includes('convex.cloud') || item.primaryImageUrl!.includes('convex.site')
                 }
                 className="object-cover transition-transform duration-500 group-hover:scale-105"
               />
@@ -103,9 +103,7 @@ export function ApparelItemCard({
             </>
           ) : (
             <div className="w-full h-full bg-surface-alt flex items-center justify-center">
-              <span className="text-3xl text-muted-foreground/40">
-                {item.category.charAt(0).toUpperCase()}
-              </span>
+              <span className="text-3xl text-muted-foreground/40">{item.category.charAt(0).toUpperCase()}</span>
             </div>
           )}
 
@@ -114,9 +112,10 @@ export function ApparelItemCard({
             <div
               className={`
                 absolute top-3 left-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200
-                ${isSelected
-                  ? 'bg-primary border-primary'
-                  : 'bg-background/90 border-border/50 group-hover:border-primary/50'
+                ${
+                  isSelected
+                    ? 'bg-primary border-primary'
+                    : 'bg-background/90 border-border/50 group-hover:border-primary/50'
                 }
               `}
             >
@@ -126,9 +125,7 @@ export function ApparelItemCard({
 
           {/* Price badge */}
           <div className="absolute top-3 right-3 px-3 py-1.5 bg-background/90 backdrop-blur-sm rounded-full border border-border/50">
-            <span className="text-xs font-medium text-foreground">
-              {formatPrice(item.price, item.currency)}
-            </span>
+            <span className="text-xs font-medium text-foreground">{formatPrice(item.price, item.currency)}</span>
           </div>
 
           {/* Quick like button - shows on hover or if liked (not in selection mode) */}
@@ -159,8 +156,8 @@ export function ApparelItemCard({
               {isLiking ? (
                 <Loader2 className="w-4 h-4 text-foreground animate-spin" />
               ) : (
-                <Heart 
-                  className={`w-4 h-4 transition-colors ${isLiked ? 'text-red-500 fill-red-500' : 'text-foreground'}`} 
+                <Heart
+                  className={`w-4 h-4 transition-colors ${isLiked ? 'text-red-500 fill-red-500' : 'text-foreground'}`}
                 />
               )}
             </motion.button>
@@ -178,9 +175,7 @@ export function ApparelItemCard({
 
         {/* Card footer */}
         <div className="p-3">
-          {item.brand && (
-            <p className="text-xs text-muted-foreground truncate">{item.brand}</p>
-          )}
+          {item.brand && <p className="text-xs text-muted-foreground truncate">{item.brand}</p>}
           <h4 className="font-medium text-foreground text-sm truncate mt-0.5">{item.name}</h4>
           <div className="flex items-center gap-2 mt-1">
             {item.colors.length > 0 && (
@@ -194,9 +189,7 @@ export function ApparelItemCard({
                   />
                 ))}
                 {item.colors.length > 3 && (
-                  <span className="text-xs text-muted-foreground">
-                    +{item.colors.length - 3}
-                  </span>
+                  <span className="text-xs text-muted-foreground">+{item.colors.length - 3}</span>
                 )}
               </div>
             )}
@@ -213,4 +206,3 @@ export function ApparelItemCard({
 
   return <Link href={`/product/${item._id}`}>{cardContent}</Link>;
 }
-

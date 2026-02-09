@@ -214,14 +214,14 @@ export default function SellerDashboard() {
                     tick={{ fontSize: 12 }}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value) => `$${(value / 100).toFixed(0)}`}
+                    tickFormatter={(value) => `KES ${(value / 100).toFixed(0)}`}
                   />
                   <ChartTooltip
                     content={
                       <ChartTooltipContent
                         labelFormatter={(label) => formatDate(label as string)}
                         formatter={(value) => [
-                          `$${((value as number) / 100).toFixed(2)}`,
+                          `KES ${((value as number) / 100).toFixed(2)}`,
                           'Revenue',
                         ]}
                       />

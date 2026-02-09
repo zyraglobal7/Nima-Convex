@@ -16,7 +16,8 @@ const categoryValidator = v.union(
   v.literal('shoes'),
   v.literal('accessory'),
   v.literal('bag'),
-  v.literal('jewelry')
+  v.literal('jewelry'),
+  v.literal('swimwear')
 );
 
 const genderValidator = v.union(v.literal('male'), v.literal('female'), v.literal('unisex'));
@@ -29,7 +30,7 @@ const productDetailsSchema = z.object({
     .string()
     .describe('A detailed, engaging product description for an e-commerce listing (2-3 sentences)'),
   category: z
-    .enum(['top', 'bottom', 'dress', 'outfit', 'outerwear', 'shoes', 'accessory', 'bag', 'jewelry'])
+    .enum(['top', 'bottom', 'dress', 'outfit', 'outerwear', 'shoes', 'accessory', 'bag', 'jewelry', 'swimwear'])
     .describe('The primary category of the fashion item'),
   subcategory: z
     .string()
@@ -55,8 +56,8 @@ const productDetailsSchema = z.object({
     .describe('Suitable seasons (e.g., ["summer", "spring", "all_season"])'),
   suggestedPriceRange: z
     .object({
-      min: z.number().describe('Minimum suggested price in USD'),
-      max: z.number().describe('Maximum suggested price in USD'),
+      min: z.number().describe('Minimum suggested price in KES'),
+      max: z.number().describe('Maximum suggested price in KES'),
     })
     .optional()
     .describe('Suggested price range based on apparent quality and style'),

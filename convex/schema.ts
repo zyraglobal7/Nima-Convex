@@ -145,7 +145,8 @@ export default defineSchema({
       v.literal('shoes'),
       v.literal('accessory'),
       v.literal('bag'),
-      v.literal('jewelry')
+      v.literal('jewelry'),
+      v.literal('swimwear')
     ),
     subcategory: v.optional(v.string()), // e.g., "t-shirt", "jeans", "sneakers"
     gender: v.union(v.literal('male'), v.literal('female'), v.literal('unisex')),

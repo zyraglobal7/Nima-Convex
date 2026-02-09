@@ -132,11 +132,13 @@ export const getLikedItems = query({
         v.literal('bottom'),
         v.literal('dress'),
         v.literal('outfit'),
+        v.literal('swimwear'),
         v.literal('outerwear'),
         v.literal('shoes'),
         v.literal('accessory'),
         v.literal('bag'),
-        v.literal('jewelry')
+        v.literal('jewelry'),
+        v.literal('swimwear')
       ),
       price: v.number(),
       currency: v.string(),
@@ -154,7 +156,7 @@ export const getLikedItems = query({
     publicId: string;
     name: string;
     brand?: string;
-    category: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+    category: 'top' | 'bottom' | 'dress' | 'outfit' | 'swimwear' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
     price: number;
     currency: string;
     originalPrice?: number;

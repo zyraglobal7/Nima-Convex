@@ -9,8 +9,8 @@ import type { Id, Doc } from '../_generated/dataModel';
 import { generatePublicId } from '../types';
 
 // Validators
-const genderValidator = v.union(v.literal('male'), v.literal('female'), v.literal('unisex'));
-const budgetValidator = v.union(v.literal('low'), v.literal('mid'), v.literal('premium'));
+// const genderValidator = v.union(v.literal('male'), v.literal('female'), v.literal('unisex'));
+// const budgetValidator = v.union(v.literal('low'), v.literal('mid'), v.literal('premium'));
 
 // ============================================
 // SMART OUTFIT MATCHING SYSTEM
@@ -450,76 +450,96 @@ export const createLooksFromChat = mutation({
     const allMatchedItemIds: string[] = []; // Track all matched items for overlap calculation
     const now = Date.now();
 
-    // Try to create 3 looks using different outfit strategies
-    for (let i = 0; i < 3; i++) {
-      const matchedItems = await matchItemsForLookWithExclusions(ctx, {
-        gender: userGender,
-        stylePreferences: userStyles,
-        budgetRange: userBudget,
-        occasion: args.occasion,
-        excludeItemIds: usedItemIds,
-        strategyIndex: i, // Use different strategies for variety
-      });
+    // Strategy Execution with Fallback
+    // Attempt 1: Strict matching (uses style preferences, budget)
+    // Attempt 2: Relaxed matching (ignores style prefs/budget penalty if strict failed to find ANY looks)
+    
+    let attempts = 0;
+    const maxAttempts = 2;
+    let fallbackTriggered = false;
 
-      if (matchedItems.length < 2) {
-        // Not enough items for this look, skip
-        continue;
+    while (lookIds.length === 0 && attempts < maxAttempts) {
+      const isFallback = attempts === 1;
+      fallbackTriggered = isFallback;
+      
+      if (isFallback) {
+        console.log('[Chat:Mutation] Strict matching yielded 0 looks. Retrying with relaxed constraints...');
       }
 
-      // Mark items as used and track for overlap
-      matchedItems.forEach((item) => {
-        usedItemIds.add(item._id);
-        allMatchedItemIds.push(item._id);
-      });
+      // Try to create 3 looks using different outfit strategies
+      for (let i = 0; i < 3; i++) {
+        const matchedItems = await matchItemsForLookWithExclusions(ctx, {
+          gender: userGender,
+          stylePreferences: userStyles,
+          budgetRange: userBudget,
+          occasion: args.occasion,
+          excludeItemIds: usedItemIds,
+          strategyIndex: i, // Use different strategies for variety
+          ignorePreferences: isFallback, // Pass fallback flag
+        });
 
-      // Calculate total price
-      let totalPrice = 0;
-      let currency = 'KES';
-      for (const item of matchedItems) {
-        totalPrice += item.price;
-        currency = item.currency;
+        if (matchedItems.length < 2) {
+          // Not enough items for this look, skip
+          continue;
+        }
+
+        // Mark items as used and track for overlap
+        matchedItems.forEach((item) => {
+          usedItemIds.add(item._id);
+          allMatchedItemIds.push(item._id);
+        });
+
+        // Calculate total price
+        let totalPrice = 0;
+        let currency = 'KES';
+        for (const item of matchedItems) {
+          totalPrice += item.price;
+          currency = item.currency;
+        }
+
+        const publicId = generatePublicId('look');
+        const styleTags = [...new Set(matchedItems.flatMap((item) => item.tags))].slice(0, 5);
+        const nimaComment = generateNimaComment(args.occasion, args.context, user.firstName);
+
+        // Vary the look names
+        const lookNames = [
+          args.occasion ? `${args.occasion} Look #1` : 'Option 1',
+          args.occasion ? `${args.occasion} Look #2` : 'Option 2',
+          args.occasion ? `${args.occasion} Look #3` : 'Option 3',
+        ];
+
+        const lookId = await ctx.db.insert('looks', {
+          publicId,
+          itemIds: matchedItems.map((item) => item._id),
+          totalPrice,
+          currency,
+          name: lookNames[i],
+          styleTags,
+          occasion: args.occasion,
+          nimaComment,
+          targetGender: userGender || 'unisex',
+          targetBudgetRange: userBudget,
+          isActive: true,
+          isFeatured: false,
+          viewCount: 0,
+          saveCount: 0,
+          generationStatus: 'pending',
+          createdBy: 'user',
+          creatorUserId: user._id,
+          creationSource: 'chat',
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        lookIds.push(lookId);
       }
-
-      const publicId = generatePublicId('look');
-      const styleTags = [...new Set(matchedItems.flatMap((item) => item.tags))].slice(0, 5);
-      const nimaComment = generateNimaComment(args.occasion, args.context, user.firstName);
-
-      // Vary the look names
-      const lookNames = [
-        args.occasion ? `${args.occasion} Look #1` : 'Option 1',
-        args.occasion ? `${args.occasion} Look #2` : 'Option 2',
-        args.occasion ? `${args.occasion} Look #3` : 'Option 3',
-      ];
-
-      const lookId = await ctx.db.insert('looks', {
-        publicId,
-        itemIds: matchedItems.map((item) => item._id),
-        totalPrice,
-        currency,
-        name: lookNames[i],
-        styleTags,
-        occasion: args.occasion,
-        nimaComment,
-        targetGender: userGender || 'unisex',
-        targetBudgetRange: userBudget,
-        isActive: true,
-        isFeatured: false,
-        viewCount: 0,
-        saveCount: 0,
-        generationStatus: 'pending',
-        createdBy: 'user',
-        creatorUserId: user._id,
-        creationSource: 'chat',
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      lookIds.push(lookId);
+      
+      attempts++;
     }
 
     if (lookIds.length === 0) {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5d407c11-6781-42e2-9459-00c476ac031a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mutations.ts:createLooksFromChat:noLooks',message:'No looks created - returning no_matches',data:{userGender,userBudget,occasion:args.occasion},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H5'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/5d407c11-6781-42e2-9459-00c476ac031a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mutations.ts:createLooksFromChat:noLooks',message:'No looks created even after fallback - returning no_matches',data:{userGender,userBudget,occasion:args.occasion},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H5'})}).catch(()=>{});
       // #endregion
       return {
         success: false,
@@ -535,12 +555,14 @@ export const createLooksFromChat = mutation({
     
     // Scenario: 'remix' if more than 50% of items overlap with previous looks
     const scenario: 'fresh' | 'remix' = overlapRatio > 0.5 ? 'remix' : 'fresh';
-    
+
     console.log(`[Chat:Mutation] Created ${lookIds.length} looks. Overlap: ${overlappingItems.length}/${allMatchedItemIds.length} (${(overlapRatio * 100).toFixed(1)}%) - Scenario: ${scenario}`);
 
-    const message = scenario === 'remix'
-      ? `I found ${lookIds.length} looks - some featuring items you've loved before with fresh combinations!`
-      : `I found ${lookIds.length} amazing looks for you! Step into the fitting room to see yourself in these outfits.`;
+    const message = fallbackTriggered
+      ? `I couldn't find exact matches for everything, but I found ${lookIds.length} looks that capture the vibe! ✨`
+      : scenario === 'remix'
+        ? `I found ${lookIds.length} looks - some featuring items you've loved before with fresh combinations!`
+        : `I found ${lookIds.length} amazing looks for you! Step into the fitting room to see yourself in these outfits.`;
 
     return {
       success: true,
@@ -564,6 +586,7 @@ async function matchItemsForLookWithExclusions(
     occasion?: string;
     excludeItemIds: Set<string>;
     strategyIndex: number;
+    ignorePreferences?: boolean; // New flag for fallback
   }
 ): Promise<Doc<'items'>[]> {
   // Rotate through strategies based on index
@@ -581,7 +604,7 @@ async function matchItemsForLookWithExclusions(
 
   async function getItemsByCategory(
     category: ItemCategory,
-    limit: number = 50
+    limit: number = 100 // Increased from 50 to 100
   ): Promise<Array<{ item: Doc<'items'>; score: number }>> {
     let items: Doc<'items'>[] = [];
     
@@ -612,48 +635,55 @@ async function matchItemsForLookWithExclusions(
 
     // #region agent log
     const rawCount = items.length;
-    const afterActiveFilter = items.filter((item) => item.isActive).length;
-    const afterExcludeFilter = items.filter((item) => item.isActive).filter((item) => !preferences.excludeItemIds.has(item._id)).length;
-    const afterBudgetFilter = items.filter((item) => item.isActive).filter((item) => !preferences.excludeItemIds.has(item._id)).filter((item) => {
-      if (preferences.budgetRange) {
-        const range = budgetRanges[preferences.budgetRange];
-        return item.price >= range.min && item.price <= range.max;
-      }
-      return true;
-    }).length;
-    fetch('http://127.0.0.1:7242/ingest/5d407c11-6781-42e2-9459-00c476ac031a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mutations.ts:getItemsByCategory',message:'Items filtering breakdown',data:{category,gender:preferences.gender,budgetRange:preferences.budgetRange,rawCount,afterActiveFilter,afterExcludeFilter,afterBudgetFilter},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/5d407c11-6781-42e2-9459-00c476ac031a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mutations.ts:getItemsByCategory',message:'Items fetched',data:{category,rawCount,ignorePreferences:preferences.ignorePreferences},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
     // #endregion
 
     return items
       .filter((item) => item.isActive)
       .filter((item) => !preferences.excludeItemIds.has(item._id)) // Exclude already used items
-      .filter((item) => {
-        if (preferences.budgetRange) {
-          const range = budgetRanges[preferences.budgetRange];
-          return item.price >= range.min && item.price <= range.max;
-        }
-        return true;
-      })
+      // REMOVED STRICT BUDGET FILTER - now handled in scoring
       .map((item) => {
-        let score = Math.random() * 5;
+        let score = Math.random() * 5; // Base score
 
-        if (preferences.stylePreferences.length > 0) {
+        // 1. Style Preferences Scoring (skipped if ignorePreferences is true)
+        if (!preferences.ignorePreferences && preferences.stylePreferences.length > 0) {
           const styleSet = new Set(preferences.stylePreferences.map((s) => s.toLowerCase()));
           const matchingTags = item.tags.filter((tag) => styleSet.has(tag.toLowerCase()));
           score += matchingTags.length * 10;
         }
 
-        if (preferences.occasion && item.occasion) {
-          const occasionLower = preferences.occasion.toLowerCase();
-          if (item.occasion.some((o) => o.toLowerCase().includes(occasionLower))) {
+        const occasionLower = preferences.occasion?.toLowerCase() || '';
+        
+        // 2. Occasion/Context Scoring (Name/Description match) - HIGH PRIORITY
+        if (occasionLower) {
+          const nameLower = item.name.toLowerCase();
+          const descLower = item.description?.toLowerCase() || '';
+          
+          // Direct name match is huge
+          if (nameLower.includes(occasionLower)) {
+            score += 50; 
+          }
+          // Description match
+          else if (descLower.includes(occasionLower)) {
+            score += 30;
+          }
+          // Tag match
+          if (item.tags.some((t) => t.toLowerCase().includes(occasionLower))) {
+            score += 15;
+          }
+          // Occasion field match
+          if (item.occasion && item.occasion.some((o) => o.toLowerCase().includes(occasionLower))) {
             score += 20;
           }
         }
 
-        if (preferences.occasion) {
-          const occasionLower = preferences.occasion.toLowerCase();
-          if (item.tags.some((t) => t.toLowerCase().includes(occasionLower))) {
-            score += 15;
+        // 3. Budget Scoring (Penalty instead of Filter)
+        if (!preferences.ignorePreferences && preferences.budgetRange) {
+          const range = budgetRanges[preferences.budgetRange];
+          if (item.price >= range.min && item.price <= range.max) {
+             score += 10; // Bonus for matching budget
+          } else {
+             score -= 20; // Penalty for mismatch, but doesn't hard exclude
           }
         }
 

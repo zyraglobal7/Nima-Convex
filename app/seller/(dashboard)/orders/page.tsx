@@ -268,7 +268,7 @@ export default function SellerOrdersPage() {
                           </span>
                         )}
                         <span className="font-medium">
-                          {formatPrice(order.lineTotal, 'USD')}
+                          {formatPrice(order.lineTotal, 'KES')}
                         </span>
                       </div>
 

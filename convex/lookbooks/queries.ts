@@ -483,6 +483,77 @@ export const isItemSaved = query({
 });
 
 /**
+ * Check if a specific try-on result is saved in "Tried On Looks"
+ */
+export const isTryOnSaved = query({
+  args: {
+    itemTryOnId: v.id('item_try_ons'),
+  },
+  returns: v.boolean(),
+  handler: async (
+    ctx: QueryCtx,
+    args: { itemTryOnId: Id<'item_try_ons'> }
+  ): Promise<boolean> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return false;
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return false;
+    }
+
+    // Get the try-on to get its storageId
+    const tryOn = await ctx.db.get(args.itemTryOnId);
+    if (!tryOn || !tryOn.storageId) {
+      return false;
+    }
+
+    // Find "Tried On Looks" lookbook
+    const triedOnLookbook = await ctx.db
+      .query('lookbooks')
+      .withIndex('by_user', (q) => q.eq('userId', user._id))
+      .filter((q) => q.eq(q.field('name'), 'Tried On Looks'))
+      .first();
+
+    if (!triedOnLookbook) {
+      return false;
+    }
+
+    // Get all items in this lookbook
+    const lookbookItems = await ctx.db
+      .query('lookbook_items')
+      .withIndex('by_lookbook', (q) => q.eq('lookbookId', triedOnLookbook._id))
+      .collect();
+
+    // Check if any of these items are looks that have the same image as the try-on
+    // This is a bit inefficient if lookbook is huge, but "Tried On" shouldn't be massive
+    // and we only check look items
+    for (const item of lookbookItems) {
+      if (item.itemType === 'look' && item.lookId) {
+        // Check if this look uses the try-on image
+        const lookImage = await ctx.db
+          .query('look_images')
+          .withIndex('by_look', (q) => q.eq('lookId', item.lookId!)) // Use '!' since we checked item.lookId
+          .filter((q) => q.eq(q.field('storageId'), tryOn.storageId))
+          .first();
+        
+        if (lookImage) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  },
+});
+
+/**
  * Get lookbook with cover image URL and item preview images
  */
 export const getLookbookWithCover = query({
