@@ -229,7 +229,8 @@ export const createSellerProduct = mutation({
       v.literal('shoes'),
       v.literal('accessory'),
       v.literal('bag'),
-      v.literal('jewelry')
+      v.literal('jewelry'),
+      v.literal('swimwear')
     ),
     subcategory: v.optional(v.string()),
     gender: v.union(v.literal('male'), v.literal('female'), v.literal('unisex')),
@@ -253,7 +254,7 @@ export const createSellerProduct = mutation({
       name: string;
       brand?: string;
       description?: string;
-      category: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+      category: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry'|'swimwear';
       subcategory?: string;
       gender: 'male' | 'female' | 'unisex';
       price: number;
@@ -352,7 +353,8 @@ export const updateSellerProduct = mutation({
         v.literal('shoes'),
         v.literal('accessory'),
         v.literal('bag'),
-        v.literal('jewelry')
+        v.literal('jewelry'),
+        v.literal('swimwear')
       )
     ),
     subcategory: v.optional(v.string()),
@@ -382,7 +384,7 @@ export const updateSellerProduct = mutation({
       name?: string;
       brand?: string;
       description?: string;
-      category?: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+      category?: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry' | 'swimwear';
       subcategory?: string;
       gender?: 'male' | 'female' | 'unisex';
       price?: number;

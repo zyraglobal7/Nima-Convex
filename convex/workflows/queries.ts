@@ -182,11 +182,13 @@ export const getLookWithItemImages = internalQuery({
             v.literal('bottom'),
             v.literal('dress'),
             v.literal('outfit'),
+            v.literal('swimwear'),
             v.literal('outerwear'),
             v.literal('shoes'),
             v.literal('accessory'),
             v.literal('bag'),
-            v.literal('jewelry')
+            v.literal('jewelry'),
+            v.literal('swimwear')
           ),
           colors: v.array(v.string()),
           primaryImageUrl: v.union(v.string(), v.null()),
@@ -212,6 +214,7 @@ export const getLookWithItemImages = internalQuery({
         | 'bottom'
         | 'dress'
         | 'outfit'
+        | 'swimwear'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -272,6 +275,7 @@ export const getLookWithItemImages = internalQuery({
         | 'bottom'
         | 'dress'
         | 'outfit'
+        | 'swimwear'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -334,11 +338,13 @@ export const searchItemsForAI = internalQuery({
         v.literal('bottom'),
         v.literal('dress'),
         v.literal('outfit'),
+        v.literal('swimwear'),
         v.literal('outerwear'),
         v.literal('shoes'),
         v.literal('accessory'),
         v.literal('bag'),
-        v.literal('jewelry')
+        v.literal('jewelry'),
+        v.literal('swimwear')
       ),
       colors: v.array(v.string()),
       tags: v.array(v.string()),
@@ -364,6 +370,7 @@ export const searchItemsForAI = internalQuery({
         | 'bottom'
         | 'dress'
         | 'outfit'
+        | 'swimwear'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -414,11 +421,13 @@ export const getAllItemsForAI = internalQuery({
         v.literal('bottom'),
         v.literal('dress'),
         v.literal('outfit'),
+        v.literal('swimwear'),
         v.literal('outerwear'),
         v.literal('shoes'),
         v.literal('accessory'),
         v.literal('bag'),
-        v.literal('jewelry')
+        v.literal('jewelry'),
+        v.literal('swimwear')
       )
     ),
     limit: v.optional(v.number()),
@@ -434,11 +443,13 @@ export const getAllItemsForAI = internalQuery({
         v.literal('bottom'),
         v.literal('dress'),
         v.literal('outfit'),
+        v.literal('swimwear'),
         v.literal('outerwear'),
         v.literal('shoes'),
         v.literal('accessory'),
         v.literal('bag'),
-        v.literal('jewelry')
+        v.literal('jewelry'),
+        v.literal('swimwear')
       ),
       colors: v.array(v.string()),
       tags: v.array(v.string()),
@@ -455,11 +466,13 @@ export const getAllItemsForAI = internalQuery({
         | 'bottom'
         | 'dress'
         | 'outfit'
+        | 'swimwear'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
         | 'bag'
-        | 'jewelry';
+        | 'jewelry'
+        | 'swimwear';
       limit?: number;
     }
   ): Promise<
@@ -473,6 +486,7 @@ export const getAllItemsForAI = internalQuery({
         | 'bottom'
         | 'dress'
         | 'outfit'
+        | 'swimwear'
         | 'outerwear'
         | 'shoes'
         | 'accessory'
@@ -549,11 +563,13 @@ export const getItemWithPrimaryImage = internalQuery({
           v.literal('bottom'),
           v.literal('dress'),
           v.literal('outfit'),
+          v.literal('swimwear'),
           v.literal('outerwear'),
           v.literal('shoes'),
           v.literal('accessory'),
           v.literal('bag'),
-          v.literal('jewelry')
+          v.literal('jewelry'),
+          v.literal('swimwear')
         ),
         colors: v.array(v.string()),
         price: v.number(),
@@ -577,6 +593,7 @@ export const getItemWithPrimaryImage = internalQuery({
         | 'bottom'
         | 'dress'
         | 'outfit'
+        | 'swimwear'
         | 'outerwear'
         | 'shoes'
         | 'accessory'

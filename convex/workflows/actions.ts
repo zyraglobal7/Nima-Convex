@@ -301,7 +301,7 @@ CRITICAL: You MUST ALWAYS return a valid JSON array, even if you can only create
 
         // Remove duplicate categories (e.g., no 2 jackets, 2 shoes)
         const deduplicatedItems = validateNoDuplicateCategories(validItems);
-        let validItemIds = deduplicatedItems.map((item) => item.itemId);
+        const validItemIds = deduplicatedItems.map((item) => item.itemId);
 
         // Must have at least 2 items
         if (validItemIds.length < 2) {
@@ -745,10 +745,19 @@ Important:
         // Try with just text prompt (the model might generate based on description)
         const simpleResponse = await genAI.models.generateContent({
           model: "gemini-3-pro-image-preview", 
-          contents: [{
-            text: `Generate a professional fashion photograph of a person wearing: ${outfitDescription}. 
-Make it look like a high-end fashion editorial photo with clean background and natural lighting.`,
-          }],
+          contents: [
+            {
+              text: `Generate a professional fashion photograph of THIS PERSON (shown in the first reference image) wearing: ${outfitDescription}. 
+Make it look like a high-end fashion editorial photo with clean background and natural lighting.
+Keep the person's identity, face, and body type EXACTLY as shown in the reference image.`,
+            },
+            {
+              inlineData: {
+                mimeType: 'image/jpeg',
+                data: userImageBase64,
+              },
+            },
+          ],
           config: {
             responseModalities: ['TEXT', 'IMAGE'],
           },

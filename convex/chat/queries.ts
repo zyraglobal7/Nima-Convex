@@ -38,7 +38,8 @@ export const searchItemsForChat = query({
         v.literal('shoes'),
         v.literal('accessory'),
         v.literal('bag'),
-        v.literal('jewelry')
+        v.literal('jewelry'),
+        v.literal('swimwear')
       )
     ),
     stylePreferences: v.optional(v.array(v.string())),
@@ -52,7 +53,7 @@ export const searchItemsForChat = query({
     args: {
       searchQuery?: string;
       gender?: 'male' | 'female' | 'unisex';
-      category?: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+      category?: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry' | 'swimwear';
       stylePreferences?: string[];
       occasion?: string;
       budgetRange?: 'low' | 'mid' | 'premium';
@@ -81,7 +82,7 @@ export const searchItemsForChat = query({
 
     // Use text search if query provided
     if (args.searchQuery && args.searchQuery.trim()) {
-      let searchQuery = ctx.db
+      const searchQuery = ctx.db
         .query('items')
         .withSearchIndex('search_items', (q) => {
           let sq = q.search('name', args.searchQuery!);

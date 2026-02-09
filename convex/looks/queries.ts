@@ -68,6 +68,7 @@ const itemValidator = v.object({
     v.literal('bottom'),
     v.literal('dress'),
     v.literal('outfit'),
+    v.literal('swimwear'),
     v.literal('outerwear'),
     v.literal('shoes'),
     v.literal('accessory'),
@@ -2188,12 +2189,20 @@ export const getSavedLooks = query({
     const results = await Promise.all(
       savedLooks.map(async (look) => {
         // Get look image
-        const lookImage = await ctx.db
+        let lookImage = await ctx.db
           .query('look_images')
           .withIndex('by_look_and_user', (q) =>
             q.eq('lookId', look._id).eq('userId', user._id)
           )
           .first();
+        
+        // Failover: If no user-specific image, check for any image for this look (like system looks)
+        if (!lookImage) {
+          lookImage = await ctx.db
+            .query('look_images')
+            .withIndex('by_look', (q) => q.eq('lookId', look._id))
+            .first();
+        }
 
         let lookImageResult: {
           _id: Id<'look_images'>;

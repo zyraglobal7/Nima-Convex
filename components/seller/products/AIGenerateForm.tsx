@@ -58,7 +58,7 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
             price: result.data.suggestedPriceRange
               ? String(Math.round((result.data.suggestedPriceRange.min + result.data.suggestedPriceRange.max) / 2))
               : '',
-            currency: 'USD',
+            currency: 'KES',
             originalPrice: '',
             colors: result.data.colors,
             sizes: [],
@@ -83,7 +83,7 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
         setStep('upload');
       }
     },
-    [generateProductDetails]
+    [generateProductDetails],
   );
 
   const handleFileUpload = useCallback(
@@ -130,7 +130,7 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
         setIsUploading(false);
       }
     },
-    [generateUploadUrl, getStorageUrl, generateDetails]
+    [generateUploadUrl, getStorageUrl, generateDetails],
   );
 
   const handleRegenerate = async () => {
@@ -148,7 +148,7 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
         handleFileUpload(files[0]);
       }
     },
-    [handleFileUpload]
+    [handleFileUpload],
   );
 
   const handleReset = () => {
@@ -188,9 +188,7 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
         gender: formData.gender,
         price: Math.round(parseFloat(formData.price)), // Store price as-is (no cents conversion)
         currency: formData.currency,
-        originalPrice: formData.originalPrice
-          ? Math.round(parseFloat(formData.originalPrice))
-          : undefined,
+        originalPrice: formData.originalPrice ? Math.round(parseFloat(formData.originalPrice)) : undefined,
         colors: formData.colors,
         sizes: formData.sizes,
         material: formData.material.trim() || undefined,
@@ -231,8 +229,8 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
               AI-Powered Product Creation
             </CardTitle>
             <CardDescription>
-              Upload a product image and our AI will automatically analyze it to extract product details.
-              You can then review and edit the information before saving.
+              Upload a product image and our AI will automatically analyze it to extract product details. You can then
+              review and edit the information before saving.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -297,7 +295,9 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
                     alt="Uploaded product"
                     width={192}
                     height={192}
-                    unoptimized={uploadedImage.url.includes('convex.cloud') || uploadedImage.url.includes('convex.site')}
+                    unoptimized={
+                      uploadedImage.url.includes('convex.cloud') || uploadedImage.url.includes('convex.site')
+                    }
                     className="h-full w-full object-cover"
                   />
                 </div>
@@ -308,9 +308,7 @@ export function AIGenerateForm({ onSuccess, onCancel }: AIGenerateFormProps) {
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
                 <p className="font-medium">Analyzing your product image...</p>
-                <p className="text-sm text-muted-foreground">
-                  Our AI is identifying colors, style, category, and more
-                </p>
+                <p className="text-sm text-muted-foreground">Our AI is identifying colors, style, category, and more</p>
               </div>
             </div>
           </CardContent>

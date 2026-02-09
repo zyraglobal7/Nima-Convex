@@ -118,7 +118,7 @@ export default function SellerOrderDetailPage() {
                         </p>
                         <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
                       </div>
-                      <p className="font-medium">{formatPrice(item.lineTotal, 'USD')}</p>
+                      <p className="font-medium">{formatPrice(item.lineTotal, 'KES')}</p>
                     </div>
                     
                     <div className="pt-2 flex items-center gap-4">
@@ -183,7 +183,7 @@ export default function SellerOrderDetailPage() {
              <CardContent>
                 <div className="flex justify-between items-center text-sm font-medium">
                     <span>Your Earnings</span>
-                    <span>{formatPrice(order.items.reduce((acc, item) => acc + item.lineTotal, 0), 'USD')}</span>
+                    <span>{formatPrice(order.items.reduce((acc, item) => acc + item.lineTotal, 0), 'KES')}</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
                     Total revenue from this order (excluding fees)
