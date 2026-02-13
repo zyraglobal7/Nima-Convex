@@ -18,6 +18,8 @@ const itemTryOnValidator = v.object({
   userId: v.id('users'),
   storageId: v.optional(v.id('_storage')),
   userImageId: v.id('user_images'),
+  selectedSize: v.optional(v.string()),
+  selectedColor: v.optional(v.string()),
   status: statusValidator,
   generationProvider: v.optional(v.string()),
   generationJobId: v.optional(v.string()),

@@ -52,6 +52,11 @@ export default defineSchema({
     dailyTryOnCount: v.number(), // Reset daily
     dailyTryOnResetAt: v.number(), // Timestamp for reset
 
+    // Credits system
+    credits: v.optional(v.number()),
+    freeCreditsUsedThisWeek: v.optional(v.number()),
+    weeklyCreditsResetAt: v.optional(v.number()),
+
     // Status
     onboardingCompleted: v.boolean(),
     isActive: v.boolean(),
