@@ -26,6 +26,9 @@ export default authkitMiddleware({
       '/discover/(.*)',
       // Public look viewing
       '/look/(.*)',
+      // Legal pages
+      '/termsAndConditions',
+      '/privacyPolicy',
       // Health check (if exposed)
       '/api/health',
     ],

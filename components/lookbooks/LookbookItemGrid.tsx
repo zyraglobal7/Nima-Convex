@@ -127,7 +127,7 @@ export function LookbookItemGrid({ items, onRemove, canEdit = false }: LookbookI
               transition={{ duration: 0.3, delay: index * 0.05 }}
               className="break-inside-avoid mb-4 group relative"
             >
-              <Link href={`/items/${item._id}`}>
+              <Link href={`/product/${item._id}`}>
                 <div className="relative overflow-hidden rounded-2xl bg-surface border border-border/30 hover:border-primary/30 transition-all duration-300 hover:shadow-lg">
                   <div className="relative aspect-[3/4] overflow-hidden bg-surface-alt">
                     {itemImageUrl ? (

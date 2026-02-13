@@ -5,6 +5,7 @@ import { ConvexClientProvider } from '@/components/ConvexClientProvider';
 import { ThemeProvider } from '@/components/theme-provider';
 import { FloatingLoaderWrapper } from '@/components/FloatingLoaderWrapper';
 import { PostHogProvider } from '@/components/PostHogProvider';
+import { Toaster } from '@/components/ui/sonner';
 
 const cormorantGaramond = Cormorant_Garamond({
   variable: '--font-serif',
@@ -61,6 +62,7 @@ export default function RootLayout({
           <PostHogProvider>
             <ConvexClientProvider>
               <FloatingLoaderWrapper>{children}</FloatingLoaderWrapper>
+              <Toaster />
             </ConvexClientProvider>
           </PostHogProvider>
         </ThemeProvider>

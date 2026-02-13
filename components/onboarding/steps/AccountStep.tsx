@@ -200,11 +200,21 @@ export function AccountStep({ formData, onNext, onBack }: StepProps) {
               {/* Terms */}
               <p className="text-xs text-muted-foreground text-center">
                 By continuing, you agree to our{' '}
-                <a href="#" className="text-secondary hover:underline">
+                <a
+                  href="/termsAndConditions"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-secondary hover:underline"
+                >
                   Terms of Service
                 </a>{' '}
                 and{' '}
-                <a href="#" className="text-secondary hover:underline">
+                <a
+                  href="/privacyPolicy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-secondary hover:underline"
+                >
                   Privacy Policy
                 </a>
               </p>
