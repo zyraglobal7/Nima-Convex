@@ -35,6 +35,8 @@ const lookValidator = v.object({
   sharedWithFriends: v.optional(v.boolean()), // Share with friends (can be true even if isPublic is false)
   viewCount: v.optional(v.number()),
   saveCount: v.optional(v.number()),
+  selectedSize: v.optional(v.string()),
+  selectedColor: v.optional(v.string()),
   generationStatus: v.optional(generationStatusValidator),
   status: v.optional(v.union(v.literal('pending'), v.literal('saved'), v.literal('discarded'))),
   createdBy: v.optional(v.union(v.literal('system'), v.literal('user'))),

@@ -8,6 +8,7 @@ import { components, internal } from '../_generated/api';
 import { mutation, query, MutationCtx, QueryCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id } from '../_generated/dataModel';
+import { calculateAvailableCredits } from '../types';
 
 /**
  * Global workflow manager instance
@@ -363,6 +364,19 @@ export const startGenerateMoreLooks = mutation({
 
     console.log(`[WORKFLOW:GENERATE_MORE] ${availableItemsCount} items available after exclusions`);
 
+    // --- CREDIT CHECK (3 credits for 3 looks) ---
+    const creditResult = await ctx.runMutation(internal.credits.mutations.deductCredit, {
+      userId: user._id,
+      count: 3,
+    });
+
+    if (!creditResult.success) {
+      return {
+        success: false,
+        error: 'insufficient_credits',
+      };
+    }
+
     // Start the workflow with exclusion list
     const workflowId = await workflow.start(
       ctx,
@@ -458,7 +472,7 @@ export const startItemTryOn = mutation({
       .first();
 
     if (existingTryOn) {
-      // If completed, return existing
+      // If completed, return existing (no credit charge for cached)
       if (existingTryOn.status === 'completed') {
         return {
           success: true,
@@ -466,7 +480,7 @@ export const startItemTryOn = mutation({
         };
       }
 
-      // If processing, tell user to wait
+      // If processing, tell user to wait (no credit charge)
       if (existingTryOn.status === 'processing') {
         return {
           success: true,
@@ -474,7 +488,27 @@ export const startItemTryOn = mutation({
         };
       }
 
-      // If pending or failed, update to pending and trigger generation
+      // If pending, also just return (already charged when first created)
+      if (existingTryOn.status === 'pending') {
+        return {
+          success: true,
+          tryOnId: existingTryOn._id,
+        };
+      }
+
+      // If failed, deduct a credit before retrying
+      const retryResult = await ctx.runMutation(internal.credits.mutations.deductCredit, {
+        userId: user._id,
+        count: 1,
+      });
+
+      if (!retryResult.success) {
+        return {
+          success: false,
+          error: 'insufficient_credits',
+        };
+      }
+
       const now = Date.now();
       await ctx.db.patch(existingTryOn._id, {
         status: 'pending',
@@ -495,6 +529,19 @@ export const startItemTryOn = mutation({
       return {
         success: true,
         tryOnId: existingTryOn._id,
+      };
+    }
+
+    // --- CREDIT CHECK (new try-on, not cached) ---
+    const creditResult = await ctx.runMutation(internal.credits.mutations.deductCredit, {
+      userId: user._id,
+      count: 1,
+    });
+
+    if (!creditResult.success) {
+      return {
+        success: false,
+        error: 'insufficient_credits',
       };
     }
 

@@ -1,7 +1,7 @@
 import { mutation, internalMutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
-import type { Id, Doc } from '../_generated/dataModel';
 import { internal } from '../_generated/api';
+import type { Id, Doc } from '../_generated/dataModel';
 
 // Status validator
 const statusValidator = v.union(
@@ -154,6 +154,18 @@ export const updateItemTryOnStatus = internalMutation({
     }
 
     await ctx.db.patch(args.itemTryOnId, updates);
+
+    // Send push notification when try-on image generation completes
+    if (args.status === 'completed' && tryOn.userId) {
+      const item = await ctx.db.get(tryOn.itemId);
+      const itemName = item?.name || 'your item';
+
+      await ctx.scheduler.runAfter(0, internal.notifications.actions.sendTryOnReadyNotification, {
+        userId: tryOn.userId,
+        itemTryOnId: args.itemTryOnId,
+        itemName,
+      });
+    }
 
     return null;
   },

@@ -249,3 +249,65 @@ export const getUserOrders = query({
     return ordersWithCounts;
   },
 });
+
+/**
+ * Get the payment status of an order (used for polling after STK Push)
+ */
+export const getOrderPaymentStatus = query({
+  args: {
+    orderId: v.id('orders'),
+  },
+  returns: v.union(
+    v.object({
+      paymentStatus: v.union(
+        v.literal('pending'),
+        v.literal('paid'),
+        v.literal('failed'),
+        v.literal('refunded')
+      ),
+      orderNumber: v.string(),
+      status: v.union(
+        v.literal('pending'),
+        v.literal('processing'),
+        v.literal('partially_shipped'),
+        v.literal('shipped'),
+        v.literal('delivered'),
+        v.literal('cancelled')
+      ),
+    }),
+    v.null()
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { orderId: Id<'orders'> }
+  ): Promise<{
+    paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
+    orderNumber: string;
+    status: 'pending' | 'processing' | 'partially_shipped' | 'shipped' | 'delivered' | 'cancelled';
+  } | null> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return null;
+    }
+
+    const order = await ctx.db.get(args.orderId);
+    if (!order || order.userId !== user._id) {
+      return null;
+    }
+
+    return {
+      paymentStatus: order.paymentStatus,
+      orderNumber: order.orderNumber,
+      status: order.status,
+    };
+  },
+});

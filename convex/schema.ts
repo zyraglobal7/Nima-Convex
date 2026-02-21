@@ -49,8 +49,13 @@ export default defineSchema({
 
     // Subscription & Limits
     subscriptionTier: v.union(v.literal('free'), v.literal('style_pass'), v.literal('vip')),
-    dailyTryOnCount: v.number(), // Reset daily
-    dailyTryOnResetAt: v.number(), // Timestamp for reset
+    dailyTryOnCount: v.number(), // Deprecated - kept for backward compat
+    dailyTryOnResetAt: v.number(), // Deprecated - kept for backward compat
+
+    // Credits system (replaces daily try-on limits)
+    credits: v.optional(v.number()), // Purchased credits balance
+    freeCreditsUsedThisWeek: v.optional(v.number()), // 0-5, how many of the 5 free weekly credits used
+    weeklyCreditsResetAt: v.optional(v.number()), // Timestamp when free credits were last reset
 
     // Status
     onboardingCompleted: v.boolean(),
@@ -60,6 +65,18 @@ export default defineSchema({
 
     // Role-based access control
     role: v.optional(v.union(v.literal('user'), v.literal('admin'), v.literal('seller'))),
+
+    // Saved shipping address (auto-saved from last order for checkout pre-fill)
+    savedShippingAddress: v.optional(v.object({
+      fullName: v.string(),
+      addressLine1: v.string(),
+      addressLine2: v.optional(v.string()),
+      city: v.string(),
+      state: v.optional(v.string()),
+      postalCode: v.string(),
+      country: v.string(),
+      phone: v.string(),
+    })),
   })
     .index('by_workos_user_id', ['workosUserId'])
     .index('by_email', ['email'])
@@ -780,6 +797,10 @@ export default defineSchema({
     paymentMethod: v.optional(v.string()),
     paymentIntentId: v.optional(v.string()),
 
+    // Fingo Pay M-Pesa
+    merchantTransactionId: v.optional(v.string()), // Our unique ref for Fingo Pay
+    mpesaPhoneNumber: v.optional(v.string()), // Phone used for M-Pesa STK Push
+
     // Order status (overall)
     status: v.union(
       v.literal('pending'), // Just placed
@@ -797,7 +818,8 @@ export default defineSchema({
     .index('by_user', ['userId'])
     .index('by_order_number', ['orderNumber'])
     .index('by_status', ['status'])
-    .index('by_created_at', ['createdAt']),
+    .index('by_created_at', ['createdAt'])
+    .index('by_merchant_transaction_id', ['merchantTransactionId']),
 
   /**
    * order_items - Individual line items in an order (seller-facing)
@@ -923,5 +945,58 @@ export default defineSchema({
     .index('by_item', ['itemId'])
     .index('by_user_and_item', ['userId', 'itemId'])
     .index('by_user_and_created', ['userId', 'createdAt']),
+
+  // ============================================
+  // CREDIT PURCHASES (Fingo Pay M-Pesa)
+  // ============================================
+
+  /**
+   * credit_purchases - Tracks credit purchase attempts and completions
+   * Each row represents an M-Pesa STK Push transaction
+   */
+  credit_purchases: defineTable({
+    userId: v.id('users'),
+
+    // Package details
+    creditAmount: v.number(), // Number of credits purchased (10, 20, 50, 100)
+    priceKes: v.number(), // Price in KES (500, 1000, 2500, 5000)
+
+    // Payment details
+    phoneNumber: v.string(), // M-Pesa phone number used
+    merchantTransactionId: v.string(), // Our unique transaction reference
+    fingoTransactionId: v.optional(v.string()), // Fingo Pay's transaction ID
+
+    // Status
+    status: v.union(
+      v.literal('pending'), // STK push sent, waiting for payment
+      v.literal('completed'), // Payment confirmed via webhook
+      v.literal('failed') // Payment failed or timed out
+    ),
+    failureReason: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_merchant_transaction_id', ['merchantTransactionId'])
+    .index('by_user_and_status', ['userId', 'status']),
+
+  // ============================================
+  // PUSH NOTIFICATION TOKENS
+  // ============================================
+
+  /**
+   * push_tokens - Expo push notification tokens per user
+   * Allows sending native push notifications to user devices
+   */
+  push_tokens: defineTable({
+    userId: v.id('users'),
+    token: v.string(), // Expo push token (ExponentPushToken[xxx])
+    platform: v.union(v.literal('ios'), v.literal('android'), v.literal('web')),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_token', ['token']),
 
 });

@@ -700,6 +700,27 @@ export const recreateLook = mutation({
         seenByOwner: false,
         createdAt: now,
       });
+
+      // Send push notification to the original look owner
+      const recreatorName = user.firstName
+        ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`
+        : user.username || 'Someone';
+
+      // Resolve profile image URL for the notification
+      let recreatorProfileImageUrl: string | undefined = undefined;
+      if (user.profileImageId) {
+        const url = await ctx.storage.getUrl(user.profileImageId);
+        recreatorProfileImageUrl = url ?? undefined;
+      } else if (user.profileImageUrl) {
+        recreatorProfileImageUrl = user.profileImageUrl;
+      }
+
+      await ctx.scheduler.runAfter(0, internal.notifications.actions.sendRecreateLookNotification, {
+        ownerId: originalLook.creatorUserId,
+        recreatorName,
+        lookId: args.lookId,
+        recreatorProfileImageUrl,
+      });
     }
 
     return {
@@ -775,6 +796,19 @@ export const createLookFromSelectedItems = mutation({
       return {
         success: false,
         error: 'Rate limit exceeded. You can create up to 10 looks per hour. Please try again later.',
+      };
+    }
+
+    // --- CREDIT CHECK (1 credit per look) ---
+    const creditResult = await ctx.runMutation(internal.credits.mutations.deductCredit, {
+      userId: user._id,
+      count: 1,
+    });
+
+    if (!creditResult.success) {
+      return {
+        success: false,
+        error: 'insufficient_credits',
       };
     }
 

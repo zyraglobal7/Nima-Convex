@@ -1,5 +1,6 @@
 import { mutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
+import { internal } from '../_generated/api';
 import type { Id } from '../_generated/dataModel';
 
 /**
@@ -86,6 +87,27 @@ export const sendDirectMessage = mutation({
       lookId: args.lookId,
       isRead: false,
       createdAt: now,
+    });
+
+    // Schedule push notification to recipient
+    const senderName = sender.firstName
+      ? `${sender.firstName}${sender.lastName ? ` ${sender.lastName}` : ''}`
+      : sender.email || 'Someone';
+
+    // Resolve sender profile image URL for rich notification
+    let senderProfileImageUrl: string | undefined = undefined;
+    if (sender.profileImageId) {
+      const url = await ctx.storage.getUrl(sender.profileImageId);
+      senderProfileImageUrl = url ?? undefined;
+    } else if (sender.profileImageUrl) {
+      senderProfileImageUrl = sender.profileImageUrl;
+    }
+
+    await ctx.scheduler.runAfter(0, internal.notifications.actions.sendMessageNotification, {
+      recipientId: args.recipientId,
+      senderName,
+      lookId: args.lookId,
+      senderProfileImageUrl,
     });
 
     return {

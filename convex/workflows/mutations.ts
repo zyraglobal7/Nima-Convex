@@ -5,6 +5,7 @@
 
 import { internalMutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
+import { internal } from '../_generated/api';
 import type { Id } from '../_generated/dataModel';
 import { generatePublicId } from '../types';
 
@@ -130,6 +131,16 @@ export const updateLookGenerationStatus = internalMutation({
 
     if (args.errorMessage) {
       console.error(`[WORKFLOW:ONBOARDING] Look ${args.lookId} failed: ${args.errorMessage}`);
+    }
+
+    // Send push notification when look generation completes
+    // Skip for system-created (onboarding) looks — those are handled by the batch onboarding notification
+    if (args.status === 'completed' && look.creatorUserId && look.createdBy === 'user') {
+      await ctx.scheduler.runAfter(0, internal.notifications.actions.sendLookReadyNotification, {
+        userId: look.creatorUserId,
+        lookId: args.lookId,
+        lookName: look.name || 'Your New Look',
+      });
     }
 
     return null;

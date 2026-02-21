@@ -163,7 +163,7 @@ async function runLookGenerationWorkflow(
   );
 
   // ========================================
-  // STEP 3: Finish Workflow
+  // STEP 3: Finish Workflow & Send Notification
   // ========================================
   const totalTime = Date.now() - workflowStartTime;
   console.log(`[WORKFLOW:${workflowName}] ========================================`);
@@ -172,5 +172,13 @@ async function runLookGenerationWorkflow(
   console.log(`[WORKFLOW:${workflowName}] Looks created: ${createdLookIds.length}`);
   console.log(`[WORKFLOW:${workflowName}] Images generated: ${successCount}/${createdLookIds.length}`);
   console.log(`[WORKFLOW:${workflowName}] ========================================`);
+
+  // Send push notification for onboarding completion (first looks ready)
+  if (workflowName === 'ONBOARDING' && successCount > 0) {
+    await ctx.runAction(
+      internal.notifications.actions.sendOnboardingLooksReadyNotification,
+      { userId, successCount },
+    );
+  }
 }
 

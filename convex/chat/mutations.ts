@@ -6,6 +6,7 @@
 import { mutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id, Doc } from '../_generated/dataModel';
+import { internal } from '../_generated/api';
 import { generatePublicId } from '../types';
 
 // Validators
@@ -418,6 +419,19 @@ export const createLooksFromChat = mutation({
           message: 'no_photo',
         };
       }
+    }
+
+    // --- CREDIT CHECK (3 credits for 3 looks) ---
+    const creditResult = await ctx.runMutation(internal.credits.mutations.deductCredit, {
+      userId: user._id,
+      count: 3,
+    });
+
+    if (!creditResult.success) {
+      return {
+        success: false,
+        message: 'insufficient_credits',
+      };
     }
 
     // Get user preferences for matching
@@ -1479,6 +1493,58 @@ export const createRemixedLook = mutation({
       success: true,
       lookId,
       message: `I've remixed your look with a ${args.twist} twist! Step into the fitting room to see this fresh take.`,
+    };
+  },
+});
+
+/**
+ * Schedule image generation for chat looks
+ * This is a mutation (not an action) so authentication completes instantly
+ * before any long-running work. Each image generation is scheduled as an
+ * independent internal action via ctx.scheduler.runAfter, avoiding token
+ * expiry issues that occur when sequentially running actions.
+ */
+export const scheduleChatLookImageGeneration = mutation({
+  args: {
+    lookIds: v.array(v.id('looks')),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    scheduled: v.number(),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { lookIds: Id<'looks'>[] }
+  ): Promise<{
+    success: boolean;
+    scheduled: number;
+  }> => {
+    // Get current user (fast — happens before any long-running work)
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { success: false, scheduled: 0 };
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return { success: false, scheduled: 0 };
+    }
+
+    // Schedule each image generation independently (runs in parallel, no token dependency)
+    for (const lookId of args.lookIds) {
+      await ctx.scheduler.runAfter(0, internal.workflows.actions.generateLookImage, {
+        lookId,
+        userId: user._id,
+      });
+    }
+
+    return {
+      success: true,
+      scheduled: args.lookIds.length,
     };
   },
 });
