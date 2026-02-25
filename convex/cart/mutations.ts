@@ -91,6 +91,11 @@ export const addToCart = mutation({
       addedAt: Date.now(),
     });
 
+    // Increment cartAddCount on new adds only (not quantity updates)
+    await ctx.db.patch(args.itemId, {
+      cartAddCount: (item.cartAddCount ?? 0) + 1,
+    });
+
     return {
       success: true,
       cartItemId,

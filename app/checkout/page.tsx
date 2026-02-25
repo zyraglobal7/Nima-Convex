@@ -97,6 +97,7 @@ export default function CheckoutPage() {
           country: address.country,
           phone: address.phone,
         },
+        mpesaPhoneNumber: address.phone,
       });
 
       setOrderPlaced(true);

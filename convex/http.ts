@@ -301,11 +301,17 @@ http.route({
       // Route to the correct handler based on merchant transaction ID prefix
       const isOrderPayment = (merchantTransactionId as string).startsWith('nima_ord_');
       const isCreditPurchase = (merchantTransactionId as string).startsWith('nima_cr_');
+      const isSubscription = (merchantTransactionId as string).startsWith('nima_sub_');
 
       if (isCompleted) {
         console.log(`[FINGO WEBHOOK] Payment completed: ${merchantTransactionId}`);
         if (isOrderPayment) {
           await ctx.runMutation(internal.orders.mutations.completeOrderPayment, {
+            merchantTransactionId: merchantTransactionId as string,
+            fingoTransactionId: fingoTransactionId as string,
+          });
+        } else if (isSubscription) {
+          await ctx.runMutation(internal.sellers.subscriptions.activateSubscription, {
             merchantTransactionId: merchantTransactionId as string,
             fingoTransactionId: fingoTransactionId as string,
           });
@@ -324,6 +330,11 @@ http.route({
             merchantTransactionId: merchantTransactionId as string,
             reason,
           });
+        } else if (isSubscription) {
+          await ctx.runMutation(internal.sellers.subscriptions.failSubscription, {
+            merchantTransactionId: merchantTransactionId as string,
+            reason,
+          });
         } else {
           // Default to credit purchase (backward compatible)
           await ctx.runMutation(internal.credits.mutations.failPurchase, {
@@ -333,7 +344,7 @@ http.route({
         }
       } else {
         // Unknown event type - log it but acknowledge
-        console.log(`[FINGO WEBHOOK] Unhandled event type: ${eventType}, status: ${status}, isOrder: ${isOrderPayment}, isCredit: ${isCreditPurchase}`);
+        console.log(`[FINGO WEBHOOK] Unhandled event type: ${eventType}, status: ${status}, isOrder: ${isOrderPayment}, isCredit: ${isCreditPurchase}, isSubscription: ${isSubscription}`);
       }
 
       return addCorsHeaders(

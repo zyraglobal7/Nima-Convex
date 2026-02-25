@@ -99,6 +99,11 @@ export const createItemTryOn = mutation({
       updatedAt: now,
     });
 
+    // Increment try-on count on the item
+    await ctx.db.patch(args.itemId, {
+      tryOnCount: (item.tryOnCount ?? 0) + 1,
+    });
+
     return {
       itemTryOnId,
       userImageId: userImage._id,

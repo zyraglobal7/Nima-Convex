@@ -52,6 +52,10 @@ const itemValidator = v.object({
   viewCount: v.optional(v.number()),
   saveCount: v.optional(v.number()),
   purchaseCount: v.optional(v.number()),
+  tryOnCount: v.optional(v.number()),
+  cartAddCount: v.optional(v.number()),
+  lookbookSaveCount: v.optional(v.number()),
+  lookInclusionCount: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
 });

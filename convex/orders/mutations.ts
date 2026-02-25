@@ -277,6 +277,57 @@ export const completeOrderPayment = internalMutation({
       orderNumber: order.orderNumber,
     });
 
+    // Schedule seller new-order email notifications
+    const orderItems = await ctx.db
+      .query('order_items')
+      .withIndex('by_order', (q) => q.eq('orderId', order._id))
+      .collect();
+
+    // Group items by seller
+    const sellerMap = new Map<string, typeof orderItems>();
+    for (const item of orderItems) {
+      if (!item.sellerId) continue; // Skip Nima-curated items (no seller)
+      const key = item.sellerId;
+      if (!sellerMap.has(key)) sellerMap.set(key, []);
+      sellerMap.get(key)!.push(item);
+    }
+
+    for (const [sellerId, items] of sellerMap) {
+      const seller = await ctx.db.get(sellerId as Id<'sellers'>);
+      if (!seller) continue;
+
+      // Prefer seller contactEmail, fall back to the seller's user account email
+      let sellerEmail = seller.contactEmail;
+      if (!sellerEmail) {
+        const sellerUser = await ctx.db.get(seller.userId);
+        sellerEmail = sellerUser?.email;
+      }
+      if (!sellerEmail) continue;
+
+      await ctx.scheduler.runAfter(0, internal.emails.actions.sendSellerNewOrderEmail, {
+        sellerEmail,
+        sellerName: seller.shopName,
+        orderNumber: order.orderNumber,
+        orderDate: order.createdAt,
+        // Divide cents by 100 for display values
+        items: items.map((i) => ({
+          name: i.itemName,
+          brand: i.itemBrand,
+          quantity: i.quantity,
+          price: i.itemPrice / 100,
+          lineTotal: i.lineTotal / 100,
+          imageUrl: i.itemImageUrl,
+          size: i.selectedSize,
+          color: i.selectedColor,
+        })),
+        subtotal: order.subtotal / 100,
+        total: order.total / 100,
+        currency: order.currency,
+        buyerCity: order.shippingAddress.city,
+        buyerCountry: order.shippingAddress.country,
+      });
+    }
+
     return {
       success: true,
       orderId: order._id,

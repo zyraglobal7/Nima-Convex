@@ -1,7 +1,23 @@
-import { internalMutation, MutationCtx } from '../_generated/server';
+import { mutation, internalMutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id } from '../_generated/dataModel';
 import { generatePublicId } from '../types';
+
+/**
+ * Increment the view count for an item (called from product detail pages)
+ */
+export const incrementItemView = mutation({
+  args: { itemId: v.id('items') },
+  returns: v.null(),
+  handler: async (ctx: MutationCtx, args: { itemId: Id<'items'> }): Promise<null> => {
+    const item = await ctx.db.get(args.itemId);
+    if (!item) return null;
+    await ctx.db.patch(args.itemId, {
+      viewCount: (item.viewCount ?? 0) + 1,
+    });
+    return null;
+  },
+});
 
 // Validators
 const categoryValidator = v.union(

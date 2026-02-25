@@ -24,6 +24,9 @@ export type BudgetRange = 'low' | 'mid' | 'premium';
 /** Subscription tiers */
 export type SubscriptionTier = 'free' | 'style_pass' | 'vip';
 
+/** Seller tier */
+export type SellerTier = 'basic' | 'starter' | 'growth' | 'premium';
+
 /** Item categories */
 export type ItemCategory =
   | 'top'
@@ -358,6 +361,42 @@ export const CREDIT_PACKAGES: CreditPackage[] = [
 
 /** Free credits per week */
 export const FREE_WEEKLY_CREDITS = 5;
+
+// ============================================
+// SELLER TIER CONSTANTS
+// ============================================
+
+/** Product listing limits and analytics windows per seller tier */
+export const TIER_LIMITS: Record<SellerTier, {
+  maxProducts: number | null;
+  revenueChartDays: number;
+  orderHistoryDays: number | null;
+  topProductsLimit: number | null;
+  showEngagementCounts: boolean;
+  showCartCounts: boolean;
+}> = {
+  basic:   { maxProducts: 20,  revenueChartDays: 0,   orderHistoryDays: 30,  topProductsLimit: 0,    showEngagementCounts: false, showCartCounts: false },
+  starter: { maxProducts: 50,  revenueChartDays: 30,  orderHistoryDays: 90,  topProductsLimit: 5,    showEngagementCounts: true,  showCartCounts: false },
+  growth:  { maxProducts: 200, revenueChartDays: 90,  orderHistoryDays: 180, topProductsLimit: 20,   showEngagementCounts: true,  showCartCounts: true  },
+  premium: { maxProducts: null, revenueChartDays: 365, orderHistoryDays: null, topProductsLimit: null, showEngagementCounts: true,  showCartCounts: true  },
+};
+
+/** Monthly subscription prices in KES */
+export const TIER_PRICES_KES: Record<'starter' | 'growth' | 'premium', number> = {
+  starter: 5000,
+  growth:  15000,
+  premium: 30000,
+};
+
+/** Generate a merchant transaction ID for subscription payments */
+export function generateSubscriptionTransactionId(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 16; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `nima_sub_${result}`;
+}
 
 /** Milliseconds in a week */
 export const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;

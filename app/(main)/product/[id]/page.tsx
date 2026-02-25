@@ -55,6 +55,7 @@ export default function ProductDetailPage() {
   const quickSave = useMutation(api.lookbooks.mutations.quickSave);
   const saveTryOn = useMutation(api.lookbooks.mutations.saveTryOnToLookbook);
   const addToCart = useMutation(api.cart.mutations.addToCart);
+  const incrementView = useMutation(api.items.mutations.incrementItemView);
 
   // Poll for try-on status if we have a tryOnId
   const tryOnResult = useQuery(
@@ -64,6 +65,15 @@ export default function ProductDetailPage() {
 
   // Check if this try-on is already saved
   const isSaved = useQuery(api.lookbooks.queries.isTryOnSaved, tryOnId ? { itemTryOnId: tryOnId } : 'skip');
+
+  // Track view once when item data first loads
+  useEffect(() => {
+    if (itemData) {
+      incrementView({ itemId }).catch(() => {});
+    }
+    // itemId is stable for the lifetime of this page
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!itemData]);
 
   // Check for existing completed try-on
   useEffect(() => {
@@ -75,6 +85,18 @@ export default function ProductDetailPage() {
       setTryOnStatus(existingTryOn.tryOn.status);
     }
   }, [existingTryOn]);
+
+  // Auto-select color/size if there is only one option
+  useEffect(() => {
+    if (!itemData) return;
+    const { item } = itemData;
+    if (item.colors.length === 1) {
+      setSelectedColor(item.colors[0]);
+    }
+    if (item.sizes.length === 1) {
+      setSelectedSize(item.sizes[0]);
+    }
+  }, [itemData]);
 
   // Watch for try-on completion
   useEffect(() => {

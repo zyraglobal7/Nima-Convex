@@ -200,7 +200,6 @@ export function GateSplash({ onGetStarted }: GateSplashProps) {
             </p>
           </motion.div>
 
-   
 
           {/* Primary CTA */}
           <motion.div

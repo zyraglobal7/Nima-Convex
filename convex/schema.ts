@@ -200,6 +200,10 @@ export default defineSchema({
     viewCount: v.optional(v.number()),
     saveCount: v.optional(v.number()),
     purchaseCount: v.optional(v.number()),
+    tryOnCount: v.optional(v.number()),
+    lookbookSaveCount: v.optional(v.number()),
+    cartAddCount: v.optional(v.number()),
+    lookInclusionCount: v.optional(v.number()),
 
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -744,6 +748,14 @@ export default defineSchema({
     ),
     verificationNotes: v.optional(v.string()),
 
+    // Tier
+    tier: v.optional(v.union(
+      v.literal('basic'),
+      v.literal('starter'),
+      v.literal('growth'),
+      v.literal('premium')
+    )),
+
     // Status
     isActive: v.boolean(),
 
@@ -753,7 +765,8 @@ export default defineSchema({
   })
     .index('by_user', ['userId'])
     .index('by_slug', ['slug'])
-    .index('by_verification_status', ['verificationStatus']),
+    .index('by_verification_status', ['verificationStatus'])
+    .index('by_tier', ['tier']),
 
   // ============================================
   // ORDERS
@@ -998,5 +1011,64 @@ export default defineSchema({
   })
     .index('by_user', ['userId'])
     .index('by_token', ['token']),
+
+  // ============================================
+  // SELLER SUBSCRIPTIONS
+  // ============================================
+
+  /**
+   * seller_subscriptions - Paid tier subscription records
+   * Each row is one billing cycle attempt. Active subscription drives seller.tier.
+   */
+  /**
+   * Tier configuration — one row per tier, editable by admins.
+   * Seeded with defaults on first read if missing.
+   */
+  tier_config: defineTable({
+    tier: v.union(
+      v.literal('basic'),
+      v.literal('starter'),
+      v.literal('growth'),
+      v.literal('premium')
+    ),
+    maxProducts: v.union(v.number(), v.null()),       // null = unlimited
+    revenueChartDays: v.number(),                      // 0 = no chart
+    orderHistoryDays: v.union(v.number(), v.null()),   // null = unlimited
+    topProductsLimit: v.union(v.number(), v.null()),   // null = unlimited, 0 = hidden
+    showEngagementCounts: v.boolean(),
+    showCartCounts: v.boolean(),
+    priceKes: v.number(),                              // 0 for basic
+    updatedAt: v.number(),
+  }).index('by_tier', ['tier']),
+
+  seller_subscriptions: defineTable({
+    sellerId: v.id('sellers'),
+    tier: v.union(
+      v.literal('starter'),
+      v.literal('growth'),
+      v.literal('premium')
+    ),
+    status: v.union(
+      v.literal('pending'),   // STK push sent, waiting for payment
+      v.literal('active'),    // Paid, running
+      v.literal('expired'),   // periodEnd passed, seller downgraded to basic
+      v.literal('cancelled'), // Manually cancelled by admin
+      v.literal('failed')     // Payment failed
+    ),
+    periodStart: v.optional(v.number()),
+    periodEnd: v.optional(v.number()),     // periodStart + 30 days
+    amountKes: v.number(),                 // 5000 | 15000 | 30000
+    phoneNumber: v.string(),               // M-Pesa phone used
+    merchantTransactionId: v.string(),     // nima_sub_xxxx
+    fingoTransactionId: v.optional(v.string()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_seller', ['sellerId'])
+    .index('by_seller_and_status', ['sellerId', 'status'])
+    .index('by_status', ['status'])
+    .index('by_period_end', ['periodEnd'])
+    .index('by_merchant_transaction_id', ['merchantTransactionId']),
 
 });
