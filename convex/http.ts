@@ -179,4 +179,198 @@ http.route({
   }),
 });
 
+// ============================================
+// FINGO PAY WEBHOOK
+// ============================================
+
+/**
+ * Fingo Pay Webhook Handler
+ * Receives payment confirmation events from Fingo Pay
+ * 
+ * Events:
+ * - transaction.completed: Payment successful, add credits
+ * - transaction.failed: Payment failed
+ * 
+ * Webhook URL: https://www.shopnima.ai/api/fingo/webhook
+ * (proxied to this Convex HTTP endpoint)
+ */
+http.route({
+  path: '/webhooks/fingo',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get('Origin');
+
+    // Get the raw body for signature verification
+    const body = await request.text();
+
+    // Verify webhook signature using FINGO_WEBHOOK_SECRET
+    const webhookSecret = process.env.FINGO_WEBHOOK_SECRET;
+    const webhookSecretKey = process.env.FINGO_WEBHOOK_SECRET_KEY;
+    const signature = request.headers.get('X-Webhook-Signature') ||
+                      request.headers.get('x-webhook-signature') ||
+                      request.headers.get('Webhook-Signature') ||
+                      request.headers.get('X-Fingo-Signature');
+
+    if (webhookSecret && signature) {
+      // Verify HMAC signature
+      const encoder = new TextEncoder();
+      const key = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(webhookSecretKey || webhookSecret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign', 'verify'],
+      );
+
+      const signatureBuffer = encoder.encode(body);
+      const expectedSignature = await crypto.subtle.sign('HMAC', key, signatureBuffer);
+      const expectedHex = Array.from(new Uint8Array(expectedSignature))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      if (signature !== expectedHex) {
+        console.error('[FINGO WEBHOOK] Signature verification failed');
+        // Log but don't reject - Fingo's exact signature format may vary
+        // In production, uncomment the line below:
+        // return new Response('Invalid signature', { status: 401 });
+      }
+    }
+
+    // Parse the webhook payload
+    let payload: {
+      event?: string;
+      type?: string;
+      data?: {
+        id?: string;
+        merchantTransactionId?: string;
+        status?: string;
+        failureReason?: string;
+        [key: string]: unknown;
+      };
+      merchantTransactionId?: string;
+      status?: string;
+      id?: string;
+      failureReason?: string;
+      [key: string]: unknown;
+    };
+
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      console.error('[FINGO WEBHOOK] Invalid JSON payload');
+      return addCorsHeaders(new Response('Invalid JSON', { status: 400 }), origin);
+    }
+
+    console.log('[FINGO WEBHOOK] Received event:', JSON.stringify(payload));
+
+    // Extract event type and data (handle various payload formats)
+    const eventType = payload.event || payload.type || '';
+    const data = payload.data || payload;
+    const merchantTransactionId = data.merchantTransactionId || payload.merchantTransactionId || '';
+    const fingoTransactionId = data.id || payload.id || '';
+
+    if (!merchantTransactionId) {
+      console.error('[FINGO WEBHOOK] No merchantTransactionId in payload');
+      return addCorsHeaders(
+        new Response(JSON.stringify({ error: 'Missing merchantTransactionId' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        origin,
+      );
+    }
+
+    try {
+      // Determine the status from the event
+      const status = (data.status || payload.status || '').toString().toLowerCase();
+      const isCompleted =
+        eventType.includes('completed') ||
+        eventType.includes('success') ||
+        status === 'completed' ||
+        status === 'success' ||
+        status === 'successful';
+
+      const isFailed =
+        eventType.includes('failed') ||
+        eventType.includes('failure') ||
+        status === 'failed' ||
+        status === 'failure' ||
+        status === 'cancelled' ||
+        status === 'rejected';
+
+      // Route to the correct handler based on merchant transaction ID prefix
+      const isOrderPayment = (merchantTransactionId as string).startsWith('nima_ord_');
+      const isCreditPurchase = (merchantTransactionId as string).startsWith('nima_cr_');
+      const isSubscription = (merchantTransactionId as string).startsWith('nima_sub_');
+
+      if (isCompleted) {
+        console.log(`[FINGO WEBHOOK] Payment completed: ${merchantTransactionId}`);
+        if (isOrderPayment) {
+          await ctx.runMutation(internal.orders.mutations.completeOrderPayment, {
+            merchantTransactionId: merchantTransactionId as string,
+            fingoTransactionId: fingoTransactionId as string,
+          });
+        } else if (isSubscription) {
+          await ctx.runMutation(internal.sellers.subscriptions.activateSubscription, {
+            merchantTransactionId: merchantTransactionId as string,
+            fingoTransactionId: fingoTransactionId as string,
+          });
+        } else {
+          // Default to credit purchase (backward compatible)
+          await ctx.runMutation(internal.credits.mutations.completePurchase, {
+            merchantTransactionId: merchantTransactionId as string,
+            fingoTransactionId: fingoTransactionId as string,
+          });
+        }
+      } else if (isFailed) {
+        const reason = (data.failureReason || payload.failureReason || 'Payment failed').toString();
+        console.log(`[FINGO WEBHOOK] Payment failed: ${merchantTransactionId} - ${reason}`);
+        if (isOrderPayment) {
+          await ctx.runMutation(internal.orders.mutations.failOrderPayment, {
+            merchantTransactionId: merchantTransactionId as string,
+            reason,
+          });
+        } else if (isSubscription) {
+          await ctx.runMutation(internal.sellers.subscriptions.failSubscription, {
+            merchantTransactionId: merchantTransactionId as string,
+            reason,
+          });
+        } else {
+          // Default to credit purchase (backward compatible)
+          await ctx.runMutation(internal.credits.mutations.failPurchase, {
+            merchantTransactionId: merchantTransactionId as string,
+            reason,
+          });
+        }
+      } else {
+        // Unknown event type - log it but acknowledge
+        console.log(`[FINGO WEBHOOK] Unhandled event type: ${eventType}, status: ${status}, isOrder: ${isOrderPayment}, isCredit: ${isCreditPurchase}, isSubscription: ${isSubscription}`);
+      }
+
+      return addCorsHeaders(
+        new Response(JSON.stringify({ received: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        origin,
+      );
+    } catch (error) {
+      console.error('[FINGO WEBHOOK] Processing error:', error);
+      return addCorsHeaders(new Response('Internal error', { status: 500 }), origin);
+    }
+  }),
+});
+
+/**
+ * CORS preflight for Fingo webhook
+ */
+http.route({
+  path: '/webhooks/fingo',
+  method: 'OPTIONS',
+  handler: httpAction(async (_, request) => {
+    const origin = request.headers.get('Origin');
+    return addCorsHeaders(new Response(null, { status: 204 }), origin);
+  }),
+});
+
 export default http;

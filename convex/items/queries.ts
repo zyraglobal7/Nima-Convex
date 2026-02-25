@@ -52,6 +52,10 @@ const itemValidator = v.object({
   viewCount: v.optional(v.number()),
   saveCount: v.optional(v.number()),
   purchaseCount: v.optional(v.number()),
+  tryOnCount: v.optional(v.number()),
+  cartAddCount: v.optional(v.number()),
+  lookbookSaveCount: v.optional(v.number()),
+  lookInclusionCount: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
 });
@@ -403,6 +407,8 @@ export const listItemsWithImages = query({
         colors: v.array(v.string()),
         sizes: v.array(v.string()),
         tags: v.array(v.string()),
+        material: v.optional(v.string()),
+        occasion: v.optional(v.array(v.string())),
         inStock: v.boolean(),
         isFeatured: v.optional(v.boolean()),
         primaryImageUrl: v.union(v.string(), v.null()),
@@ -435,6 +441,8 @@ export const listItemsWithImages = query({
       colors: string[];
       sizes: string[];
       tags: string[];
+      material?: string;
+      occasion?: string[];
       inStock: boolean;
       isFeatured?: boolean;
       primaryImageUrl: string | null;
@@ -521,6 +529,8 @@ export const listItemsWithImages = query({
           colors: item.colors,
           sizes: item.sizes,
           tags: item.tags,
+          material: item.material,
+          occasion: item.occasion,
           inStock: item.inStock,
           isFeatured: item.isFeatured,
           primaryImageUrl,

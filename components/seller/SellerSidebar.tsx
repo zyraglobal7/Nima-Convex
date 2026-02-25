@@ -9,6 +9,9 @@ import {
   DollarSign,
   Settings,
   Store,
+  CreditCard,
+  BarChart2,
+  Sparkles,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -47,6 +50,21 @@ const navItems = [
     title: 'Finance',
     href: '/seller/finance',
     icon: DollarSign,
+  },
+  {
+    title: 'Analytics',
+    href: '/seller/analytics',
+    icon: BarChart2,
+  },
+  {
+    title: 'AI Insights',
+    href: '/seller/ai-insights',
+    icon: Sparkles,
+  },
+  {
+    title: 'Billing',
+    href: '/seller/billing',
+    icon: CreditCard,
   },
 ];
 

@@ -1,7 +1,7 @@
 import { query, QueryCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id, Doc } from '../_generated/dataModel';
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../types';
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, TIER_PRICES_KES } from '../types';
 
 // Validators
 const categoryValidator = v.union(
@@ -60,6 +60,10 @@ const itemValidator = v.object({
   viewCount: v.optional(v.number()),
   saveCount: v.optional(v.number()),
   purchaseCount: v.optional(v.number()),
+  tryOnCount: v.optional(v.number()),
+  cartAddCount: v.optional(v.number()),
+  lookbookSaveCount: v.optional(v.number()),
+  lookInclusionCount: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
 });
@@ -397,6 +401,344 @@ export const getDashboardStats = query({
       totalCartItems,
       cartTotalValue,
     };
+  },
+});
+
+// ============================================
+// SELLER SUBSCRIPTION ADMIN QUERIES
+// ============================================
+
+const adminSellerTierValidator = v.optional(v.union(
+  v.literal('basic'),
+  v.literal('starter'),
+  v.literal('growth'),
+  v.literal('premium')
+));
+
+const adminSubStatusValidator = v.optional(v.union(
+  v.literal('pending'),
+  v.literal('active'),
+  v.literal('expired'),
+  v.literal('cancelled'),
+  v.literal('failed')
+));
+
+/**
+ * Admin: list all sellers with their current tier and active subscription info
+ */
+export const listSellersAdmin = query({
+  args: {
+    tier: adminSellerTierValidator,
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+  },
+  returns: v.object({
+    sellers: v.array(v.object({
+      _id: v.id('sellers'),
+      shopName: v.string(),
+      slug: v.string(),
+      tier: v.optional(v.union(
+        v.literal('basic'),
+        v.literal('starter'),
+        v.literal('growth'),
+        v.literal('premium')
+      )),
+      verificationStatus: v.union(
+        v.literal('pending'),
+        v.literal('verified'),
+        v.literal('rejected')
+      ),
+      isActive: v.boolean(),
+      createdAt: v.number(),
+      activeSub: v.optional(v.object({
+        _id: v.id('seller_subscriptions'),
+        tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('premium')),
+        status: v.union(
+          v.literal('pending'),
+          v.literal('active'),
+          v.literal('expired'),
+          v.literal('cancelled'),
+          v.literal('failed')
+        ),
+        periodEnd: v.optional(v.number()),
+        amountKes: v.number(),
+        createdAt: v.number(),
+      })),
+    })),
+    hasMore: v.boolean(),
+    nextCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx: QueryCtx, args: { tier?: 'basic' | 'starter' | 'growth' | 'premium'; limit?: number; cursor?: string }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Not authenticated');
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+    if (!user || user.role !== 'admin') throw new Error('Not authorized');
+
+    const limit = Math.min(args.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
+    let allSellers: Doc<'sellers'>[];
+    if (args.tier) {
+      allSellers = await ctx.db
+        .query('sellers')
+        .withIndex('by_tier', (q) => q.eq('tier', args.tier))
+        .order('desc')
+        .collect();
+    } else {
+      allSellers = await ctx.db.query('sellers').order('desc').collect();
+    }
+
+    // Handle cursor
+    let startIndex = 0;
+    if (args.cursor) {
+      const idx = allSellers.findIndex((s) => s._id === args.cursor);
+      if (idx !== -1) startIndex = idx + 1;
+    }
+
+    const page = allSellers.slice(startIndex, startIndex + limit + 1);
+    const hasMore = page.length > limit;
+    const result = page.slice(0, limit);
+
+    const enriched = await Promise.all(result.map(async (seller) => {
+      const activeSub = await ctx.db
+        .query('seller_subscriptions')
+        .withIndex('by_seller_and_status', (q) => q.eq('sellerId', seller._id).eq('status', 'active'))
+        .order('desc')
+        .first();
+
+      return {
+        _id: seller._id,
+        shopName: seller.shopName,
+        slug: seller.slug,
+        tier: seller.tier,
+        verificationStatus: seller.verificationStatus,
+        isActive: seller.isActive,
+        createdAt: seller.createdAt,
+        activeSub: activeSub ? {
+          _id: activeSub._id,
+          tier: activeSub.tier,
+          status: activeSub.status,
+          periodEnd: activeSub.periodEnd,
+          amountKes: activeSub.amountKes,
+          createdAt: activeSub.createdAt,
+        } : undefined,
+      };
+    }));
+
+    return {
+      sellers: enriched,
+      hasMore,
+      nextCursor: hasMore && result.length > 0 ? result[result.length - 1]._id : null,
+    };
+  },
+});
+
+/**
+ * Admin: subscription stats overview
+ */
+export const getSubscriptionStats = query({
+  args: {},
+  returns: v.object({
+    activeByTier: v.object({
+      starter: v.number(),
+      growth: v.number(),
+      premium: v.number(),
+    }),
+    mrrKes: v.number(),
+    expiringIn7Days: v.number(),
+    failedLast30Days: v.number(),
+    totalSellers: v.number(),
+  }),
+  handler: async (ctx: QueryCtx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Not authenticated');
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+    if (!user || user.role !== 'admin') throw new Error('Not authorized');
+
+    const now = Date.now();
+    const sevenDaysFromNow = now + 7 * 24 * 60 * 60 * 1000;
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+    const activeSubs = await ctx.db
+      .query('seller_subscriptions')
+      .withIndex('by_status', (q) => q.eq('status', 'active'))
+      .collect();
+
+    const activeByTier = { starter: 0, growth: 0, premium: 0 };
+    let mrrKes = 0;
+    let expiringIn7Days = 0;
+
+    for (const sub of activeSubs) {
+      activeByTier[sub.tier]++;
+      mrrKes += sub.amountKes;
+      if (sub.periodEnd && sub.periodEnd <= sevenDaysFromNow) {
+        expiringIn7Days++;
+      }
+    }
+
+    const failedSubs = await ctx.db
+      .query('seller_subscriptions')
+      .withIndex('by_status', (q) => q.eq('status', 'failed'))
+      .collect();
+    const failedLast30Days = failedSubs.filter((s) => s.createdAt >= thirtyDaysAgo).length;
+
+    const totalSellers = (await ctx.db.query('sellers').collect()).length;
+
+    return {
+      activeByTier,
+      mrrKes,
+      expiringIn7Days,
+      failedLast30Days,
+      totalSellers,
+    };
+  },
+});
+
+/**
+ * Admin: get all subscriptions for a specific seller
+ */
+const tierConfigValidator = v.object({
+  _id: v.id('tier_config'),
+  _creationTime: v.number(),
+  tier: v.union(v.literal('basic'), v.literal('starter'), v.literal('growth'), v.literal('premium')),
+  maxProducts: v.union(v.number(), v.null()),
+  revenueChartDays: v.number(),
+  orderHistoryDays: v.union(v.number(), v.null()),
+  topProductsLimit: v.union(v.number(), v.null()),
+  showEngagementCounts: v.boolean(),
+  showCartCounts: v.boolean(),
+  priceKes: v.number(),
+  updatedAt: v.number(),
+});
+
+export const getTierConfigs = query({
+  args: {},
+  returns: v.array(tierConfigValidator),
+  handler: async (ctx: QueryCtx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Not authenticated');
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+    if (!user || user.role !== 'admin') throw new Error('Not authorized');
+
+    return ctx.db.query('tier_config').collect();
+  },
+});
+
+export const getSellerSubscriptionsAdmin = query({
+  args: { sellerId: v.id('sellers') },
+  returns: v.array(v.object({
+    _id: v.id('seller_subscriptions'),
+    _creationTime: v.number(),
+    sellerId: v.id('sellers'),
+    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('premium')),
+    status: v.union(
+      v.literal('pending'),
+      v.literal('active'),
+      v.literal('expired'),
+      v.literal('cancelled'),
+      v.literal('failed')
+    ),
+    periodStart: v.optional(v.number()),
+    periodEnd: v.optional(v.number()),
+    amountKes: v.number(),
+    phoneNumber: v.string(),
+    merchantTransactionId: v.string(),
+    fingoTransactionId: v.optional(v.string()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })),
+  handler: async (ctx: QueryCtx, args: { sellerId: Id<'sellers'> }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Not authenticated');
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+    if (!user || user.role !== 'admin') throw new Error('Not authorized');
+
+    return ctx.db
+      .query('seller_subscriptions')
+      .withIndex('by_seller', (q) => q.eq('sellerId', args.sellerId))
+      .order('desc')
+      .collect();
+  },
+});
+
+/**
+ * Admin: recent subscription events across all sellers (last 50), enriched with shop name.
+ * Used in the admin billing page events feed.
+ */
+export const getRecentSubscriptionEvents = query({
+  args: {},
+  returns: v.array(v.object({
+    _id: v.id('seller_subscriptions'),
+    sellerId: v.id('sellers'),
+    shopName: v.string(),
+    tier: v.union(v.literal('starter'), v.literal('growth'), v.literal('premium')),
+    status: v.union(
+      v.literal('pending'),
+      v.literal('active'),
+      v.literal('expired'),
+      v.literal('cancelled'),
+      v.literal('failed')
+    ),
+    amountKes: v.number(),
+    periodEnd: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+  })),
+  handler: async (ctx: QueryCtx): Promise<Array<{
+    _id: Id<'seller_subscriptions'>;
+    sellerId: Id<'sellers'>;
+    shopName: string;
+    tier: 'starter' | 'growth' | 'premium';
+    status: 'pending' | 'active' | 'expired' | 'cancelled' | 'failed';
+    amountKes: number;
+    periodEnd?: number;
+    failureReason?: string;
+    createdAt: number;
+  }>> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Not authenticated');
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+    if (!user || user.role !== 'admin') throw new Error('Not authorized');
+
+    // Get last 50 subscription events by creation time
+    const events = await ctx.db
+      .query('seller_subscriptions')
+      .order('desc')
+      .take(50);
+
+    const enriched = await Promise.all(
+      events.map(async (ev) => {
+        const seller = await ctx.db.get(ev.sellerId);
+        return {
+          _id: ev._id,
+          sellerId: ev.sellerId,
+          shopName: seller?.shopName ?? 'Unknown Shop',
+          tier: ev.tier,
+          status: ev.status,
+          amountKes: ev.amountKes,
+          periodEnd: ev.periodEnd,
+          failureReason: ev.failureReason,
+          createdAt: ev.createdAt,
+        };
+      })
+    );
+
+    return enriched;
   },
 });
 
