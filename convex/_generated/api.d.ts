@@ -54,6 +54,8 @@ import type * as orders_mutations from "../orders/mutations.js";
 import type * as orders_queries from "../orders/queries.js";
 import type * as search_visualSearch from "../search/visualSearch.js";
 import type * as sellers_actions from "../sellers/actions.js";
+import type * as sellers_aiChat from "../sellers/aiChat.js";
+import type * as sellers_aiChatActions from "../sellers/aiChatActions.js";
 import type * as sellers_mutations from "../sellers/mutations.js";
 import type * as sellers_queries from "../sellers/queries.js";
 import type * as sellers_subscriptionActions from "../sellers/subscriptionActions.js";
@@ -132,6 +134,8 @@ declare const fullApi: ApiFromModules<{
   "orders/queries": typeof orders_queries;
   "search/visualSearch": typeof search_visualSearch;
   "sellers/actions": typeof sellers_actions;
+  "sellers/aiChat": typeof sellers_aiChat;
+  "sellers/aiChatActions": typeof sellers_aiChatActions;
   "sellers/mutations": typeof sellers_mutations;
   "sellers/queries": typeof sellers_queries;
   "sellers/subscriptionActions": typeof sellers_subscriptionActions;

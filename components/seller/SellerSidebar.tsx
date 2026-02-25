@@ -11,6 +11,7 @@ import {
   Store,
   CreditCard,
   BarChart2,
+  Sparkles,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -54,6 +55,11 @@ const navItems = [
     title: 'Analytics',
     href: '/seller/analytics',
     icon: BarChart2,
+  },
+  {
+    title: 'AI Insights',
+    href: '/seller/ai-insights',
+    icon: Sparkles,
   },
   {
     title: 'Billing',

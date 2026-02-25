@@ -1071,4 +1071,21 @@ export default defineSchema({
     .index('by_period_end', ['periodEnd'])
     .index('by_merchant_transaction_id', ['merchantTransactionId']),
 
+  // ============================================
+  // SELLER AI CHAT
+  // ============================================
+
+  /**
+   * seller_chat_messages - Premium seller AI insights conversation history
+   * Stores messages for the AI business analyst chat feature (Premium only)
+   */
+  seller_chat_messages: defineTable({
+    sellerId: v.id('sellers'),
+    role: v.union(v.literal('user'), v.literal('assistant')),
+    content: v.string(),
+    createdAt: v.number(),
+  })
+    .index('by_seller', ['sellerId'])
+    .index('by_seller_and_created', ['sellerId', 'createdAt']),
+
 });

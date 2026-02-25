@@ -116,6 +116,7 @@ const TIERS: TierDefinition[] = [
     badge: { label: 'Top Tier', variant: 'secondary' },
     features: [
       { label: 'Everything in Growth', included: true },
+      { label: 'AI Insights — chat with an analyst trained on your store data', included: true },
       { label: 'Top-tier placement platform-wide', included: true },
       { label: 'Dedicated campaigns, seasonal pushes & exclusive drops', included: true },
       { label: 'Trending looks, NIMA-styled collections', included: true },
