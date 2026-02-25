@@ -350,7 +350,6 @@ function PaymentDialog({ open, onOpenChange, tier, defaultPhone }: PaymentDialog
   }
 
   function handleClose() {
-    if (paymentState === 'pending') return; // Block closing while payment is in-flight
     onOpenChange(false);
   }
 
