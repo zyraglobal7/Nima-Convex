@@ -9,7 +9,7 @@ const DEFAULT_FROM = 'Nima <support@shopnima.ai>';
 
 /**
  * Send a new-order notification email to a seller.
- * All financial amounts must already be divided by 100 (display values, not cents).
+ * All financial amounts are whole KES values (prices are stored as whole units, not cents).
  * Errors are swallowed — email failures must never break the order payment flow.
  */
 export const sendSellerNewOrderEmail = internalAction({

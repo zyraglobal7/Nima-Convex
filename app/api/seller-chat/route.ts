@@ -72,7 +72,7 @@ interface SellerContext {
 function buildSellerSystemPrompt(ctx: SellerContext): string {
   const { shopInfo, products, revenueSummary, engagement, customerInsights, platformAggregates } = ctx;
 
-  const currency = products[0]?.currency ?? 'KES';
+  const currency = 'KES';
 
   // Format products list (cap at 50 for token budget)
   const productList = products

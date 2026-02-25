@@ -58,7 +58,7 @@ export const buildSellerContext = internalQuery({
     const products = activeItems.map((item) => ({
       name: item.name,
       category: item.category,
-      price: item.price / 100,
+      price: item.price,
       currency: item.currency,
       inStock: item.inStock,
       stockQuantity: item.stockQuantity ?? null,

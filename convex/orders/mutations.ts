@@ -205,6 +205,51 @@ export const createOrder = mutation({
       });
     }
 
+     // TEMPORARY: send seller email on order creation (before payment confirmation)
+     
+    /**const sellerMap = new Map<string, (typeof itemsWithDetails)>();
+    for (const detail of itemsWithDetails) {
+      if (!detail.item.sellerId) continue;
+      const key = detail.item.sellerId;
+      if (!sellerMap.has(key)) sellerMap.set(key, []);
+      sellerMap.get(key)!.push(detail);
+    }
+
+    for (const [sellerId, details] of sellerMap) {
+      const seller = await ctx.db.get(sellerId as Id<'sellers'>);
+      if (!seller) continue;
+
+      let sellerEmail = seller.contactEmail;
+      if (!sellerEmail) {
+        const sellerUser = await ctx.db.get(seller.userId);
+        sellerEmail = sellerUser?.email;
+      }
+      if (!sellerEmail) continue;
+
+      await ctx.scheduler.runAfter(0, internal.emails.actions.sendSellerNewOrderEmail, {
+        sellerEmail,
+        sellerName: seller.shopName,
+        orderNumber,
+        orderDate: now,
+        items: details.map((d) => ({
+          name: d.item.name,
+          brand: d.item.brand,
+          quantity: d.cartItem.quantity,
+          price: d.item.price / 100,
+          lineTotal: d.lineTotal / 100,
+          imageUrl: d.imageUrl,
+          size: d.cartItem.selectedSize,
+          color: d.cartItem.selectedColor,
+        })),
+        subtotal: subtotal / 100,
+        total: total / 100,
+        currency: 'KES',
+        buyerCity: args.shippingAddress.city,
+        buyerCountry: args.shippingAddress.country,
+      });
+    }**/
+    // END TEMPORARY
+
     // Schedule Fingo Pay STK Push
     await ctx.scheduler.runAfter(0, internal.orders.actions.callFingoPayOrderSTKPush, {
       orderId,
@@ -213,6 +258,8 @@ export const createOrder = mutation({
       phoneNumber: args.mpesaPhoneNumber,
       narration: `Nima Order ${orderNumber}`,
     });
+
+   
 
     return { orderId, orderNumber, merchantTransactionId };
   },
@@ -309,19 +356,19 @@ export const completeOrderPayment = internalMutation({
         sellerName: seller.shopName,
         orderNumber: order.orderNumber,
         orderDate: order.createdAt,
-        // Divide cents by 100 for display values
+        // Prices are stored as whole KES — NO division needed
         items: items.map((i) => ({
           name: i.itemName,
           brand: i.itemBrand,
           quantity: i.quantity,
-          price: i.itemPrice / 100,
-          lineTotal: i.lineTotal / 100,
+          price: i.itemPrice,
+          lineTotal: i.lineTotal,
           imageUrl: i.itemImageUrl,
           size: i.selectedSize,
           color: i.selectedColor,
         })),
-        subtotal: order.subtotal / 100,
-        total: order.total / 100,
+        subtotal: order.subtotal,
+        total: order.total,
         currency: order.currency,
         buyerCity: order.shippingAddress.city,
         buyerCountry: order.shippingAddress.country,

@@ -147,7 +147,52 @@ Convex dashboard env vars: `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `FINGO_WEBHOOK_
 - `internal.*` for server-to-server calls; `api.*` for client-callable functions
 - `convex/types.ts` exports document types (`Doc<'tableName'>`) and constants — import from here, not re-declare
 - `getTierConfig(ctx, tier)` — always use this helper (not raw `TIER_LIMITS`) to read seller tier limits, as admins can override them in the `tier_config` table
-- Actions that call Node.js-only APIs (e.g. `crypto`, `fetch` with streaming) must start with `'use node';` at the top of the file
+- Actions that call Node.js-only APIs (e.g. `crypto`) must start with `'use node';` at the top of the file. `fetch()` is available without `'use node'`
+- **NEVER put `'use node'` in a file that also exports queries or mutations.** Keep actions that require Node.js in separate files from queries/mutations
 - Migration scripts in `convex/admin/migrations.ts` are `internalMutation` functions run manually: `npx convex run admin/migrations:fnName --no-push`
 - UI components use shadcn/ui (configured via `components.json`), Radix UI primitives, Tailwind CSS v4
 - Path alias `@/` maps to project root
+- Use `v.null()` (not `undefined`) as the return validator when a function returns nothing; use `v.int64()` not `v.bigint()`
+- Always include both `args` and `returns` validators on every Convex function
+
+### Convex Explicit Typing (Mandatory)
+
+Every Convex handler **must** have explicit TypeScript types — no inference allowed:
+
+```typescript
+export const functionName = query({
+  args: { id: v.id("users") },
+  returns: v.object({ name: v.string() }),
+  handler: async (
+    ctx: QueryCtx,
+    args: { id: Id<"users"> },
+  ): Promise<{ name: string }> => {
+    // implementation
+  },
+});
+```
+
+Required imports for every Convex file:
+```typescript
+import { query, mutation, internalQuery, internalMutation, action, internalAction, QueryCtx, MutationCtx, ActionCtx } from "./_generated/server";
+import { Id, Doc } from "./_generated/dataModel";
+import { v } from "convex/values";
+```
+
+For helper functions, pass `db: DatabaseReader | DatabaseWriter` rather than the full `ctx`.
+
+### UI Color System
+
+The app uses a luxury palette (Loro Piana-inspired) via CSS variables. Always use these semantic tokens instead of raw colors:
+
+| Token | Light | Dark | Usage |
+|---|---|---|---|
+| `--background` | `#FAF8F5` | `#1A1614` | Page background |
+| `--surface` | `#F5F0E8` | `#252220` | Cards, modals |
+| `--primary` | `#5C2A33` (burgundy) | `#C9A07A` (rose gold) | Primary buttons |
+| `--secondary` | `#A67C52` (camel) | `#A66B73` | Secondary actions |
+| `--text-primary` | `#2D2926` | `#F5F0E8` | Headlines, body |
+| `--text-secondary` | `#6B635B` | `#C4B8A8` | Captions, muted |
+| `--border` | `#E0D8CC` | `#3D3835` | Dividers, inputs |
+
+In Tailwind, use `bg-background`, `bg-surface`, `text-text-primary`, `border-border`, `bg-primary`, etc.

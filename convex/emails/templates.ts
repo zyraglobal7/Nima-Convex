@@ -1,15 +1,15 @@
 /**
  * Email templates for Nima
  * Pure functions returning { subject, html } — no framework, just template literals.
- * Amounts in DB are in cents; divide by 100 before passing here.
+ * Amounts are whole KES values (prices are NOT stored in cents).
  */
 
 export interface OrderItem {
   name: string;
   brand?: string;
   quantity: number;
-  price: number;      // already divided by 100 (display value)
-  lineTotal: number;  // already divided by 100 (display value)
+  price: number;      // whole KES value
+  lineTotal: number;  // whole KES value
   imageUrl?: string;
   size?: string;
   color?: string;
@@ -20,8 +20,8 @@ export interface SellerNewOrderEmailData {
   orderNumber: string;
   orderDate: number;   // timestamp ms
   items: OrderItem[];
-  subtotal: number;    // already divided by 100
-  total: number;       // already divided by 100
+  subtotal: number;    // whole KES value
+  total: number;       // whole KES value
   currency: string;
   buyerCity: string;
   buyerCountry: string;
@@ -33,7 +33,7 @@ function fmt(amount: number, currency: string): string {
 }
 
 function formatDate(ts: number): string {
-  return new Date(ts).toLocaleDateString('en-KE', {
+  return new Date(ts).toLocaleDateString('`en-KE', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
