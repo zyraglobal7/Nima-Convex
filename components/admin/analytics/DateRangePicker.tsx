@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Lock } from 'lucide-react';
 import { format, subDays, startOfMonth, startOfYear, endOfDay, startOfDay } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
 
@@ -25,12 +25,15 @@ export interface DateRangePickerProps {
   dateRange: DateRange | undefined;
   onDateRangeChange: (range: DateRange | undefined) => void;
   className?: string;
+  /** Maximum number of days back this picker should allow. Undefined = unlimited (admin/premium). */
+  maxDays?: number;
 }
 
-const presets = [
+const ALL_PRESETS = [
   {
     label: 'Today',
     value: 'today',
+    days: 1,
     getRange: () => ({
       from: startOfDay(new Date()),
       to: endOfDay(new Date()),
@@ -39,6 +42,7 @@ const presets = [
   {
     label: 'Last 7 days',
     value: '7d',
+    days: 7,
     getRange: () => ({
       from: startOfDay(subDays(new Date(), 6)),
       to: endOfDay(new Date()),
@@ -47,6 +51,7 @@ const presets = [
   {
     label: 'Last 14 days',
     value: '14d',
+    days: 14,
     getRange: () => ({
       from: startOfDay(subDays(new Date(), 13)),
       to: endOfDay(new Date()),
@@ -55,14 +60,34 @@ const presets = [
   {
     label: 'Last 30 days',
     value: '30d',
+    days: 30,
     getRange: () => ({
       from: startOfDay(subDays(new Date(), 29)),
       to: endOfDay(new Date()),
     }),
   },
   {
+    label: 'Last 60 days',
+    value: '60d',
+    days: 60,
+    getRange: () => ({
+      from: startOfDay(subDays(new Date(), 59)),
+      to: endOfDay(new Date()),
+    }),
+  },
+  {
+    label: 'Last 90 days',
+    value: '90d',
+    days: 90,
+    getRange: () => ({
+      from: startOfDay(subDays(new Date(), 89)),
+      to: endOfDay(new Date()),
+    }),
+  },
+  {
     label: 'This Month',
     value: 'this-month',
+    days: 31,
     getRange: () => ({
       from: startOfMonth(new Date()),
       to: endOfDay(new Date()),
@@ -71,6 +96,7 @@ const presets = [
   {
     label: 'This Year',
     value: 'this-year',
+    days: 365,
     getRange: () => ({
       from: startOfYear(new Date()),
       to: endOfDay(new Date()),
@@ -79,6 +105,7 @@ const presets = [
   {
     label: 'Custom Range',
     value: 'custom',
+    days: Infinity,
     getRange: () => undefined,
   },
 ];
@@ -87,26 +114,39 @@ export function DateRangePicker({
   dateRange,
   onDateRangeChange,
   className,
+  maxDays,
 }: DateRangePickerProps) {
   const [isOpen, setIsOpen] = React.useState(false);
-  const [selectedPreset, setSelectedPreset] = React.useState<string>('30d');
 
-  // Initialize with 30 days on mount
+  // Filter presets to those within the tier's allowed window
+  const presets = maxDays !== undefined
+    ? ALL_PRESETS.filter((p) => p.days <= maxDays)
+    : ALL_PRESETS;
+
+  // Default preset: largest allowed one (excluding 'custom')
+  const defaultPreset = [...presets].reverse().find((p) => p.value !== 'custom')?.value ?? '30d';
+  const [selectedPreset, setSelectedPreset] = React.useState<string>(defaultPreset);
+
+  // Initialize with default range on mount
   React.useEffect(() => {
     if (!dateRange) {
-      const preset = presets.find((p) => p.value === '30d');
-      if (preset) {
+      const preset = presets.find((p) => p.value === defaultPreset);
+      if (preset && preset.value !== 'custom') {
         onDateRangeChange(preset.getRange());
       }
     }
   }, []);
 
+  // Earliest allowed date for calendar
+  const minDate = maxDays !== undefined
+    ? startOfDay(subDays(new Date(), maxDays - 1))
+    : undefined;
+
   const handlePresetChange = (value: string) => {
     setSelectedPreset(value);
     const preset = presets.find((p) => p.value === value);
     if (preset && value !== 'custom') {
-      const range = preset.getRange();
-      onDateRangeChange(range);
+      onDateRangeChange(preset.getRange());
     }
   };
 
@@ -118,7 +158,7 @@ export function DateRangePicker({
   const displayValue = React.useMemo(() => {
     if (!dateRange?.from) return 'Select date range';
     if (!dateRange.to) return format(dateRange.from, 'MMM d, yyyy');
-    return `${format(dateRange.from, 'MMM d, yyyy')} - ${format(dateRange.to, 'MMM d, yyyy')}`;
+    return `${format(dateRange.from, 'MMM d, yyyy')} – ${format(dateRange.to, 'MMM d, yyyy')}`;
   }, [dateRange]);
 
   return (
@@ -156,22 +196,19 @@ export function DateRangePicker({
             selected={dateRange}
             onSelect={handleCalendarSelect}
             numberOfMonths={2}
+            disabled={minDate ? { before: minDate } : undefined}
           />
           <div className="border-t p-3 flex justify-end gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                setIsOpen(false);
-              }}
+              onClick={() => setIsOpen(false)}
             >
               Cancel
             </Button>
             <Button
               size="sm"
-              onClick={() => {
-                setIsOpen(false);
-              }}
+              onClick={() => setIsOpen(false)}
             >
               Apply
             </Button>
@@ -196,7 +233,6 @@ const AnalyticsDateContext = React.createContext<AnalyticsDateContextType | unde
 
 export function AnalyticsDateProvider({ children }: { children: React.ReactNode }) {
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(() => {
-    // Default to last 30 days
     return {
       from: startOfDay(subDays(new Date(), 29)),
       to: endOfDay(new Date()),
@@ -228,3 +264,15 @@ export function useAnalyticsDate() {
   return context;
 }
 
+/** Read-only label shown to Basic sellers who have no date-based analytics */
+export function DateRangeLocked({ upgradeHref }: { upgradeHref: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-dashed px-3 py-1.5 text-xs text-muted-foreground">
+      <Lock className="h-3 w-3 shrink-0" />
+      <span>Date filter — Starter+</span>
+      <a href={upgradeHref} className="text-primary hover:underline ml-1 font-medium">
+        Upgrade
+      </a>
+    </div>
+  );
+}

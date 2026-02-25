@@ -1,6 +1,7 @@
 import { mutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id } from '../_generated/dataModel';
+import { internal } from '../_generated/api';
 
 /**
  * Toggle love interaction on a look
@@ -72,6 +73,29 @@ export const toggleLove = mutation({
         seenByOwner: false,
         createdAt: Date.now(),
       });
+
+      // Send push notification to look owner (if not self)
+      if (look.creatorUserId && look.creatorUserId !== user._id) {
+        const interactorName = user.firstName
+          ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`
+          : user.username || 'Someone';
+
+        let interactorProfileImageUrl: string | undefined = undefined;
+        if (user.profileImageId) {
+          const url = await ctx.storage.getUrl(user.profileImageId);
+          interactorProfileImageUrl = url ?? undefined;
+        } else if (user.profileImageUrl) {
+          interactorProfileImageUrl = user.profileImageUrl;
+        }
+
+        await ctx.scheduler.runAfter(0, internal.notifications.actions.sendLookInteractionNotification, {
+          ownerId: look.creatorUserId,
+          interactorName,
+          interactionType: 'love' as const,
+          lookId: args.lookId,
+          interactorProfileImageUrl,
+        });
+      }
 
       return { isLoved: true };
     }
@@ -205,6 +229,29 @@ export const recordSave = mutation({
         seenByOwner: false,
         createdAt: Date.now(),
       });
+
+      // Send push notification to look owner (if not self)
+      if (look.creatorUserId && look.creatorUserId !== user._id) {
+        const interactorName = user.firstName
+          ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`
+          : user.username || 'Someone';
+
+        let interactorProfileImageUrl: string | undefined = undefined;
+        if (user.profileImageId) {
+          const url = await ctx.storage.getUrl(user.profileImageId);
+          interactorProfileImageUrl = url ?? undefined;
+        } else if (user.profileImageUrl) {
+          interactorProfileImageUrl = user.profileImageUrl;
+        }
+
+        await ctx.scheduler.runAfter(0, internal.notifications.actions.sendLookInteractionNotification, {
+          ownerId: look.creatorUserId,
+          interactorName,
+          interactionType: 'save' as const,
+          lookId: args.lookId,
+          interactorProfileImageUrl,
+        });
+      }
     }
 
     return null;

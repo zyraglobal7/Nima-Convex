@@ -1,6 +1,8 @@
 import { mutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id } from '../_generated/dataModel';
+import { type SellerTier } from '../types';
+import { getTierConfig } from './tierConfig';
 
 const imageTypeValidator = v.union(
   v.literal('front'),
@@ -292,6 +294,21 @@ export const createSellerProduct = mutation({
 
     if (!seller) {
       throw new Error('Seller profile not found. Complete onboarding first.');
+    }
+
+    // Enforce tier product limit
+    const tier = (seller.tier ?? 'basic') as SellerTier;
+    const { maxProducts } = await getTierConfig(ctx, tier);
+    if (maxProducts !== null) {
+      const activeCount = await ctx.db
+        .query('items')
+        .withIndex('by_seller_and_active', (q) => q.eq('sellerId', seller._id).eq('isActive', true))
+        .collect();
+      if (activeCount.length >= maxProducts) {
+        throw new Error(
+          `You've reached the ${maxProducts} product limit for the ${tier} plan. Upgrade to add more products.`
+        );
+      }
     }
 
     const now = Date.now();

@@ -18,5 +18,19 @@ crons.daily(
   internal.wrapped.actions.checkAndGenerateWrapped
 );
 
+// ============================================
+// SELLER SUBSCRIPTION EXPIRY
+// ============================================
+
+/**
+ * Daily check at 1am UTC: expire any active subscriptions past their periodEnd
+ * and downgrade those sellers back to the basic tier.
+ */
+crons.daily(
+  'expire-seller-subscriptions',
+  { hourUTC: 1, minuteUTC: 0 },
+  internal.sellers.subscriptions.expireSubscriptions
+);
+
 export default crons;
 

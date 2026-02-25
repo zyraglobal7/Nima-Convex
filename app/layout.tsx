@@ -50,19 +50,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${cormorantGaramond.variable} ${dmSans.variable} ${jetbrainsMono.variable} antialiased`}
-      >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
-          disableTransitionOnChange
-        >
+      <body className={`${cormorantGaramond.variable} ${dmSans.variable} ${jetbrainsMono.variable} antialiased`}>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
           <PostHogProvider>
             <ConvexClientProvider>
               <FloatingLoaderWrapper>{children}</FloatingLoaderWrapper>
-              <Toaster />
+
+              <Toaster position="top-center" richColors />
+
             </ConvexClientProvider>
           </PostHogProvider>
         </ThemeProvider>

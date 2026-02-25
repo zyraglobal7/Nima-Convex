@@ -24,6 +24,9 @@ export type BudgetRange = 'low' | 'mid' | 'premium';
 /** Subscription tiers */
 export type SubscriptionTier = 'free' | 'style_pass' | 'vip';
 
+/** Seller tier */
+export type SellerTier = 'basic' | 'starter' | 'growth' | 'premium';
+
 /** Item categories */
 export type ItemCategory =
   | 'top'
@@ -286,11 +289,123 @@ export function shouldResetDailyLimit(resetAt: number): boolean {
   return resetAt < startOfToday;
 }
 
+/**
+ * Check if weekly free credits should be reset
+ * @param resetAt - The timestamp when free credits were last reset
+ * @returns Whether free credits should be reset
+ */
+export function shouldResetWeeklyCredits(resetAt: number): boolean {
+  return Date.now() - resetAt >= ONE_WEEK_MS;
+}
+
+/**
+ * Get the user's total available credits (free remaining + purchased)
+ */
+export function calculateAvailableCredits(
+  freeCreditsUsedThisWeek: number,
+  weeklyCreditsResetAt: number,
+  purchasedCredits: number,
+): { freeRemaining: number; purchased: number; total: number } {
+  // Check if free credits should be reset
+  const shouldReset = shouldResetWeeklyCredits(weeklyCreditsResetAt);
+  const freeUsed = shouldReset ? 0 : freeCreditsUsedThisWeek;
+  const freeRemaining = Math.max(0, FREE_WEEKLY_CREDITS - freeUsed);
+
+  return {
+    freeRemaining,
+    purchased: purchasedCredits,
+    total: freeRemaining + purchasedCredits,
+  };
+}
+
+/**
+ * Generate a unique merchant transaction ID for Fingo Pay
+ */
+export function generateMerchantTransactionId(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 16; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `nima_cr_${result}`;
+}
+
+/** Credit purchase status */
+export type CreditPurchaseStatus = 'pending' | 'completed' | 'failed';
+
+/** Push notification platform */
+export type PushPlatform = 'ios' | 'android' | 'web';
+
+export type CreditPurchase = Doc<'credit_purchases'>;
+export type PushToken = Doc<'push_tokens'>;
+
+// ============================================
+// CREDIT PACKAGES
+// ============================================
+
+/** Available credit packages */
+export interface CreditPackage {
+  id: string;
+  credits: number;
+  priceKes: number;
+  label: string;
+  popular?: boolean;
+}
+
+export const CREDIT_PACKAGES: CreditPackage[] = [
+  { id: 'pack_10', credits: 10, priceKes: 500, label: '10 Credits' },
+  { id: 'pack_20', credits: 20, priceKes: 1000, label: '20 Credits', popular: true },
+  { id: 'pack_50', credits: 50, priceKes: 2500, label: '50 Credits' },
+  { id: 'pack_100', credits: 100, priceKes: 5000, label: '100 Credits' },
+];
+
+/** Free credits per week */
+export const FREE_WEEKLY_CREDITS = 5;
+
+// ============================================
+// SELLER TIER CONSTANTS
+// ============================================
+
+/** Product listing limits and analytics windows per seller tier */
+export const TIER_LIMITS: Record<SellerTier, {
+  maxProducts: number | null;
+  revenueChartDays: number;
+  orderHistoryDays: number | null;
+  topProductsLimit: number | null;
+  showEngagementCounts: boolean;
+  showCartCounts: boolean;
+}> = {
+  basic:   { maxProducts: 20,  revenueChartDays: 0,   orderHistoryDays: 30,  topProductsLimit: 0,    showEngagementCounts: false, showCartCounts: false },
+  starter: { maxProducts: 50,  revenueChartDays: 30,  orderHistoryDays: 90,  topProductsLimit: 5,    showEngagementCounts: true,  showCartCounts: false },
+  growth:  { maxProducts: 200, revenueChartDays: 90,  orderHistoryDays: 180, topProductsLimit: 20,   showEngagementCounts: true,  showCartCounts: true  },
+  premium: { maxProducts: null, revenueChartDays: 365, orderHistoryDays: null, topProductsLimit: null, showEngagementCounts: true,  showCartCounts: true  },
+};
+
+/** Monthly subscription prices in KES */
+export const TIER_PRICES_KES: Record<'starter' | 'growth' | 'premium', number> = {
+  starter: 5000,
+  growth:  15000,
+  premium: 30000,
+};
+
+/** Generate a merchant transaction ID for subscription payments */
+export function generateSubscriptionTransactionId(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 16; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `nima_sub_${result}`;
+}
+
+/** Milliseconds in a week */
+export const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
 // ============================================
 // CONSTANTS
 // ============================================
 
-/** Daily try-on limits by subscription tier */
+/** Daily try-on limits by subscription tier (deprecated - use credits system) */
 export const DAILY_TRYON_LIMITS: Record<SubscriptionTier, number> = {
   free: 20,
   style_pass: 100,

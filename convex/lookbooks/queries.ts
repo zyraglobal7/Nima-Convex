@@ -238,6 +238,7 @@ export const getLookbookItemsWithDetails = query({
         type: v.literal('item'),
         item: v.object({
           _id: v.id('items'),
+          publicId: v.string(),
           name: v.string(),
           brand: v.optional(v.string()),
           category: v.string(),
@@ -272,6 +273,7 @@ export const getLookbookItemsWithDetails = query({
           type: 'item';
           item: {
             _id: Id<'items'>;
+            publicId: string;
             name: string;
             brand?: string;
             category: string;
@@ -397,6 +399,7 @@ export const getLookbookItemsWithDetails = query({
             type: 'item' as const,
             item: {
               _id: item._id,
+              publicId: item.publicId,
               name: item.name,
               brand: item.brand,
               category: item.category,
@@ -550,6 +553,142 @@ export const isTryOnSaved = query({
     }
 
     return false;
+  },
+});
+
+/**
+ * List lookbooks for the current user with cover images and preview thumbnails
+ * Returns each lookbook with coverImageUrl and up to 4 item preview image URLs
+ */
+export const listUserLookbooksWithCovers = query({
+  args: {
+    includeArchived: v.optional(v.boolean()),
+  },
+  returns: v.array(
+    v.object({
+      lookbook: lookbookValidator,
+      coverImageUrl: v.union(v.string(), v.null()),
+      previewImageUrls: v.array(v.string()),
+    })
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { includeArchived?: boolean }
+  ): Promise<
+    Array<{
+      lookbook: Doc<'lookbooks'>;
+      coverImageUrl: string | null;
+      previewImageUrls: string[];
+    }>
+  > => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      return [];
+    }
+
+    let lookbooks: Doc<'lookbooks'>[];
+    if (args.includeArchived) {
+      lookbooks = await ctx.db
+        .query('lookbooks')
+        .withIndex('by_user', (q) => q.eq('userId', user._id))
+        .collect();
+    } else {
+      lookbooks = await ctx.db
+        .query('lookbooks')
+        .withIndex('by_user_and_archived', (q) => q.eq('userId', user._id).eq('isArchived', false))
+        .collect();
+    }
+
+    // For each lookbook, resolve cover image and first 4 item preview images
+    const results = await Promise.all(
+      lookbooks.map(async (lookbook) => {
+        let coverImageUrl: string | null = null;
+        const previewImageUrls: string[] = [];
+
+        // Try custom cover image first
+        if (lookbook.coverImageId) {
+          coverImageUrl = await ctx.storage.getUrl(lookbook.coverImageId);
+        }
+        // Fall back to auto cover from first item
+        else if (lookbook.autoCoverItemId) {
+          const primaryImage = await ctx.db
+            .query('item_images')
+            .withIndex('by_item_and_primary', (q) =>
+              q.eq('itemId', lookbook.autoCoverItemId!).eq('isPrimary', true)
+            )
+            .unique();
+
+          if (primaryImage) {
+            if (primaryImage.storageId) {
+              coverImageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+            } else if (primaryImage.externalUrl) {
+              coverImageUrl = primaryImage.externalUrl;
+            }
+          }
+        }
+
+        // Fetch first 4 items from lookbook for preview grid
+        const lookbookItems = await ctx.db
+          .query('lookbook_items')
+          .withIndex('by_lookbook', (q) => q.eq('lookbookId', lookbook._id))
+          .order('asc')
+          .take(4);
+
+        // Get images for each item
+        for (const lookbookItem of lookbookItems) {
+          let imageUrl: string | null = null;
+
+          if (lookbookItem.itemType === 'item' && lookbookItem.itemId) {
+            // Get item's primary image
+            const primaryImage = await ctx.db
+              .query('item_images')
+              .withIndex('by_item_and_primary', (q) =>
+                q.eq('itemId', lookbookItem.itemId!).eq('isPrimary', true)
+              )
+              .unique();
+
+            if (primaryImage) {
+              if (primaryImage.storageId) {
+                imageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+              } else if (primaryImage.externalUrl) {
+                imageUrl = primaryImage.externalUrl;
+              }
+            }
+          } else if (lookbookItem.itemType === 'look' && lookbookItem.lookId) {
+            // Get look's generated image from look_images table
+            const lookImage = await ctx.db
+              .query('look_images')
+              .withIndex('by_look', (q) => q.eq('lookId', lookbookItem.lookId!))
+              .first();
+
+            if (lookImage?.storageId) {
+              imageUrl = await ctx.storage.getUrl(lookImage.storageId);
+            }
+          }
+
+          if (imageUrl) {
+            previewImageUrls.push(imageUrl);
+          }
+        }
+
+        return {
+          lookbook,
+          coverImageUrl,
+          previewImageUrls,
+        };
+      })
+    );
+
+    return results;
   },
 });
 

@@ -11,6 +11,8 @@ import {
   Settings,
   Gift,
   BarChart3,
+  Store,
+  CreditCard,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -59,6 +61,16 @@ const navItems = [
     href: '/admin/orders',
     icon: ShoppingCart,
     disabled: true,
+  },
+  {
+    title: 'Sellers',
+    href: '/admin/sellers',
+    icon: Store,
+  },
+  {
+    title: 'Billing',
+    href: '/admin/billing',
+    icon: CreditCard,
   },
   {
     title: 'Wrapped',

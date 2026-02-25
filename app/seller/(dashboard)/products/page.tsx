@@ -3,7 +3,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -13,20 +16,36 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Plus, Sparkles, Package } from 'lucide-react';
 import { ItemsTable } from '@/components/seller/products/ItemsTable';
 import { AIGenerateForm } from '@/components/seller/products/AIGenerateForm';
+import { CreateProductForm } from '@/components/seller/products/CreateProductForm';
 import type { Id } from '@/convex/_generated/dataModel';
 
 export default function SellerProductsPage() {
   const router = useRouter();
   const [showAIDialog, setShowAIDialog] = useState(false);
+  const [showCreateSheet, setShowCreateSheet] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'create'>('all');
+
+  const stats = useQuery(api.sellers.queries.getSellerDashboardStats);
+  const atLimit =
+    stats !== undefined &&
+    stats !== null &&
+    stats.productLimit !== null &&
+    stats.totalProducts >= stats.productLimit;
 
   const handleCreateSuccess = (itemId: Id<'items'>) => {
     setShowAIDialog(false);
+    setShowCreateSheet(false);
     setActiveTab('all');
-    // Optionally refresh or highlight new item
   };
 
   const handleEditItem = (itemId: Id<'items'>) => {
@@ -39,23 +58,48 @@ export default function SellerProductsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-serif font-semibold">Products</h1>
-          <p className="text-muted-foreground">
-            Manage your product catalog
-          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-muted-foreground">Manage your product catalog</p>
+            {stats && stats.productLimit !== null && (
+              <Badge variant={atLimit ? 'destructive' : 'secondary'}>
+                {stats.totalProducts} / {stats.productLimit} products
+              </Badge>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowAIDialog(true)}>
+          <Button
+            variant="outline"
+            onClick={() => setShowAIDialog(true)}
+            disabled={!!atLimit}
+            title={atLimit ? `Product limit reached (${stats?.productLimit}). Upgrade your plan to add more.` : undefined}
+          >
             <Sparkles className="mr-2 h-4 w-4" />
             AI Generate
           </Button>
-          <Link href="/seller/products/create">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Product
-            </Button>
-          </Link>
+          <Button
+            onClick={() => setShowCreateSheet(true)}
+            disabled={!!atLimit}
+            title={atLimit ? `Product limit reached (${stats?.productLimit}). Upgrade your plan to add more.` : undefined}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Product
+          </Button>
         </div>
       </div>
+
+      {/* Limit warning banner */}
+      {atLimit && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive flex items-center justify-between">
+          <span>
+            You&apos;ve reached your product limit ({stats?.productLimit} products).{' '}
+            <Link href="/seller/billing" className="underline font-medium">
+              Upgrade your plan
+            </Link>{' '}
+            to add more.
+          </span>
+        </div>
+      )}
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'all' | 'create')}>
@@ -87,8 +131,10 @@ export default function SellerProductsPage() {
         <TabsContent value="create" className="mt-6">
           <div className="grid gap-6 md:grid-cols-2">
             {/* Manual Create Card */}
-            <Card className="cursor-pointer hover:border-primary/50 transition-colors"
-                  onClick={() => router.push('/seller/products/create')}>
+            <Card
+              className={atLimit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-primary/50 transition-colors'}
+              onClick={atLimit ? undefined : () => setShowCreateSheet(true)}
+            >
               <CardHeader>
                 <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
                   <Plus className="h-6 w-6 text-primary" />
@@ -102,8 +148,10 @@ export default function SellerProductsPage() {
             </Card>
 
             {/* AI Generate Card */}
-            <Card className="cursor-pointer hover:border-primary/50 transition-colors"
-                  onClick={() => setShowAIDialog(true)}>
+            <Card
+              className={atLimit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-primary/50 transition-colors'}
+              onClick={atLimit ? undefined : () => setShowAIDialog(true)}
+            >
               <CardHeader>
                 <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
                   <Sparkles className="h-6 w-6 text-primary" />
@@ -137,6 +185,27 @@ export default function SellerProductsPage() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Create Product Sheet */}
+      <Sheet open={showCreateSheet} onOpenChange={setShowCreateSheet}>
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              Add Product
+            </SheetTitle>
+            <SheetDescription>
+              Fill in the details below to add a new product to your catalog.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6">
+            <CreateProductForm
+              onSuccess={handleCreateSuccess}
+              onCancel={() => setShowCreateSheet(false)}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

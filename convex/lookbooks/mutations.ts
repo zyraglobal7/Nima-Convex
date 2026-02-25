@@ -280,6 +280,16 @@ export const addToLookbook = mutation({
       });
     }
 
+    // Increment lookbookSaveCount on the item if saving an individual item
+    if (args.itemType === 'item' && args.itemId) {
+      const savedItem = await ctx.db.get(args.itemId);
+      if (savedItem) {
+        await ctx.db.patch(args.itemId, {
+          lookbookSaveCount: (savedItem.lookbookSaveCount ?? 0) + 1,
+        });
+      }
+    }
+
     return lookbookItemId;
   },
 });
@@ -570,6 +580,16 @@ export const quickSave = mutation({
         lookId: args.lookId,
         increment: 1,
       });
+    }
+
+    // Increment lookbookSaveCount on the item if saving an individual item
+    if (args.itemType === 'item' && args.itemId) {
+      const savedItem = await ctx.db.get(args.itemId);
+      if (savedItem) {
+        await ctx.db.patch(args.itemId, {
+          lookbookSaveCount: (savedItem.lookbookSaveCount ?? 0) + 1,
+        });
+      }
     }
 
     return {
