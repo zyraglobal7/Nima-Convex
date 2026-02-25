@@ -55,7 +55,9 @@ export default function RootLayout({
           <PostHogProvider>
             <ConvexClientProvider>
               <FloatingLoaderWrapper>{children}</FloatingLoaderWrapper>
+
               <Toaster position="top-center" richColors />
+
             </ConvexClientProvider>
           </PostHogProvider>
         </ThemeProvider>

@@ -57,6 +57,11 @@ export default defineSchema({
     freeCreditsUsedThisWeek: v.optional(v.number()), // 0-5, how many of the 5 free weekly credits used
     weeklyCreditsResetAt: v.optional(v.number()), // Timestamp when free credits were last reset
 
+    // Credits system
+    credits: v.optional(v.number()),
+    freeCreditsUsedThisWeek: v.optional(v.number()),
+    weeklyCreditsResetAt: v.optional(v.number()),
+
     // Status
     onboardingCompleted: v.boolean(),
     isActive: v.boolean(),

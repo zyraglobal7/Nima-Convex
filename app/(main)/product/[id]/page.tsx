@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -44,6 +44,8 @@ export default function ProductDetailPage() {
   // Variant selection state
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [highlightVariants, setHighlightVariants] = useState<'color' | 'size' | null>(null);
+  const variantSectionRef = useRef<HTMLDivElement>(null);
 
   // Queries
   const itemData = useQuery(api.items.queries.getItemWithImage, { itemId });
@@ -136,11 +138,17 @@ export default function ProductDetailPage() {
 
     if (item.colors.length > 0 && !selectedColor) {
       toast.error('Please select a color first');
+      setHighlightVariants('color');
+      variantSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => setHighlightVariants(null), 2000);
       return;
     }
 
     if (item.sizes.length > 0 && !selectedSize) {
       toast.error('Please select a size first');
+      setHighlightVariants('size');
+      variantSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => setHighlightVariants(null), 2000);
       return;
     }
 
@@ -343,57 +351,74 @@ export default function ProductDetailPage() {
           {/* Description */}
           {item.description && <p className="text-muted-foreground leading-relaxed">{item.description}</p>}
 
-          {/* Colors */}
-          {item.colors.length > 0 && (
-            <div>
-              <h3 className="text-sm font-medium text-foreground mb-2">Colors</h3>
-              <div className="flex flex-wrap gap-2">
-                {item.colors.map((color, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setSelectedColor(color)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${
-                      selectedColor === color
-                        ? 'bg-primary/10 border-primary ring-1 ring-primary'
-                        : 'bg-surface border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <div
-                      className="w-4 h-4 rounded-full border border-border"
-                      style={{ backgroundColor: color.toLowerCase() }}
-                    />
-                    <span
-                      className={`text-sm ${selectedColor === color ? 'font-medium text-primary' : 'text-foreground'}`}
+          {/* Colors & Sizes */}
+          <div ref={variantSectionRef}>
+            {item.colors.length > 0 && (
+              <div className={`rounded-xl p-3 -mx-3 transition-all duration-500 ${
+                highlightVariants === 'color' ? 'bg-primary/10 ring-2 ring-primary/50' : ''
+              }`}>
+                <h3 className={`text-sm font-medium mb-2 transition-colors duration-300 ${
+                  highlightVariants === 'color' ? 'text-primary' : 'text-foreground'
+                }`}>
+                  Color {highlightVariants === 'color' && <span className="text-primary text-xs ml-1">(required)</span>}
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {item.colors.map((color, index) => (
+                    <button
+                      key={index}
+                      onClick={() => { setSelectedColor(color); setHighlightVariants(null); }}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${
+                        selectedColor === color
+                          ? 'bg-primary/10 border-primary ring-1 ring-primary'
+                          : highlightVariants === 'color'
+                            ? 'bg-surface border-primary/50 animate-pulse'
+                            : 'bg-surface border-border hover:border-primary/50'
+                      }`}
                     >
-                      {color}
-                    </span>
-                  </button>
-                ))}
+                      <div
+                        className="w-4 h-4 rounded-full border border-border"
+                        style={{ backgroundColor: color.toLowerCase() }}
+                      />
+                      <span
+                        className={`text-sm ${selectedColor === color ? 'font-medium text-primary' : 'text-foreground'}`}
+                      >
+                        {color}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Sizes */}
-          {item.sizes.length > 0 && (
-            <div>
-              <h3 className="text-sm font-medium text-foreground mb-2">Sizes</h3>
-              <div className="flex flex-wrap gap-2">
-                {item.sizes.map((size, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setSelectedSize(size)}
-                    className={`px-4 py-2 rounded-lg border text-sm transition-all ${
-                      selectedSize === size
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-surface border-border text-foreground hover:border-primary/50'
-                    }`}
-                  >
-                    {size}
-                  </button>
-                ))}
+            {item.sizes.length > 0 && (
+              <div className={`rounded-xl p-3 -mx-3 mt-2 transition-all duration-500 ${
+                highlightVariants === 'size' ? 'bg-primary/10 ring-2 ring-primary/50' : ''
+              }`}>
+                <h3 className={`text-sm font-medium mb-2 transition-colors duration-300 ${
+                  highlightVariants === 'size' ? 'text-primary' : 'text-foreground'
+                }`}>
+                  Size {highlightVariants === 'size' && <span className="text-primary text-xs ml-1">(required)</span>}
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {item.sizes.map((size, index) => (
+                    <button
+                      key={index}
+                      onClick={() => { setSelectedSize(size); setHighlightVariants(null); }}
+                      className={`px-4 py-2 rounded-lg border text-sm transition-all ${
+                        selectedSize === size
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : highlightVariants === 'size'
+                            ? 'bg-surface border-primary/50 animate-pulse'
+                            : 'bg-surface border-border text-foreground hover:border-primary/50'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Category & Tags */}
           <div className="flex flex-wrap gap-2">
