@@ -51,6 +51,12 @@ interface SellerContext {
     totalBuyers: number;
     repeatBuyers: number;
     repeatBuyerRate: number;
+    demographics: {
+      gender: { male: number; female: number; preferNotToSay: number; unknown: number };
+      ageBuckets: Array<{ label: string; count: number; pct: number }>;
+      budgetBreakdown: { low: number; mid: number; premium: number; unknown: number };
+      topStyles: Array<{ style: string; pct: number }>;
+    };
   };
   platformAggregates: {
     categoryTrends: Array<{
@@ -178,6 +184,37 @@ ${engagement.topBySaves.map((p) => `  ${p.name}: ${p.saveCount} saves`).join('\n
 ### Customer Insights
 - Total unique buyers: ${customerInsights.totalBuyers}
 - Repeat buyers: ${customerInsights.repeatBuyers} (${customerInsights.repeatBuyerRate}% repeat rate)
+
+### Customer Demographics (aggregated — no individual PII)
+${(() => {
+  const d = customerInsights.demographics;
+  if (customerInsights.totalBuyers === 0) return '  No buyer data yet';
+
+  const genderLines = [
+    d.gender.female  > 0 ? `  Women: ${Math.round((d.gender.female  / customerInsights.totalBuyers) * 100)}% (${d.gender.female})` : '',
+    d.gender.male    > 0 ? `  Men: ${Math.round((d.gender.male    / customerInsights.totalBuyers) * 100)}% (${d.gender.male})` : '',
+    d.gender.preferNotToSay > 0 ? `  Prefer not to say: ${Math.round((d.gender.preferNotToSay / customerInsights.totalBuyers) * 100)}% (${d.gender.preferNotToSay})` : '',
+  ].filter(Boolean).join('\n');
+
+  const ageLines = d.ageBuckets.length > 0
+    ? d.ageBuckets.map((b) => `  ${b.label}: ${b.pct}% (${b.count})`).join('\n')
+    : '  Age data not available';
+
+  const known = d.budgetBreakdown.low + d.budgetBreakdown.mid + d.budgetBreakdown.premium;
+  const budgetLines = known > 0
+    ? [
+        d.budgetBreakdown.low     > 0 ? `  Budget: ${Math.round((d.budgetBreakdown.low     / known) * 100)}%` : '',
+        d.budgetBreakdown.mid     > 0 ? `  Mid-range: ${Math.round((d.budgetBreakdown.mid     / known) * 100)}%` : '',
+        d.budgetBreakdown.premium > 0 ? `  Premium: ${Math.round((d.budgetBreakdown.premium / known) * 100)}%` : '',
+      ].filter(Boolean).join('\n')
+    : '  Budget data not available';
+
+  const styleLines = d.topStyles.length > 0
+    ? d.topStyles.map((s) => `  ${s.style}: ${s.pct}% of buyers`).join('\n')
+    : '  Style data not available';
+
+  return `Gender breakdown:\n${genderLines}\n\nAge distribution:\n${ageLines}\n\nSpending power:\n${budgetLines}\n\nTop style preferences:\n${styleLines}`;
+})()}
 
 ### All Active Products
 ${productList || '  No active products'}

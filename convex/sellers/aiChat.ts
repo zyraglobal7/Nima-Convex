@@ -138,6 +138,65 @@ export const buildSellerContext = internalQuery({
     const repeatBuyers = Object.values(buyerOrderCounts).filter((c) => c > 1).length;
     const repeatBuyerRate = totalBuyers > 0 ? Math.round((repeatBuyers / totalBuyers) * 100) : 0;
 
+    // ── Customer Demographics ─────────────────────────────────────────────────
+    // Aggregate gender, age buckets, budget range, and top style preferences
+    // across all unique buyers — no individual PII, only anonymised counts/pcts.
+    const gender = { male: 0, female: 0, preferNotToSay: 0, unknown: 0 };
+    const AGE_BUCKETS = [
+      { label: 'Under 18', min: 0,  max: 17 },
+      { label: '18-24',    min: 18, max: 24 },
+      { label: '25-34',    min: 25, max: 34 },
+      { label: '35-44',    min: 35, max: 44 },
+      { label: '45-54',    min: 45, max: 54 },
+      { label: '55+',      min: 55, max: Infinity },
+    ];
+    const ageCounts: number[] = Array(AGE_BUCKETS.length).fill(0);
+    let ageKnown = 0;
+    const budgetBreakdown = { low: 0, mid: 0, premium: 0, unknown: 0 };
+    const styleCounts: Record<string, number> = {};
+
+    for (const uid of buyerUserIds) {
+      const u = await ctx.db.get(uid as unknown as Id<'users'>);
+      if (!u) continue;
+      // Gender
+      if (u.gender === 'male') gender.male++;
+      else if (u.gender === 'female') gender.female++;
+      else if (u.gender === 'prefer-not-to-say') gender.preferNotToSay++;
+      else gender.unknown++;
+      // Age
+      const parsed = u.age ? parseInt(u.age, 10) : NaN;
+      if (!isNaN(parsed)) {
+        ageKnown++;
+        const idx = AGE_BUCKETS.findIndex((b) => parsed >= b.min && parsed <= b.max);
+        if (idx !== -1) ageCounts[idx]++;
+      }
+      // Budget
+      if (u.budgetRange === 'low') budgetBreakdown.low++;
+      else if (u.budgetRange === 'mid') budgetBreakdown.mid++;
+      else if (u.budgetRange === 'premium') budgetBreakdown.premium++;
+      else budgetBreakdown.unknown++;
+      // Styles
+      for (const style of u.stylePreferences ?? []) {
+        styleCounts[style] = (styleCounts[style] ?? 0) + 1;
+      }
+    }
+
+    const ageBuckets = AGE_BUCKETS
+      .map((b, i) => ({
+        label: b.label,
+        count: ageCounts[i],
+        pct: ageKnown > 0 ? Math.round((ageCounts[i] / ageKnown) * 100) : 0,
+      }))
+      .filter((b) => b.count > 0);
+
+    const topStyles = Object.entries(styleCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([style, count]) => ({
+        style,
+        pct: totalBuyers > 0 ? Math.round((count / totalBuyers) * 100) : 0,
+      }));
+
     return {
       shopInfo,
       products,
@@ -158,6 +217,12 @@ export const buildSellerContext = internalQuery({
         totalBuyers,
         repeatBuyers,
         repeatBuyerRate,
+        demographics: {
+          gender,
+          ageBuckets,
+          budgetBreakdown,
+          topStyles,
+        },
       },
     };
   },
