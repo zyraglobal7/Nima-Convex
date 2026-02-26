@@ -178,9 +178,9 @@ function SubPageNav({ tier }: { tier: SellerTier }) {
       href: '/seller/analytics/customers',
       icon: Users,
       label: 'Customers',
-      description: 'Buyer patterns & loyalty',
-      unlocked: isPremium,
-      required: 'Premium',
+      description: 'Demographics, buyer patterns & loyalty',
+      unlocked: isStarter,
+      required: 'Starter',
     },
   ];
 
