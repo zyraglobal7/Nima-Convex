@@ -81,6 +81,7 @@ const TIERS: TierDefinition[] = [
       { label: 'Category-based spotlighting (e.g. "Summer Tops")', included: true },
       { label: 'Access to NIMA community lookbooks', included: true },
       { label: 'Basic trend insights (top styles, seasons)', included: true },
+      { label: 'Customer demographics — gender, age, budget & style breakdown', included: true },
       { label: 'Advanced analytics & conversion insights', included: false },
       { label: 'Try-on → click-out performance dashboards', included: false },
       { label: 'Dedicated account manager', included: false },

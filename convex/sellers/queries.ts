@@ -2057,3 +2057,149 @@ export const getProductEngagementBreakdown = query({
     return { tier, products: sorted };
   },
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Customer Demographics  (Starter+)
+// Aggregates gender, age buckets, budgetRange, and style preferences
+// across all unique buyers who have purchased from this seller.
+// ─────────────────────────────────────────────────────────────────────────────
+export const getSellerDemographics = query({
+  args: {},
+  returns: v.union(
+    v.object({
+      totalBuyers: v.number(),
+      gender: v.object({
+        male: v.number(),
+        female: v.number(),
+        preferNotToSay: v.number(),
+        unknown: v.number(),
+      }),
+      ageBuckets: v.array(v.object({
+        label: v.string(),
+        count: v.number(),
+        pct: v.number(),
+      })),
+      budgetBreakdown: v.object({
+        low: v.number(),
+        mid: v.number(),
+        premium: v.number(),
+        unknown: v.number(),
+      }),
+      topStyles: v.array(v.object({
+        style: v.string(),
+        count: v.number(),
+        pct: v.number(),
+      })),
+    }),
+    v.null()
+  ),
+  handler: async (ctx: QueryCtx): Promise<{
+    totalBuyers: number;
+    gender: { male: number; female: number; preferNotToSay: number; unknown: number };
+    ageBuckets: Array<{ label: string; count: number; pct: number }>;
+    budgetBreakdown: { low: number; mid: number; premium: number; unknown: number };
+    topStyles: Array<{ style: string; count: number; pct: number }>;
+  } | null> => {
+    const seller = await getSellerWithTier(ctx);
+    if (!seller) return null;
+
+    const tier = seller.effectiveTier;
+    const allowed: SellerTier[] = ['starter', 'growth', 'premium'];
+    if (!allowed.includes(tier)) return null;
+
+    // 1. Get all non-cancelled order items for this seller
+    const orderItems = await ctx.db
+      .query('order_items')
+      .withIndex('by_seller', (q) => q.eq('sellerId', seller._id))
+      .collect();
+
+    const nonCancelled = orderItems.filter((oi) => oi.fulfillmentStatus !== 'cancelled');
+    if (nonCancelled.length === 0) {
+      return {
+        totalBuyers: 0,
+        gender: { male: 0, female: 0, preferNotToSay: 0, unknown: 0 },
+        ageBuckets: [],
+        budgetBreakdown: { low: 0, mid: 0, premium: 0, unknown: 0 },
+        topStyles: [],
+      };
+    }
+
+    // 2. Resolve unique buyer userIds via orders table
+    const uniqueOrderIds = [...new Set(nonCancelled.map((oi) => oi.orderId))];
+    const buyerIdSet = new Set<Id<'users'>>();
+    for (const orderId of uniqueOrderIds) {
+      const order = await ctx.db.get(orderId);
+      if (order) buyerIdSet.add(order.userId);
+    }
+
+    // 3. Fetch user records for each buyer
+    const users: Array<Doc<'users'>> = [];
+    for (const uid of buyerIdSet) {
+      const u = await ctx.db.get(uid);
+      if (u) users.push(u);
+    }
+    const totalBuyers = users.length;
+
+    // 4. Gender breakdown
+    const gender = { male: 0, female: 0, preferNotToSay: 0, unknown: 0 };
+    for (const u of users) {
+      if (u.gender === 'male') gender.male++;
+      else if (u.gender === 'female') gender.female++;
+      else if (u.gender === 'prefer-not-to-say') gender.preferNotToSay++;
+      else gender.unknown++;
+    }
+
+    // 5. Age buckets — age stored as exact string e.g. "24"
+    const AGE_BUCKETS = [
+      { label: 'Under 18', min: 0,  max: 17 },
+      { label: '18 – 24',  min: 18, max: 24 },
+      { label: '25 – 34',  min: 25, max: 34 },
+      { label: '35 – 44',  min: 35, max: 44 },
+      { label: '45 – 54',  min: 45, max: 54 },
+      { label: '55+',      min: 55, max: Infinity },
+    ];
+    const ageCounts: number[] = Array(AGE_BUCKETS.length).fill(0);
+    let ageKnown = 0;
+    for (const u of users) {
+      const parsed = u.age ? parseInt(u.age, 10) : NaN;
+      if (!isNaN(parsed)) {
+        ageKnown++;
+        const idx = AGE_BUCKETS.findIndex((b) => parsed >= b.min && parsed <= b.max);
+        if (idx !== -1) ageCounts[idx]++;
+      }
+    }
+    const ageBuckets = AGE_BUCKETS.map((b, i) => ({
+      label: b.label,
+      count: ageCounts[i],
+      pct: ageKnown > 0 ? Math.round((ageCounts[i] / ageKnown) * 100) : 0,
+    })).filter((b) => b.count > 0);
+
+    // 6. Budget breakdown
+    const budgetBreakdown = { low: 0, mid: 0, premium: 0, unknown: 0 };
+    for (const u of users) {
+      if (u.budgetRange === 'low') budgetBreakdown.low++;
+      else if (u.budgetRange === 'mid') budgetBreakdown.mid++;
+      else if (u.budgetRange === 'premium') budgetBreakdown.premium++;
+      else budgetBreakdown.unknown++;
+    }
+
+    // 7. Style preferences — count how many buyers have each style (not total votes)
+    // pct = "X% of your buyers prefer this style"
+    const styleCounts: Record<string, number> = {};
+    for (const u of users) {
+      for (const style of u.stylePreferences ?? []) {
+        styleCounts[style] = (styleCounts[style] ?? 0) + 1;
+      }
+    }
+    const topStyles = Object.entries(styleCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([style, count]) => ({
+        style,
+        count,
+        pct: totalBuyers > 0 ? Math.round((count / totalBuyers) * 100) : 0,
+      }));
+
+    return { totalBuyers, gender, ageBuckets, budgetBreakdown, topStyles };
+  },
+});
