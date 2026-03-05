@@ -1,8 +1,110 @@
 import { httpRouter } from 'convex/server';
 import { httpAction } from './_generated/server';
 import { internal } from './_generated/api';
+import type { Id } from './_generated/dataModel';
 
 const http = httpRouter();
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.shopnima.ai';
+
+// ─── Connect CORS helper ────────────────────────────────────────────────────
+
+/**
+ * Add CORS headers for Connect API responses.
+ * Allows any origin when key validates (server-side calls have no Origin header).
+ * For browser calls, validates against partner's allowedDomains.
+ */
+function addConnectCorsHeaders(
+  response: Response,
+  origin: string | null,
+  allowedDomains: string[],
+): Response {
+  const headers = new Headers(response.headers);
+  const allowed =
+    !origin || // server-to-server: no origin header
+    allowedDomains.length === 0 ||
+    allowedDomains.some((d) => origin === d || origin.endsWith(`.${d}`));
+
+  if (allowed) {
+    headers.set('Access-Control-Allow-Origin', origin ?? '*');
+  }
+  headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  headers.set('Access-Control-Max-Age', '86400');
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+/** SHA-256 via Web Crypto (available in Convex without 'use node') */
+async function sha256Hex(input: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/** Generate a random hex token of given byte length */
+function randomHex(bytes: number): string {
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+type ConnectPartner = {
+  _id: Id<'api_partners'>;
+  name: string;
+  slug: string;
+  apiKeyHash: string;
+  apiKeyPrefix: string;
+  allowedDomains: string[];
+  plan: string;
+  monthlyTryOnLimit: number;
+  tryOnsUsedThisMonth: number;
+  billingResetAt: number;
+  isActive: boolean;
+};
+
+type ConnectAuthResult =
+  | { partner: ConnectPartner }
+  | { error: string; status: number };
+
+/**
+ * Validate an API key from the Authorization header.
+ * Returns partner data or an error.
+ */
+async function validateConnectApiKey(
+  ctx: Parameters<Parameters<typeof httpAction>[0]>[0],
+  request: Request,
+): Promise<ConnectAuthResult> {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer nima_pk_')) {
+    return { error: 'Missing or invalid Authorization header', status: 401 };
+  }
+
+  const fullKey = authHeader.slice('Bearer '.length);
+  // prefix is the first 16 chars of the random part (after "nima_pk_")
+  const randomPart = fullKey.slice('nima_pk_'.length);
+  const prefix = randomPart.slice(0, 16);
+
+  const partner = await ctx.runQuery(internal.connect.queries.validateApiKey, { prefix });
+  if (!partner) {
+    return { error: 'Invalid or inactive API key', status: 401 };
+  }
+
+  // Verify hash
+  const keyHash = await sha256Hex(fullKey);
+  if (keyHash !== partner.apiKeyHash) {
+    return { error: 'Invalid API key', status: 401 };
+  }
+
+  return { partner };
+}
 
 // Allowed origins for CORS
 const ALLOWED_ORIGINS = [
@@ -370,6 +472,307 @@ http.route({
   handler: httpAction(async (_, request) => {
     const origin = request.headers.get('Origin');
     return addCorsHeaders(new Response(null, { status: 204 }), origin);
+  }),
+});
+
+// ============================================
+// NIMA CONNECT REST API
+// ============================================
+
+/**
+ * POST /api/v1/sessions
+ * Create a new try-on session for a product
+ */
+http.route({
+  path: '/api/v1/sessions',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get('Origin');
+    const auth = await validateConnectApiKey(ctx, request);
+    if ('error' in auth) {
+      return new Response(JSON.stringify({ error: auth.error }), {
+        status: auth.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const { partner } = auth;
+
+    let body: {
+      productImageUrl?: string;
+      externalProductId?: string;
+      productName?: string;
+      productCategory?: string;
+      guestFingerprint?: string;
+      externalProductUrl?: string;
+    };
+    try {
+      body = await request.json();
+    } catch {
+      return addConnectCorsHeaders(
+        new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
+        origin, partner.allowedDomains,
+      );
+    }
+
+    if (!body.productImageUrl || !body.externalProductId) {
+      return addConnectCorsHeaders(
+        new Response(JSON.stringify({ error: 'productImageUrl and externalProductId are required' }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
+        origin, partner.allowedDomains,
+      );
+    }
+
+    const sessionToken = `sess_${randomHex(16)}`;
+    const sessionId = await ctx.runMutation(internal.connect.mutations.createSession, {
+      partnerId: partner._id,
+      sessionToken,
+      externalProductId: body.externalProductId,
+      externalProductUrl: body.externalProductUrl,
+      productImageUrl: body.productImageUrl,
+      productName: body.productName,
+      productCategory: body.productCategory as 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | undefined,
+      guestFingerprint: body.guestFingerprint,
+    });
+
+    // Log session_created event
+    await ctx.runMutation(internal.connect.mutations.logUsageEvent, {
+      partnerId: partner._id,
+      sessionId,
+      eventType: 'session_created',
+      externalProductId: body.externalProductId,
+      wasAuthenticated: false,
+    });
+
+    return addConnectCorsHeaders(
+      new Response(
+        JSON.stringify({
+          sessionToken,
+          widgetUrl: `${SITE_URL}/connect?session=${sessionToken}`,
+          status: 'photo_needed',
+        }),
+        { status: 201, headers: { 'Content-Type': 'application/json' } }
+      ),
+      origin, partner.allowedDomains,
+    );
+  }),
+});
+
+http.route({
+  path: '/api/v1/sessions',
+  method: 'OPTIONS',
+  handler: httpAction(async (_, request) => {
+    const origin = request.headers.get('Origin');
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': origin ?? '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400',
+      },
+    });
+  }),
+});
+
+/**
+ * GET /api/v1/sessions/:token
+ * Get session status + result
+ */
+http.route({
+  pathPrefix: '/api/v1/sessions/',
+  method: 'GET',
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get('Origin');
+    const auth = await validateConnectApiKey(ctx, request);
+    if ('error' in auth) {
+      return new Response(JSON.stringify({ error: auth.error }), {
+        status: auth.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const { partner } = auth;
+
+    const url = new URL(request.url);
+    const parts = url.pathname.split('/');
+    const token = parts[parts.length - 1];
+
+    const session = await ctx.runQuery(internal.connect.queries.getSessionByToken, { sessionToken: token });
+    if (!session) {
+      return addConnectCorsHeaders(
+        new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } }),
+        origin, partner.allowedDomains,
+      );
+    }
+
+    let resultImageUrl: string | null = null;
+    if (session.resultStorageId) {
+      resultImageUrl = await ctx.storage.getUrl(session.resultStorageId);
+    }
+
+    return addConnectCorsHeaders(
+      new Response(
+        JSON.stringify({
+          sessionToken: session.sessionToken,
+          status: session.status,
+          productName: session.productName,
+          productImageUrl: session.productImageUrl,
+          resultImageUrl,
+          guestTryOnUsed: session.guestTryOnUsed,
+          errorMessage: session.errorMessage,
+          expiresAt: session.expiresAt,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      ),
+      origin, partner.allowedDomains,
+    );
+  }),
+});
+
+/**
+ * POST /api/v1/sessions/:token/generate
+ * Trigger try-on generation
+ */
+http.route({
+  pathPrefix: '/api/v1/sessions/',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get('Origin');
+    const auth = await validateConnectApiKey(ctx, request);
+    if ('error' in auth) {
+      return new Response(JSON.stringify({ error: auth.error }), {
+        status: auth.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const { partner } = auth;
+
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split('/');
+    // /api/v1/sessions/:token/generate  → pathParts = ['','api','v1','sessions',token,'generate']
+    const subAction = pathParts[pathParts.length - 1];
+    const token = pathParts[pathParts.length - 2];
+
+    if (subAction !== 'generate') {
+      return addConnectCorsHeaders(
+        new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } }),
+        origin, partner.allowedDomains,
+      );
+    }
+
+    const session = await ctx.runQuery(internal.connect.queries.getSessionByToken, { sessionToken: token });
+    if (!session) {
+      return addConnectCorsHeaders(
+        new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } }),
+        origin, partner.allowedDomains,
+      );
+    }
+
+    if (Date.now() > session.expiresAt) {
+      await ctx.runMutation(internal.connect.mutations.updateSessionStatus, {
+        sessionToken: token,
+        status: 'expired',
+      });
+      return addConnectCorsHeaders(
+        new Response(JSON.stringify({ error: 'Session expired' }), { status: 410, headers: { 'Content-Type': 'application/json' } }),
+        origin, partner.allowedDomains,
+      );
+    }
+
+    // Check rate limit
+    const now = Date.now();
+    let used = partner.tryOnsUsedThisMonth;
+    if (now > partner.billingResetAt) used = 0;
+    if (used >= partner.monthlyTryOnLimit) {
+      return addConnectCorsHeaders(
+        new Response(JSON.stringify({ error: 'Monthly try-on limit exceeded' }), { status: 429, headers: { 'Content-Type': 'application/json' } }),
+        origin, partner.allowedDomains,
+      );
+    }
+
+    // Schedule generation (fire-and-forget)
+    await ctx.scheduler.runAfter(0, internal.connect.actions.generateConnectTryOn, {
+      sessionToken: token,
+    });
+
+    return addConnectCorsHeaders(
+      new Response(
+        JSON.stringify({ status: 'processing', estimatedTimeMs: 30000 }),
+        { status: 202, headers: { 'Content-Type': 'application/json' } }
+      ),
+      origin, partner.allowedDomains,
+    );
+  }),
+});
+
+/**
+ * OPTIONS /api/v1/sessions/* (CORS preflight)
+ */
+http.route({
+  pathPrefix: '/api/v1/sessions/',
+  method: 'OPTIONS',
+  handler: httpAction(async (_, request) => {
+    const origin = request.headers.get('Origin');
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': origin ?? '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400',
+      },
+    });
+  }),
+});
+
+/**
+ * GET /api/v1/usage
+ * Get partner usage stats
+ */
+http.route({
+  path: '/api/v1/usage',
+  method: 'GET',
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get('Origin');
+    const auth = await validateConnectApiKey(ctx, request);
+    if ('error' in auth) {
+      return new Response(JSON.stringify({ error: auth.error }), {
+        status: auth.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const { partner } = auth;
+
+    const now = Date.now();
+    const used = now > partner.billingResetAt ? 0 : partner.tryOnsUsedThisMonth;
+
+    return addConnectCorsHeaders(
+      new Response(
+        JSON.stringify({
+          plan: partner.plan,
+          used,
+          limit: partner.monthlyTryOnLimit,
+          resetAt: partner.billingResetAt,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      ),
+      origin, partner.allowedDomains,
+    );
+  }),
+});
+
+http.route({
+  path: '/api/v1/usage',
+  method: 'OPTIONS',
+  handler: httpAction(async (_, request) => {
+    const origin = request.headers.get('Origin');
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': origin ?? '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400',
+      },
+    });
   }),
 });
 

@@ -31,6 +31,9 @@ export default authkitMiddleware({
       '/privacyPolicy',
       // Health check (if exposed)
       '/api/health',
+      // Nima Connect widget (unauthenticated popup)
+      '/connect',
+      '/connect/(.*)',
     ],
   },
 });
