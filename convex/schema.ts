@@ -1088,4 +1088,105 @@ export default defineSchema({
     .index('by_seller', ['sellerId'])
     .index('by_seller_and_created', ['sellerId', 'createdAt']),
 
+  // ============================================
+  // NIMA CONNECT (Third-Party API)
+  // ============================================
+
+  /**
+   * api_partners - External merchants using Nima Connect API
+   * Each partner has an API key (hashed) and usage limits based on plan
+   */
+  api_partners: defineTable({
+    name: v.string(),
+    slug: v.string(),
+    websiteUrl: v.string(),
+    apiKeyHash: v.string(),       // SHA-256 of full key
+    apiKeyPrefix: v.string(),     // first 16 chars of key (after "nima_pk_") for O(1) lookup
+    allowedDomains: v.array(v.string()),
+    webhookUrl: v.optional(v.string()),
+    webhookSecret: v.optional(v.string()),
+    plan: v.union(
+      v.literal('free'),
+      v.literal('starter'),
+      v.literal('growth'),
+      v.literal('enterprise'),
+    ),
+    monthlyTryOnLimit: v.number(),   // free=50, starter=500, growth=5000, enterprise=999999
+    tryOnsUsedThisMonth: v.number(),
+    billingResetAt: v.number(),
+    isActive: v.boolean(),
+    sellerId: v.optional(v.id('sellers')), // link to seller if they're also a Nima seller
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_api_key_prefix', ['apiKeyPrefix'])
+    .index('by_slug', ['slug'])
+    .index('by_seller', ['sellerId']),
+
+  /**
+   * api_sessions - Try-on sessions created by API partners
+   * Each session represents one try-on request for an external product
+   */
+  api_sessions: defineTable({
+    partnerId: v.id('api_partners'),
+    sessionToken: v.string(),
+    nimaUserId: v.optional(v.id('users')),
+    guestFingerprint: v.optional(v.string()),
+    externalProductId: v.string(),
+    externalProductUrl: v.optional(v.string()),
+    productImageUrl: v.string(),
+    productName: v.optional(v.string()),
+    productCategory: v.optional(
+      v.union(
+        v.literal('top'),
+        v.literal('bottom'),
+        v.literal('dress'),
+        v.literal('outfit'),
+        v.literal('outerwear'),
+      )
+    ),
+    guestImageStorageId: v.optional(v.id('_storage')),
+    resultStorageId: v.optional(v.id('_storage')),
+    guestTryOnUsed: v.boolean(),
+    status: v.union(
+      v.literal('created'),
+      v.literal('photo_needed'),
+      v.literal('photo_uploaded'),
+      v.literal('processing'),
+      v.literal('completed'),
+      v.literal('failed'),
+      v.literal('expired'),
+    ),
+    errorMessage: v.optional(v.string()),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_session_token', ['sessionToken'])
+    .index('by_partner', ['partnerId'])
+    .index('by_nima_user', ['nimaUserId'])
+    .index('by_expires_at', ['expiresAt']),
+
+  /**
+   * api_usage_logs - Audit log of events per session
+   */
+  api_usage_logs: defineTable({
+    partnerId: v.id('api_partners'),
+    sessionId: v.id('api_sessions'),
+    eventType: v.union(
+      v.literal('session_created'),
+      v.literal('photo_uploaded'),
+      v.literal('tryon_generated'),
+      v.literal('tryon_failed'),
+      v.literal('user_converted'),
+    ),
+    externalProductId: v.optional(v.string()),
+    wasAuthenticated: v.boolean(),
+    generationTimeMs: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index('by_partner', ['partnerId'])
+    .index('by_partner_and_created', ['partnerId', 'createdAt'])
+    .index('by_event_type', ['eventType']),
+
 });

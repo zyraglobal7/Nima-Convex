@@ -13,6 +13,7 @@ import {
   BarChart3,
   Store,
   CreditCard,
+  Plug,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -73,6 +74,11 @@ const navItems = [
     icon: CreditCard,
   },
   {
+    title: 'Nima Connect',
+    href: '/admin/connect',
+    icon: Plug,
+  },
+  {
     title: 'Wrapped',
     href: '/admin/wrapped',
     icon: Gift,
@@ -83,7 +89,7 @@ export function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <Sidebar collapsible="icon" variant="sidebar">
+    <Sidebar collapsible="icon" variant="sidebar" >
       <SidebarHeader className="border-b border-sidebar-border">
         <SidebarMenu>
           <SidebarMenuItem>
