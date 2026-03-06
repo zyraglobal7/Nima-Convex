@@ -521,6 +521,17 @@ http.route({
       );
     }
 
+    // Normalize common plural/alias variants so integrators don't break on minor mismatches
+    const CATEGORY_MAP: Record<string, 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear'> = {
+      top: 'top', tops: 'top', shirt: 'top', blouse: 'top',
+      bottom: 'bottom', bottoms: 'bottom', pants: 'bottom', trousers: 'bottom', skirt: 'bottom',
+      dress: 'dress', dresses: 'dress',
+      outfit: 'outfit', outfits: 'outfit', set: 'outfit',
+      outerwear: 'outerwear', jacket: 'outerwear', coat: 'outerwear', vest: 'outerwear',
+    };
+    const rawCategory = (body.productCategory ?? '').toLowerCase().trim();
+    const normalizedCategory = CATEGORY_MAP[rawCategory] ?? undefined;
+
     const sessionToken = `sess_${randomHex(16)}`;
     const sessionId = await ctx.runMutation(internal.connect.mutations.createSession, {
       partnerId: partner._id,
@@ -529,7 +540,7 @@ http.route({
       externalProductUrl: body.externalProductUrl,
       productImageUrl: body.productImageUrl,
       productName: body.productName,
-      productCategory: body.productCategory as 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | undefined,
+      productCategory: normalizedCategory,
       guestFingerprint: body.guestFingerprint,
     });
 
@@ -628,78 +639,84 @@ http.route({
 });
 
 /**
- * POST /api/v1/sessions/:token/generate
- * Trigger try-on generation
+ * POST /api/v1/sessions/:token/photo/url   — get Convex upload URL (widget, no API key)
+ * POST /api/v1/sessions/:token/photo/save  — save uploaded storageId (widget, no API key)
+ * POST /api/v1/sessions/:token/generate    — trigger try-on (widget, no API key)
  */
 http.route({
   pathPrefix: '/api/v1/sessions/',
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
-    const origin = request.headers.get('Origin');
-    const auth = await validateConnectApiKey(ctx, request);
-    if ('error' in auth) {
-      return new Response(JSON.stringify({ error: auth.error }), {
-        status: auth.status,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-    const { partner } = auth;
-
     const url = new URL(request.url);
-    const pathParts = url.pathname.split('/');
-    // /api/v1/sessions/:token/generate  → pathParts = ['','api','v1','sessions',token,'generate']
-    const subAction = pathParts[pathParts.length - 1];
-    const token = pathParts[pathParts.length - 2];
+    const parts = url.pathname.split('/').filter(Boolean);
+    // parts: ['api','v1','sessions', TOKEN, ...subpath]
+    const sessIdx = parts.indexOf('sessions');
+    const sessionToken = parts[sessIdx + 1] ?? '';
+    const subPath = parts.slice(sessIdx + 2).join('/'); // 'generate' | 'photo/url' | 'photo/save'
 
-    if (subAction !== 'generate') {
-      return addConnectCorsHeaders(
-        new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } }),
-        origin, partner.allowedDomains,
-      );
+    const CORS_HEADERS = {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+
+    // ── photo/url: generate a Convex upload URL ──────────────────────────────
+    if (subPath === 'photo/url') {
+      const session = await ctx.runQuery(internal.connect.queries.getSessionByToken, { sessionToken });
+      if (!session) {
+        return new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: CORS_HEADERS });
+      }
+      const uploadUrl = await ctx.storage.generateUploadUrl();
+      return new Response(JSON.stringify({ uploadUrl }), { status: 200, headers: CORS_HEADERS });
     }
 
-    const session = await ctx.runQuery(internal.connect.queries.getSessionByToken, { sessionToken: token });
-    if (!session) {
-      return addConnectCorsHeaders(
-        new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } }),
-        origin, partner.allowedDomains,
-      );
-    }
-
-    if (Date.now() > session.expiresAt) {
-      await ctx.runMutation(internal.connect.mutations.updateSessionStatus, {
-        sessionToken: token,
-        status: 'expired',
+    // ── photo/save: link uploaded storage ID to session ──────────────────────
+    if (subPath === 'photo/save') {
+      let body: { storageId?: string } = {};
+      try { body = await request.json(); } catch { /* ignore */ }
+      if (!body.storageId) {
+        return new Response(JSON.stringify({ error: 'storageId required' }), { status: 400, headers: CORS_HEADERS });
+      }
+      const session = await ctx.runQuery(internal.connect.queries.getSessionByToken, { sessionToken });
+      if (!session) {
+        return new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: CORS_HEADERS });
+      }
+      await ctx.runMutation(internal.connect.mutations.saveGuestPhoto, {
+        sessionToken,
+        storageId: body.storageId as Id<'_storage'>,
       });
-      return addConnectCorsHeaders(
-        new Response(JSON.stringify({ error: 'Session expired' }), { status: 410, headers: { 'Content-Type': 'application/json' } }),
-        origin, partner.allowedDomains,
-      );
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: CORS_HEADERS });
     }
 
-    // Check rate limit
-    const now = Date.now();
-    let used = partner.tryOnsUsedThisMonth;
-    if (now > partner.billingResetAt) used = 0;
-    if (used >= partner.monthlyTryOnLimit) {
-      return addConnectCorsHeaders(
-        new Response(JSON.stringify({ error: 'Monthly try-on limit exceeded' }), { status: 429, headers: { 'Content-Type': 'application/json' } }),
-        origin, partner.allowedDomains,
-      );
-    }
-
-    // Schedule generation (fire-and-forget)
-    await ctx.scheduler.runAfter(0, internal.connect.actions.generateConnectTryOn, {
-      sessionToken: token,
-    });
-
-    return addConnectCorsHeaders(
-      new Response(
+    // ── generate: trigger try-on generation ─────────────────────────────────
+    if (subPath === 'generate') {
+      const session = await ctx.runQuery(internal.connect.queries.getSessionByToken, { sessionToken });
+      if (!session) {
+        return new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: CORS_HEADERS });
+      }
+      if (Date.now() > session.expiresAt) {
+        await ctx.runMutation(internal.connect.mutations.updateSessionStatus, { sessionToken, status: 'expired' });
+        return new Response(JSON.stringify({ error: 'Session expired' }), { status: 410, headers: CORS_HEADERS });
+      }
+      // Look up partner for rate limit check
+      const partner = await ctx.runQuery(internal.connect.queries.getPartnerById, { partnerId: session.partnerId });
+      if (!partner || !partner.isActive) {
+        return new Response(JSON.stringify({ error: 'Partner inactive' }), { status: 403, headers: CORS_HEADERS });
+      }
+      const now = Date.now();
+      const used = now > partner.billingResetAt ? 0 : partner.tryOnsUsedThisMonth;
+      if (used >= partner.monthlyTryOnLimit) {
+        return new Response(JSON.stringify({ error: 'Monthly try-on limit exceeded' }), { status: 429, headers: CORS_HEADERS });
+      }
+      await ctx.scheduler.runAfter(0, internal.connect.actions.generateConnectTryOn, { sessionToken });
+      return new Response(
         JSON.stringify({ status: 'processing', estimatedTimeMs: 30000 }),
-        { status: 202, headers: { 'Content-Type': 'application/json' } }
-      ),
-      origin, partner.allowedDomains,
-    );
+        { status: 202, headers: CORS_HEADERS }
+      );
+    }
+
+    return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: CORS_HEADERS });
   }),
 });
 

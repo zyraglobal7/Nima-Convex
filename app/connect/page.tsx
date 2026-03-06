@@ -4,7 +4,6 @@ import { useSearchParams } from 'next/navigation';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useState, useRef, useCallback, Suspense } from 'react';
-import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -78,7 +77,7 @@ function ProcessingView({ productImageUrl }: { productImageUrl: string }) {
           </div>
         </div>
         <div className="w-full h-40 rounded-lg overflow-hidden relative">
-          <Image src={productImageUrl} alt="Product" fill className="object-cover" />
+          <img src={productImageUrl} alt="Product" className="w-full h-full object-cover" />
         </div>
       </CardContent>
     </Card>
@@ -242,13 +241,13 @@ function ConnectWidgetInner() {
             <div>
               <p className="text-xs text-text-secondary mb-2">Try-on Result</p>
               <div className="w-full aspect-[4/5] relative rounded-lg overflow-hidden">
-                <Image src={resultImageUrl} alt="Try-on result" fill className="object-cover" />
+                <img src={resultImageUrl} alt="Try-on result" className="w-full h-full object-cover" />
               </div>
             </div>
             <div>
               <p className="text-xs text-text-secondary mb-2">Product</p>
               <div className="w-full aspect-[4/5] relative rounded-lg overflow-hidden">
-                <Image src={productImageUrl} alt={productName ?? 'Product'} fill className="object-cover" />
+                <img src={productImageUrl} alt={productName ?? 'Product'} className="w-full h-full object-cover" />
               </div>
               {productName && (
                 <p className="text-sm font-medium mt-2 truncate">{productName}</p>
@@ -325,7 +324,7 @@ function ConnectWidgetInner() {
               </p>
             </div>
             <div className="w-14 h-14 relative rounded-md overflow-hidden shrink-0">
-              <Image src={productImageUrl} alt={productName ?? 'Product'} fill className="object-cover" />
+              <img src={productImageUrl} alt={productName ?? 'Product'} className="w-full h-full object-cover" />
             </div>
           </div>
 
@@ -409,11 +408,10 @@ function ConnectWidgetInner() {
         <div className="grid grid-cols-2 gap-4">
           <TryOnPlaceholder />
           <div className="w-full aspect-[4/5] relative rounded-lg overflow-hidden bg-surface">
-            <Image
+            <img
               src={productImageUrl}
               alt={productName ?? 'Product'}
-              fill
-              className="object-cover"
+              className="w-full h-full object-cover"
             />
           </div>
         </div>
