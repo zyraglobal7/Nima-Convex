@@ -344,6 +344,54 @@ export const listPartnersInternal = internalQuery({
 });
 
 /**
+ * Get partner by ID (internal)
+ */
+export const getPartnerById = internalQuery({
+  args: { partnerId: v.id('api_partners') },
+  returns: v.union(
+    v.object({
+      _id: v.id('api_partners'),
+      isActive: v.boolean(),
+      plan: v.union(
+        v.literal('free'),
+        v.literal('starter'),
+        v.literal('growth'),
+        v.literal('enterprise'),
+      ),
+      monthlyTryOnLimit: v.number(),
+      tryOnsUsedThisMonth: v.number(),
+      billingResetAt: v.number(),
+      allowedDomains: v.array(v.string()),
+    }),
+    v.null()
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { partnerId: Id<'api_partners'> }
+  ): Promise<{
+    _id: Id<'api_partners'>;
+    isActive: boolean;
+    plan: 'free' | 'starter' | 'growth' | 'enterprise';
+    monthlyTryOnLimit: number;
+    tryOnsUsedThisMonth: number;
+    billingResetAt: number;
+    allowedDomains: string[];
+  } | null> => {
+    const partner = await ctx.db.get(args.partnerId);
+    if (!partner) return null;
+    return {
+      _id: partner._id,
+      isActive: partner.isActive,
+      plan: partner.plan,
+      monthlyTryOnLimit: partner.monthlyTryOnLimit,
+      tryOnsUsedThisMonth: partner.tryOnsUsedThisMonth,
+      billingResetAt: partner.billingResetAt,
+      allowedDomains: partner.allowedDomains,
+    };
+  },
+});
+
+/**
  * Get partner linked to a seller (internal)
  */
 export const getPartnerBySeller = internalQuery({

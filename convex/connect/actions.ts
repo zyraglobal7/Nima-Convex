@@ -135,43 +135,52 @@ export const generateConnectTryOn = internalAction({
       return { success: false as const, error: 'Session not found' };
     }
 
+    /** Fetch an image and return base64 + detected MIME type */
+    async function fetchImage(url: string): Promise<{ data: string; mimeType: string } | null> {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const contentType = res.headers.get('content-type') ?? '';
+        // Normalize to a Gemini-supported MIME type
+        let mimeType = 'image/jpeg';
+        if (contentType.includes('image/png')) mimeType = 'image/png';
+        else if (contentType.includes('image/webp')) mimeType = 'image/webp';
+        else if (contentType.includes('image/gif')) mimeType = 'image/gif';
+        else if (contentType.includes('image/heic') || contentType.includes('image/heif')) mimeType = 'image/jpeg'; // convert unsupported → jpeg label (Gemini doesn't support heic)
+        const buf = await res.arrayBuffer();
+        return { data: Buffer.from(buf).toString('base64'), mimeType };
+      } catch {
+        return null;
+      }
+    }
+
     try {
       // Get user photo: prefer linked Nima user's primary image, else guest upload
-      let userImageBase64: string | null = null;
+      let userImage: { data: string; mimeType: string } | null = null;
 
       if (session.nimaUserId) {
-        // Authenticated path: get user's primary image from Nima
-        const userImage = await ctx.runQuery(internal.workflows.queries.getUserPrimaryImage, {
+        const primaryImage = await ctx.runQuery(internal.workflows.queries.getUserPrimaryImage, {
           userId: session.nimaUserId,
         });
-        if (userImage?.url) {
-          const res = await fetch(userImage.url);
-          const buf = await res.arrayBuffer();
-          userImageBase64 = Buffer.from(buf).toString('base64');
+        if (primaryImage?.url) {
+          userImage = await fetchImage(primaryImage.url);
         }
       }
 
-      if (!userImageBase64 && session.guestImageStorageId) {
-        // Guest path: get uploaded image from storage
+      if (!userImage && session.guestImageStorageId) {
         const guestImageUrl = await ctx.storage.getUrl(session.guestImageStorageId);
         if (guestImageUrl) {
-          const res = await fetch(guestImageUrl);
-          const buf = await res.arrayBuffer();
-          userImageBase64 = Buffer.from(buf).toString('base64');
+          userImage = await fetchImage(guestImageUrl);
         }
       }
 
-      if (!userImageBase64) {
+      if (!userImage) {
         throw new Error('No user photo available for try-on');
       }
 
       // Fetch product image
-      let productImageBase64: string | null = null;
-      try {
-        const res = await fetch(session.productImageUrl);
-        const buf = await res.arrayBuffer();
-        productImageBase64 = Buffer.from(buf).toString('base64');
-      } catch {
+      const productImage = await fetchImage(session.productImageUrl);
+      if (!productImage) {
         console.warn('[CONNECT_TRYON] Failed to fetch product image');
       }
 
@@ -220,9 +229,9 @@ Important:
 - Make it look like a professional fashion photograph`,
       });
 
-      contents.push({ inlineData: { mimeType: 'image/jpeg', data: userImageBase64 } });
-      if (productImageBase64) {
-        contents.push({ inlineData: { mimeType: 'image/jpeg', data: productImageBase64 } });
+      contents.push({ inlineData: { mimeType: userImage.mimeType, data: userImage.data } });
+      if (productImage) {
+        contents.push({ inlineData: { mimeType: productImage.mimeType, data: productImage.data } });
       }
 
       const response = await genAI.models.generateContent({
