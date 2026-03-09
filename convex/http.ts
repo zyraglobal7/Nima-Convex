@@ -699,6 +699,11 @@ http.route({
         await ctx.runMutation(internal.connect.mutations.updateSessionStatus, { sessionToken, status: 'expired' });
         return new Response(JSON.stringify({ error: 'Session expired' }), { status: 410, headers: CORS_HEADERS });
       }
+      // Block guests who have used their 2-try limit
+      const guestCount = session.guestTryOnCount ?? 0;
+      if (guestCount >= 2 && !session.nimaUserId) {
+        return new Response(JSON.stringify({ error: 'Guest try-on limit reached' }), { status: 429, headers: CORS_HEADERS });
+      }
       // Look up partner for rate limit check
       const partner = await ctx.runQuery(internal.connect.queries.getPartnerById, { partnerId: session.partnerId });
       if (!partner || !partner.isActive) {

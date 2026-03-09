@@ -42,6 +42,7 @@ export const getSessionByToken = internalQuery({
       guestImageStorageId: v.optional(v.id('_storage')),
       resultStorageId: v.optional(v.id('_storage')),
       guestTryOnUsed: v.boolean(),
+      guestTryOnCount: v.optional(v.number()),
       status: v.union(
         v.literal('created'),
         v.literal('photo_needed'),
@@ -76,6 +77,7 @@ export const getSessionByToken = internalQuery({
     guestImageStorageId?: Id<'_storage'>;
     resultStorageId?: Id<'_storage'>;
     guestTryOnUsed: boolean;
+    guestTryOnCount?: number;
     status: 'created' | 'photo_needed' | 'photo_uploaded' | 'processing' | 'completed' | 'failed' | 'expired';
     errorMessage?: string;
     expiresAt: number;
@@ -104,6 +106,7 @@ export const getSessionByToken = internalQuery({
       guestImageStorageId: session.guestImageStorageId,
       resultStorageId: session.resultStorageId,
       guestTryOnUsed: session.guestTryOnUsed,
+      guestTryOnCount: session.guestTryOnCount,
       status: session.status,
       errorMessage: session.errorMessage,
       expiresAt: session.expiresAt,
@@ -235,6 +238,8 @@ export const getSessionStatus = query({
       productImageUrl: v.string(),
       partnerName: v.string(),
       guestTryOnUsed: v.boolean(),
+      guestTryOnCount: v.optional(v.number()),
+      nimaUserId: v.optional(v.id('users')),
       errorMessage: v.optional(v.string()),
       expiresAt: v.number(),
     }),
@@ -250,6 +255,8 @@ export const getSessionStatus = query({
     productImageUrl: string;
     partnerName: string;
     guestTryOnUsed: boolean;
+    guestTryOnCount?: number;
+    nimaUserId?: Id<'users'>;
     errorMessage?: string;
     expiresAt: number;
   } | null> => {
@@ -273,6 +280,8 @@ export const getSessionStatus = query({
       productImageUrl: session.productImageUrl,
       partnerName: partner?.name ?? 'Unknown Partner',
       guestTryOnUsed: session.guestTryOnUsed,
+      guestTryOnCount: session.guestTryOnCount,
+      nimaUserId: session.nimaUserId,
       errorMessage: session.errorMessage,
       expiresAt: session.expiresAt,
     };

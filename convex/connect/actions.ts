@@ -252,6 +252,39 @@ Important:
         }
       }
 
+      // First attempt returned no image — retry once with a simpler prompt but
+      // keeping both reference images so identity is preserved
+      if (!generatedImageBase64) {
+        console.warn('[CONNECT_TRYON] No image on first attempt, retrying with simplified prompt...');
+
+        const retryContents: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
+          {
+            text: `Show the person from Reference Image 1 wearing the clothing item from Reference Image 2. Keep the person's face, skin tone, and body exactly as they appear. Professional fashion photo, clean background.`,
+          },
+          { inlineData: { mimeType: userImage.mimeType, data: userImage.data } },
+        ];
+        if (productImage) {
+          retryContents.push({ inlineData: { mimeType: productImage.mimeType, data: productImage.data } });
+        }
+
+        const retryResponse = await genAI.models.generateContent({
+          model: 'gemini-3-pro-image-preview',
+          contents: retryContents,
+          config: { responseModalities: ['TEXT', 'IMAGE'] },
+        });
+
+        const retryParts = retryResponse.candidates?.[0]?.content?.parts;
+        if (retryParts) {
+          for (const part of retryParts) {
+            if (part.inlineData?.data) {
+              generatedImageBase64 = part.inlineData.data;
+              console.log('[CONNECT_TRYON] Retry succeeded');
+              break;
+            }
+          }
+        }
+      }
+
       if (!generatedImageBase64) {
         throw new Error('Image generation failed — model did not return an image');
       }
@@ -263,12 +296,32 @@ Important:
 
       const generationTimeMs = Date.now() - startTime;
 
+      // For authenticated sessions: deduct 1 credit
+      if (session.nimaUserId) {
+        const creditResult = await ctx.runMutation(internal.credits.mutations.deductCredit, {
+          userId: session.nimaUserId,
+          count: 1,
+        });
+        if (!creditResult.success) {
+          await ctx.runMutation(internal.connect.mutations.updateSessionStatus, {
+            sessionToken: args.sessionToken,
+            status: 'failed',
+            errorMessage: 'insufficient_credits',
+          });
+          return { success: false as const, error: 'insufficient_credits' };
+        }
+      }
+
+      // For guest sessions: increment try-on count (gate fires at >= 2)
+      const newGuestCount = session.nimaUserId ? undefined : (session.guestTryOnCount ?? 0) + 1;
+
       // Update session to completed
       await ctx.runMutation(internal.connect.mutations.updateSessionStatus, {
         sessionToken: args.sessionToken,
         status: 'completed',
         resultStorageId,
-        guestTryOnUsed: !session.nimaUserId, // mark guest try-on used if no Nima user
+        guestTryOnUsed: session.nimaUserId ? false : (newGuestCount ?? 0) >= 2,
+        ...(newGuestCount !== undefined ? { guestTryOnCount: newGuestCount } : {}),
       });
 
       // Increment partner usage
