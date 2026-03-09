@@ -201,30 +201,33 @@ Important:
         }
       }
 
-      // If no image generated, try simpler approach
+      // First attempt returned no image — retry once with a simpler prompt but
+      // keeping both reference images so identity is preserved
       if (!generatedImageBase64) {
-        console.warn(`[ITEM_TRYON] No image from first attempt, trying simpler approach...`);
+        console.warn(`[ITEM_TRYON] No image on first attempt, retrying with simplified prompt...`);
 
-        const simpleResponse = await genAI.models.generateContent({
-          model: 'gemini-3-pro-image-preview',
-          contents: [
-            {
-              text: `Generate a professional fashion photograph of a person wearing: ${itemDescription}. 
-Make it look like a high-end fashion photo with clean background and natural lighting.
-Show ONLY this single item of clothing - no other items.`,
-            },
-          ],
-          config: {
-            responseModalities: ['TEXT', 'IMAGE'],
+        const retryContents: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
+          {
+            text: `Show the person from Reference Image 1 wearing the clothing item from Reference Image 2. Keep the person's face, skin tone, and body exactly as they appear. Professional fashion photo, clean background.`,
           },
+          { inlineData: { mimeType: 'image/jpeg', data: userImageBase64 } },
+        ];
+        if (itemImageBase64) {
+          retryContents.push({ inlineData: { mimeType: 'image/jpeg', data: itemImageBase64 } });
+        }
+
+        const retryResponse = await genAI.models.generateContent({
+          model: 'gemini-3-pro-image-preview',
+          contents: retryContents,
+          config: { responseModalities: ['TEXT', 'IMAGE'] },
         });
 
-        const simpleParts = simpleResponse.candidates?.[0]?.content?.parts;
-        if (simpleParts) {
-          for (const part of simpleParts) {
-            if (part.inlineData && part.inlineData.data) {
+        const retryParts = retryResponse.candidates?.[0]?.content?.parts;
+        if (retryParts) {
+          for (const part of retryParts) {
+            if (part.inlineData?.data) {
               generatedImageBase64 = part.inlineData.data;
-              console.log(`[ITEM_TRYON] Generated image with simpler approach`);
+              console.log(`[ITEM_TRYON] Retry succeeded`);
               break;
             }
           }

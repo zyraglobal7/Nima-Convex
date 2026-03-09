@@ -107,6 +107,7 @@ export const updateSessionStatus = internalMutation({
     resultStorageId: v.optional(v.id('_storage')),
     errorMessage: v.optional(v.string()),
     guestTryOnUsed: v.optional(v.boolean()),
+    guestTryOnCount: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (
@@ -117,6 +118,7 @@ export const updateSessionStatus = internalMutation({
       resultStorageId?: Id<'_storage'>;
       errorMessage?: string;
       guestTryOnUsed?: boolean;
+      guestTryOnCount?: number;
     }
   ): Promise<null> => {
     const session = await ctx.db
@@ -131,10 +133,12 @@ export const updateSessionStatus = internalMutation({
       resultStorageId?: Id<'_storage'>;
       errorMessage?: string;
       guestTryOnUsed?: boolean;
+      guestTryOnCount?: number;
     } = { status: args.status, updatedAt: Date.now() };
     if (args.resultStorageId !== undefined) patch.resultStorageId = args.resultStorageId;
     if (args.errorMessage !== undefined) patch.errorMessage = args.errorMessage;
     if (args.guestTryOnUsed !== undefined) patch.guestTryOnUsed = args.guestTryOnUsed;
+    if (args.guestTryOnCount !== undefined) patch.guestTryOnCount = args.guestTryOnCount;
 
     await ctx.db.patch(session._id, patch);
     return null;
@@ -375,6 +379,42 @@ export const deactivatePartner = internalMutation({
     args: { partnerId: Id<'api_partners'> }
   ): Promise<null> => {
     await ctx.db.patch(args.partnerId, { isActive: false, updatedAt: Date.now() });
+    return null;
+  },
+});
+
+/**
+ * Link a Nima user to a Connect session (public — called from widget after auth popup)
+ * Requires the caller to be authenticated. Patches the session with nimaUserId and
+ * resets guestTryOnUsed so the gate doesn't block the newly linked user.
+ */
+export const linkNimaUserPublic = mutation({
+  args: { sessionToken: v.string() },
+  returns: v.null(),
+  handler: async (
+    ctx: MutationCtx,
+    args: { sessionToken: string }
+  ): Promise<null> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Unauthorized');
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .first();
+    if (!user) throw new Error('User not found');
+
+    const session = await ctx.db
+      .query('api_sessions')
+      .withIndex('by_session_token', (q) => q.eq('sessionToken', args.sessionToken))
+      .first();
+    if (!session) throw new Error('Session not found');
+
+    await ctx.db.patch(session._id, {
+      nimaUserId: user._id,
+      guestTryOnUsed: false,
+      updatedAt: Date.now(),
+    });
     return null;
   },
 });
