@@ -1,9 +1,9 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useQuery } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { useState, useRef, useCallback, Suspense } from 'react';
+import { useState, useRef, useCallback, Suspense, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,11 +16,13 @@ import {
   RotateCcw,
   AlertCircle,
   Clock,
+  ChevronRight,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Step =
+  | 'demo'
   | 'loading'
   | 'landing'
   | 'upload'
@@ -84,21 +86,79 @@ function ProcessingView({ productImageUrl }: { productImageUrl: string }) {
   );
 }
 
+// ─── Demo slide ───────────────────────────────────────────────────────────────
+
+function DemoView({ onNext }: { onNext: () => void }) {
+  return (
+    <Card className="w-full max-w-2xl">
+      <CardContent className="p-0 overflow-hidden rounded-xl">
+        <div className="relative">
+          <img
+            src="/popup-demo.png"
+            alt="Virtual Try-On Demo"
+            className="w-full object-contain"
+          />
+          <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-6 flex flex-col items-center gap-3">
+            <Button
+              className="w-full max-w-xs"
+              onClick={onNext}
+            >
+              Try it on yourself
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+            <p className="text-xs text-white/70">Powered by Nima AI</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main widget inner component ──────────────────────────────────────────────
 
 function ConnectWidgetInner() {
   const searchParams = useSearchParams();
   const sessionToken = searchParams.get('session') ?? '';
+  const isPopup = searchParams.get('popup') === '1';
+  const isLinked = searchParams.get('linked') === '1';
 
   const sessionStatus = useQuery(
     api.connect.queries.getSessionStatus,
     sessionToken ? { sessionToken } : 'skip'
   );
 
-  const [step, setStep] = useState<Step>('landing');
+  const currentUser = useQuery(api.users.queries.getCurrentUser);
+  const linkNimaUser = useMutation(api.connect.mutations.linkNimaUserPublic);
+
+  const [step, setStep] = useState<Step>('demo');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Auth popup callback: when this IS the auth popup, link user and close ──
+  useEffect(() => {
+    if (isPopup && isLinked && currentUser && sessionToken) {
+      linkNimaUser({ sessionToken })
+        .then(() => {
+          window.opener?.postMessage({ type: 'nima_auth_complete' }, window.location.origin);
+          window.close();
+        })
+        .catch(() => {
+          window.close();
+        });
+    }
+  }, [isPopup, isLinked, currentUser, sessionToken, linkNimaUser]);
+
+  // ── Listen for auth completion from child popup ────────────────────────────
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'nima_auth_complete') {
+        window.location.reload();
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
 
   // Auto-advance to result/expired when Convex pushes an update
   const status = sessionStatus?.status;
@@ -168,6 +228,11 @@ function ConnectWidgetInner() {
     },
     [handleFileUpload]
   );
+
+  // ── Demo (shown before anything else, no session needed) ──
+  if (step === 'demo') {
+    return <DemoView onNext={() => setStep('landing')} />;
+  }
 
   // ── No session token ──
   if (!sessionToken) {
@@ -299,11 +364,16 @@ function ConnectWidgetInner() {
                 Create Free Account
               </a>
             </Button>
-            <Button variant="outline" className="w-full" asChild>
-              <a href={`/sign-in?redirect=/connect?session=${sessionToken}&linked=1`} target="_blank" rel="noopener noreferrer">
-                <UserCircle className="w-4 h-4 mr-2" />
-                Sign In
-              </a>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                const redirect = encodeURIComponent(`/connect?session=${sessionToken}&linked=1&popup=1`);
+                window.open(`/sign-in?redirect=${redirect}`, 'nimaAuth', 'popup,width=480,height=680,left=200,top=100');
+              }}
+            >
+              <UserCircle className="w-4 h-4 mr-2" />
+              Sign In
             </Button>
           </div>
         </CardContent>
@@ -389,6 +459,15 @@ function ConnectWidgetInner() {
   }
 
   // ── Landing (default) ──
+  const openAuthPopup = () => {
+    const redirect = encodeURIComponent(`/connect?session=${sessionToken}&linked=1&popup=1`);
+    window.open(
+      `/sign-in?redirect=${redirect}`,
+      'nimaAuth',
+      'popup,width=480,height=680,left=200,top=100'
+    );
+  };
+
   return (
     <Card className="w-full max-w-2xl">
       <CardContent className="p-6 space-y-5">
@@ -423,12 +502,10 @@ function ConnectWidgetInner() {
         <div className="space-y-2">
           <Button
             className="w-full"
-            asChild
+            onClick={openAuthPopup}
           >
-            <a href={`/sign-in?redirect=/connect?session=${sessionToken}&linked=1`} target="_blank" rel="noopener noreferrer">
-              <UserCircle className="w-4 h-4 mr-2" />
-              Connect Nima Account
-            </a>
+            <UserCircle className="w-4 h-4 mr-2" />
+            Connect Nima Account
           </Button>
 
           <Button
@@ -444,17 +521,6 @@ function ConnectWidgetInner() {
           >
             Continue as Guest
           </Button>
-
-          <div className="text-center">
-            <a
-              href="/sign-up"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-text-secondary hover:text-primary underline underline-offset-2"
-            >
-              Don&apos;t have a Nima account? Create one free →
-            </a>
-          </div>
         </div>
       </CardContent>
     </Card>

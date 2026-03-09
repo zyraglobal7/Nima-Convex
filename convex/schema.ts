@@ -1148,6 +1148,7 @@ export default defineSchema({
     guestImageStorageId: v.optional(v.id('_storage')),
     resultStorageId: v.optional(v.id('_storage')),
     guestTryOnUsed: v.boolean(),
+    guestTryOnCount: v.optional(v.number()),
     status: v.union(
       v.literal('created'),
       v.literal('photo_needed'),
