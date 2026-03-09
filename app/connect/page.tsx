@@ -133,6 +133,7 @@ function ConnectWidgetInner() {
   const [step, setStep] = useState<Step>('demo');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Auth popup callback: when this IS the auth popup, link user and close ──
@@ -150,10 +151,12 @@ function ConnectWidgetInner() {
   }, [isPopup, isLinked, currentUser, sessionToken, linkNimaUser]);
 
   // ── Listen for auth completion from child popup ────────────────────────────
+  // No reload needed — Convex real-time subscription will push nimaUserId update automatically
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === 'nima_auth_complete') {
-        window.location.reload();
+        // Advance to landing so the connected state is visible (step may still be 'demo')
+        setStep((prev) => (prev === 'demo' ? 'landing' : prev));
       }
     };
     window.addEventListener('message', handler);
@@ -468,6 +471,24 @@ function ConnectWidgetInner() {
     );
   };
 
+  const handleGenerateAuthenticated = async () => {
+    setGenerating(true);
+    try {
+      await fetch(
+        `${process.env.NEXT_PUBLIC_CONVEX_URL?.replace('.convex.cloud', '.convex.site') ?? ''}/api/v1/sessions/${sessionToken}/generate`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+      );
+      setStep('processing');
+    } catch {
+      // fall through to upload as fallback
+      setStep('upload');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const isAccountLinked = !!sessionStatus.nimaUserId;
+
   return (
     <Card className="w-full max-w-2xl">
       <CardContent className="p-6 space-y-5">
@@ -499,29 +520,49 @@ function ConnectWidgetInner() {
           <p className="text-sm font-medium truncate">{productName}</p>
         )}
 
-        <div className="space-y-2">
-          <Button
-            className="w-full"
-            onClick={openAuthPopup}
-          >
-            <UserCircle className="w-4 h-4 mr-2" />
-            Connect Nima Account
-          </Button>
+        {isAccountLinked ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-xs text-text-secondary bg-surface rounded-lg px-3 py-2 border border-border">
+              <UserCircle className="w-4 h-4 text-primary shrink-0" />
+              <span>Nima account connected — your profile photo will be used</span>
+            </div>
+            <Button
+              className="w-full"
+              onClick={handleGenerateAuthenticated}
+              disabled={generating}
+            >
+              {generating ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating…</>
+              ) : (
+                <><Sparkles className="w-4 h-4 mr-2" />Generate Try-On</>
+              )}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Button
+              className="w-full"
+              onClick={openAuthPopup}
+            >
+              <UserCircle className="w-4 h-4 mr-2" />
+              Connect Nima Account
+            </Button>
 
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => {
-              if (guestTryOnUsed) {
-                setStep('gate');
-              } else {
-                setStep('upload');
-              }
-            }}
-          >
-            Continue as Guest
-          </Button>
-        </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                if (guestTryOnUsed) {
+                  setStep('gate');
+                } else {
+                  setStep('upload');
+                }
+              }}
+            >
+              Continue as Guest
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
