@@ -1136,6 +1136,8 @@ export default defineSchema({
     externalProductUrl: v.optional(v.string()),
     productImageUrl: v.string(),
     productName: v.optional(v.string()),
+    // Partner-supplied ID to correlate this session with their cart/order system
+    trackingId: v.optional(v.string()),
     productCategory: v.optional(
       v.union(
         v.literal('top'),
@@ -1170,6 +1172,8 @@ export default defineSchema({
 
   /**
    * api_usage_logs - Audit log of events per session
+   * Includes try-on lifecycle events AND post-try-on conversion events
+   * (item_added_to_cart, item_purchased) reported by partners via /api/v1/track
    */
   api_usage_logs: defineTable({
     partnerId: v.id('api_partners'),
@@ -1180,10 +1184,17 @@ export default defineSchema({
       v.literal('tryon_generated'),
       v.literal('tryon_failed'),
       v.literal('user_converted'),
+      // Conversion events — reported by partner after try-on
+      v.literal('item_added_to_cart'),
+      v.literal('item_purchased'),
     ),
     externalProductId: v.optional(v.string()),
     wasAuthenticated: v.boolean(),
     generationTimeMs: v.optional(v.number()),
+    // Conversion tracking fields (set for item_added_to_cart / item_purchased)
+    itemValue: v.optional(v.number()),   // monetary value in smallest unit (e.g. cents/KES)
+    currency: v.optional(v.string()),    // e.g. "KES", "USD"
+    trackingId: v.optional(v.string()),  // partner's internal cart/order reference
     createdAt: v.number(),
   })
     .index('by_partner', ['partnerId'])

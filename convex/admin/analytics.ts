@@ -1463,3 +1463,220 @@ export const getLookInteractionsAnalytics = query({
   },
 });
 
+// =============================================================================
+// NIMA CONNECT — CONVERSION ANALYTICS (Admin)
+// Tracks try-on → cart add → purchase funnel across partner merchants
+// =============================================================================
+
+export const getConnectConversionAnalytics = query({
+  args: {
+    startDate: v.number(),
+    endDate: v.number(),
+    partnerId: v.optional(v.id('api_partners')),
+    eventFilter: v.optional(
+      v.union(
+        v.literal('all'),
+        v.literal('item_added_to_cart'),
+        v.literal('item_purchased'),
+      )
+    ),
+  },
+  returns: v.object({
+    summary: v.object({
+      totalTryOns: v.number(),
+      totalCartAdds: v.number(),
+      totalPurchases: v.number(),
+      totalCartValue: v.number(),
+      totalPurchaseValue: v.number(),
+      cartConversionRate: v.number(),
+      purchaseConversionRate: v.number(),
+    }),
+    byPartner: v.array(v.object({
+      partnerId: v.string(),
+      partnerName: v.string(),
+      partnerSlug: v.string(),
+      tryOns: v.number(),
+      cartAdds: v.number(),
+      purchases: v.number(),
+      cartValue: v.number(),
+      purchaseValue: v.number(),
+      cartConversionRate: v.number(),
+      purchaseConversionRate: v.number(),
+    })),
+    trend: v.array(v.object({
+      date: v.string(),
+      tryOns: v.number(),
+      cartAdds: v.number(),
+      purchases: v.number(),
+    })),
+    topProductsByCart: v.array(v.object({
+      productId: v.string(),
+      productName: v.string(),
+      count: v.number(),
+      totalValue: v.number(),
+    })),
+    topProductsByPurchase: v.array(v.object({
+      productId: v.string(),
+      productName: v.string(),
+      count: v.number(),
+      totalValue: v.number(),
+    })),
+  }),
+  handler: async (
+    ctx: QueryCtx,
+    args: {
+      startDate: number;
+      endDate: number;
+      partnerId?: Id<'api_partners'>;
+      eventFilter?: 'all' | 'item_added_to_cart' | 'item_purchased';
+    }
+  ): Promise<{
+    summary: {
+      totalTryOns: number;
+      totalCartAdds: number;
+      totalPurchases: number;
+      totalCartValue: number;
+      totalPurchaseValue: number;
+      cartConversionRate: number;
+      purchaseConversionRate: number;
+    };
+    byPartner: Array<{
+      partnerId: string;
+      partnerName: string;
+      partnerSlug: string;
+      tryOns: number;
+      cartAdds: number;
+      purchases: number;
+      cartValue: number;
+      purchaseValue: number;
+      cartConversionRate: number;
+      purchaseConversionRate: number;
+    }>;
+    trend: Array<{ date: string; tryOns: number; cartAdds: number; purchases: number }>;
+    topProductsByCart: Array<{ productId: string; productName: string; count: number; totalValue: number }>;
+    topProductsByPurchase: Array<{ productId: string; productName: string; count: number; totalValue: number }>;
+  }> => {
+    const { startDate, endDate } = args;
+
+    // Fetch logs in date range, optionally filtered by partner
+    let logsQuery = ctx.db.query('api_usage_logs');
+    let logs = await (args.partnerId
+      ? logsQuery.withIndex('by_partner_and_created', (q) =>
+          q.eq('partnerId', args.partnerId!)
+        ).collect()
+      : logsQuery.collect());
+
+    // Filter by date
+    logs = logs.filter((l) => l.createdAt >= startDate && l.createdAt <= endDate);
+
+    // Separate by event type
+    const tryOnLogs = logs.filter((l) => l.eventType === 'tryon_generated');
+    const cartLogs = logs.filter((l) => l.eventType === 'item_added_to_cart');
+    const purchaseLogs = logs.filter((l) => l.eventType === 'item_purchased');
+
+    // Compute totals
+    const totalTryOns = tryOnLogs.length;
+    const totalCartAdds = cartLogs.length;
+    const totalPurchases = purchaseLogs.length;
+    const totalCartValue = cartLogs.reduce((sum, l) => sum + (l.itemValue ?? 0), 0);
+    const totalPurchaseValue = purchaseLogs.reduce((sum, l) => sum + (l.itemValue ?? 0), 0);
+    const cartConversionRate = totalTryOns > 0 ? Math.round((totalCartAdds / totalTryOns) * 1000) / 10 : 0;
+    const purchaseConversionRate = totalTryOns > 0 ? Math.round((totalPurchases / totalTryOns) * 1000) / 10 : 0;
+
+    // Per-partner breakdown
+    const partnerIds = [...new Set(logs.map((l) => l.partnerId))];
+    const byPartner = await Promise.all(
+      partnerIds.map(async (pid) => {
+        const partner = await ctx.db.get(pid);
+        const partnerLogs = logs.filter((l) => l.partnerId === pid);
+        const pTryOns = partnerLogs.filter((l) => l.eventType === 'tryon_generated').length;
+        const pCartAdds = partnerLogs.filter((l) => l.eventType === 'item_added_to_cart').length;
+        const pPurchases = partnerLogs.filter((l) => l.eventType === 'item_purchased').length;
+        const pCartValue = partnerLogs
+          .filter((l) => l.eventType === 'item_added_to_cart')
+          .reduce((sum, l) => sum + (l.itemValue ?? 0), 0);
+        const pPurchaseValue = partnerLogs
+          .filter((l) => l.eventType === 'item_purchased')
+          .reduce((sum, l) => sum + (l.itemValue ?? 0), 0);
+        return {
+          partnerId: pid,
+          partnerName: partner?.name ?? 'Unknown',
+          partnerSlug: partner?.slug ?? '',
+          tryOns: pTryOns,
+          cartAdds: pCartAdds,
+          purchases: pPurchases,
+          cartValue: pCartValue,
+          purchaseValue: pPurchaseValue,
+          cartConversionRate: pTryOns > 0 ? Math.round((pCartAdds / pTryOns) * 1000) / 10 : 0,
+          purchaseConversionRate: pTryOns > 0 ? Math.round((pPurchases / pTryOns) * 1000) / 10 : 0,
+        };
+      })
+    );
+
+    // Daily trend
+    const dayMs = 24 * 60 * 60 * 1000;
+    const days = Math.ceil((endDate - startDate) / dayMs);
+    const trendMap: Record<string, { tryOns: number; cartAdds: number; purchases: number }> = {};
+    for (let i = 0; i <= days; i++) {
+      const dateStr = new Date(startDate + i * dayMs).toISOString().split('T')[0];
+      trendMap[dateStr] = { tryOns: 0, cartAdds: 0, purchases: 0 };
+    }
+    for (const log of logs) {
+      const dateStr = new Date(log.createdAt).toISOString().split('T')[0];
+      if (!trendMap[dateStr]) continue;
+      if (log.eventType === 'tryon_generated') trendMap[dateStr].tryOns++;
+      else if (log.eventType === 'item_added_to_cart') trendMap[dateStr].cartAdds++;
+      else if (log.eventType === 'item_purchased') trendMap[dateStr].purchases++;
+    }
+    const trend = Object.entries(trendMap)
+      .map(([date, counts]) => ({ date, ...counts }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Top products by cart
+    const cartProductMap: Record<string, { count: number; totalValue: number; productName: string }> = {};
+    for (const log of cartLogs) {
+      const pid2 = log.externalProductId ?? 'unknown';
+      if (!cartProductMap[pid2]) {
+        cartProductMap[pid2] = { count: 0, totalValue: 0, productName: pid2 };
+      }
+      cartProductMap[pid2].count++;
+      cartProductMap[pid2].totalValue += log.itemValue ?? 0;
+    }
+    const topProductsByCart = Object.entries(cartProductMap)
+      .map(([productId, data]) => ({ productId, ...data }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Top products by purchase
+    const purchaseProductMap: Record<string, { count: number; totalValue: number; productName: string }> = {};
+    for (const log of purchaseLogs) {
+      const pid2 = log.externalProductId ?? 'unknown';
+      if (!purchaseProductMap[pid2]) {
+        purchaseProductMap[pid2] = { count: 0, totalValue: 0, productName: pid2 };
+      }
+      purchaseProductMap[pid2].count++;
+      purchaseProductMap[pid2].totalValue += log.itemValue ?? 0;
+    }
+    const topProductsByPurchase = Object.entries(purchaseProductMap)
+      .map(([productId, data]) => ({ productId, ...data }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    return {
+      summary: {
+        totalTryOns,
+        totalCartAdds,
+        totalPurchases,
+        totalCartValue,
+        totalPurchaseValue,
+        cartConversionRate,
+        purchaseConversionRate,
+      },
+      byPartner,
+      trend,
+      topProductsByCart,
+      topProductsByPurchase,
+    };
+  },
+});
+
