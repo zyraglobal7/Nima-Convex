@@ -37,7 +37,7 @@ import {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type Plan = 'free' | 'starter' | 'growth' | 'enterprise';
-type EventType = 'session_created' | 'photo_uploaded' | 'tryon_generated' | 'tryon_failed' | 'user_converted';
+type EventType = 'session_created' | 'photo_uploaded' | 'tryon_generated' | 'tryon_failed' | 'user_converted' | 'item_added_to_cart' | 'item_purchased';
 
 const PLAN_COLORS: Record<Plan, string> = {
   free: 'bg-muted text-muted-foreground',
@@ -52,6 +52,8 @@ const EVENT_LABELS: Record<EventType, string> = {
   tryon_generated: 'Try-On Generated',
   tryon_failed: 'Try-On Failed',
   user_converted: 'User Converted',
+  item_added_to_cart: 'Added to Cart',
+  item_purchased: 'Purchased',
 };
 
 const EVENT_COLORS: Record<EventType, string> = {
@@ -60,6 +62,8 @@ const EVENT_COLORS: Record<EventType, string> = {
   tryon_generated: 'text-green-500',
   tryon_failed: 'text-red-500',
   user_converted: 'text-amber-500',
+  item_added_to_cart: 'text-orange-500',
+  item_purchased: 'text-emerald-600',
 };
 
 function formatDate(ts: number) {
@@ -266,6 +270,42 @@ const res = await fetch('https://convex.shopnima.ai/api/v1/sessions', {
 const { sessionToken, widgetUrl } = await res.json();
 // Open widgetUrl in a popup on your product page`;
 
+  const trackSnippet = `// Report a conversion event (server-side, after cart add or purchase)
+// Call this from your checkout/cart backend — keep the sessionToken from step 1.
+
+// When the shopper adds to cart:
+await fetch('https://convex.shopnima.ai/api/v1/track', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer nima_pk_${partner.apiKeyPrefix}...',
+  },
+  body: JSON.stringify({
+    sessionToken,               // from step 1
+    event: 'added_to_cart',
+    itemValue: 4500,            // optional — item price
+    currency: 'KES',           // optional
+    trackingId: 'cart_abc123', // optional — your internal cart/order ID
+  }),
+});
+
+// When the shopper completes purchase:
+await fetch('https://convex.shopnima.ai/api/v1/track', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer nima_pk_${partner.apiKeyPrefix}...',
+  },
+  body: JSON.stringify({
+    sessionToken,
+    event: 'purchased',
+    itemValue: 4500,
+    currency: 'KES',
+    trackingId: 'order_xyz789',
+  }),
+});
+`;
+
   return (
     <div className="space-y-8">
       <div>
@@ -407,6 +447,20 @@ const { sessionToken, widgetUrl } = await res.json();
             </pre>
           </div>
 
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs font-medium text-text-secondary">3. Track cart &amp; purchase events (server-side)</p>
+              <CopyButton text={trackSnippet} label="Copy" />
+            </div>
+            <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto font-mono leading-relaxed">
+              {trackSnippet}
+            </pre>
+            <p className="text-xs text-text-secondary mt-2">
+              Store the <code className="font-mono bg-muted px-1 py-0.5 rounded">sessionToken</code> from step 1 in your cart/checkout flow so you can send it when the order completes.
+              This unlocks try-on → purchase conversion analytics in your dashboard.
+            </p>
+          </div>
+
           <Button
             variant="outline"
             size="sm"
@@ -443,7 +497,7 @@ const { sessionToken, widgetUrl } = await res.json();
                   key={log._id}
                   className="flex items-center gap-3 py-2 border-b border-border last:border-0"
                 >
-                  <div className={`w-2 h-2 rounded-full ${log.eventType.includes('fail') ? 'bg-red-500' : 'bg-green-500'}`} />
+                  <div className={`w-2 h-2 rounded-full ${log.eventType === 'tryon_failed' ? 'bg-red-500' : log.eventType === 'item_purchased' ? 'bg-emerald-500' : log.eventType === 'item_added_to_cart' ? 'bg-orange-400' : 'bg-green-500'}`} />
                   <span className={`text-xs font-medium ${EVENT_COLORS[log.eventType as EventType]}`}>
                     {EVENT_LABELS[log.eventType as EventType]}
                   </span>
@@ -452,6 +506,11 @@ const { sessionToken, widgetUrl } = await res.json();
                   )}
                   {log.generationTimeMs && (
                     <span className="text-xs text-text-secondary">{log.generationTimeMs}ms</span>
+                  )}
+                  {log.itemValue != null && (
+                    <span className="text-xs font-medium text-emerald-600">
+                      {log.currency ?? 'KES'} {log.itemValue.toLocaleString()}
+                    </span>
                   )}
                   <span className="ml-auto text-xs text-text-secondary">
                     {formatDate(log.createdAt)} {formatTime(log.createdAt)}
