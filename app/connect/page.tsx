@@ -17,6 +17,9 @@ import {
   AlertCircle,
   Clock,
   ChevronRight,
+  ExternalLink,
+  X,
+  CreditCard,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -149,6 +152,13 @@ function ConnectWidgetInner() {
         });
     }
   }, [isPopup, isLinked, currentUser, sessionToken, linkNimaUser]);
+
+  // ── Auto-advance past demo if session is already linked (widget reopened) ──
+  useEffect(() => {
+    if (sessionStatus && sessionStatus.nimaUserId && step === 'demo') {
+      setStep('landing');
+    }
+  }, [sessionStatus, step]);
 
   // ── Listen for auth completion from child popup ────────────────────────────
   // No reload needed — Convex real-time subscription will push nimaUserId update automatically
@@ -295,6 +305,7 @@ function ConnectWidgetInner() {
 
   // ── Result ──
   if (step === 'result' && resultImageUrl) {
+    const isAuthenticated = !!sessionStatus.nimaUserId;
     return (
       <Card className="w-full max-w-2xl">
         <CardContent className="p-6 space-y-4">
@@ -323,18 +334,37 @@ function ConnectWidgetInner() {
             </div>
           </div>
 
-          <div className="bg-surface rounded-lg p-4 text-center space-y-2 border border-border">
-            <p className="text-sm font-medium">Save this look &amp; unlock unlimited try-ons</p>
-            <p className="text-xs text-text-secondary">
-              Create your free Nima account to save looks, try more items, and build your style profile.
-            </p>
-            <Button className="w-full mt-2" asChild>
-              <a href="/sign-up" target="_blank" rel="noopener noreferrer">
-                <UserPlus className="w-4 h-4 mr-2" />
-                Create Free Nima Account
-              </a>
-            </Button>
-          </div>
+          {isAuthenticated ? (
+            <div className="flex gap-2">
+              <Button className="flex-1" asChild>
+                <a href="/lookbooks" target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Save to Lookbooks
+                </a>
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => window.close()}
+              >
+                <X className="w-4 h-4 mr-2" />
+                Discard
+              </Button>
+            </div>
+          ) : (
+            <div className="bg-surface rounded-lg p-4 text-center space-y-2 border border-border">
+              <p className="text-sm font-medium">Save this look &amp; unlock unlimited try-ons</p>
+              <p className="text-xs text-text-secondary">
+                Create your free Nima account to save looks, try more items, and build your style profile.
+              </p>
+              <Button className="w-full mt-2" asChild>
+                <a href="/sign-up" target="_blank" rel="noopener noreferrer">
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Create Free Nima Account
+                </a>
+              </Button>
+            </div>
+          )}
 
           <Button
             variant="ghost"
@@ -444,18 +474,42 @@ function ConnectWidgetInner() {
 
   // ── Error ──
   if (step === 'error' || sessionStatus.status === 'failed') {
+    const isInsufficientCredits = sessionStatus.errorMessage === 'insufficient_credits';
     return (
       <Card className="w-full max-w-md">
         <CardContent className="p-8 text-center space-y-4">
-          <AlertCircle className="w-10 h-10 text-destructive mx-auto" />
-          <h2 className="text-lg font-semibold">Generation Failed</h2>
-          <p className="text-sm text-text-secondary">
-            {sessionStatus.errorMessage ?? 'Something went wrong generating your try-on. Please try again.'}
-          </p>
-          <Button onClick={() => setStep('upload')}>
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Try Again
-          </Button>
+          {isInsufficientCredits ? (
+            <>
+              <CreditCard className="w-10 h-10 text-primary mx-auto" />
+              <h2 className="text-lg font-semibold">Not enough credits</h2>
+              <p className="text-sm text-text-secondary">
+                You&apos;ve used all your try-on credits. Top up to keep styling.
+              </p>
+              <div className="space-y-2">
+                <Button className="w-full" asChild>
+                  <a href="/credits" target="_blank" rel="noopener noreferrer">
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    Get More Credits
+                  </a>
+                </Button>
+                <Button variant="ghost" size="sm" className="w-full text-text-secondary" onClick={() => window.close()}>
+                  Close
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <AlertCircle className="w-10 h-10 text-destructive mx-auto" />
+              <h2 className="text-lg font-semibold">Generation Failed</h2>
+              <p className="text-sm text-text-secondary">
+                Something went wrong generating your try-on. Please try again.
+              </p>
+              <Button onClick={() => setStep('upload')}>
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Try Again
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
     );
