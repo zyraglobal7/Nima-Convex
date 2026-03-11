@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { ArrowLeft, Sparkles, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useChat } from '@ai-sdk/react';
 import { useQuery, useMutation, useAction } from 'convex/react';
@@ -22,7 +22,7 @@ import { ExploreCard } from '@/components/ask/ExploreCard';
 import { AuthExpiredModal } from '@/components/auth';
 import type { UIMessage } from 'ai';
 
-type ChatState = 'idle' | 'typing' | 'curating' | 'generating' | 'no_matches';
+type ChatState = 'idle' | 'typing' | 'curating' | 'generating' | 'no_matches' | 'no_credits';
 
 // Helper to extract text content from AI SDK v5 message parts
 function getMessageText(message: UIMessage): string {
@@ -272,13 +272,15 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
         if (result.message === 'no_matches' || result.message === 'no_photo') {
           console.log('[Chat] No matching items found for occasion:', occasion);
           setChatState('no_matches');
-          
+
           try {
             await saveNoMatchesMessage({ threadId, occasion });
             console.log('[Chat] Saved no-matches message');
           } catch (error) {
             console.error('[Chat] Failed to save no-matches message:', error);
           }
+        } else if (result.message === 'insufficient_credits') {
+          setChatState('no_credits');
         } else {
           console.warn('[Chat] Match items failed:', result.message);
           setChatState('idle');
@@ -384,8 +386,8 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
   const handleSendMessage = async (content: string) => {
     if (!content.trim()) return;
     
-    // Reset no_matches state when user tries again
-    if (chatState === 'no_matches') {
+    // Reset no_matches / no_credits state when user tries again
+    if (chatState === 'no_matches' || chatState === 'no_credits') {
       setChatState('idle');
     }
     
@@ -562,6 +564,17 @@ function ChatThreadInner({ chatId, authExpired, userData, currentUser }: ChatThr
     });
   }
 
+  // Add no-credits message if in that state
+  if (chatState === 'no_credits' && !displayMessages.some(m => m.id === 'no-credits')) {
+    displayMessages.push({
+      id: 'no-credits',
+      role: 'nima',
+      content: "You don't have enough credits to generate new looks. Each request uses 3 credits.",
+      timestamp: new Date(),
+      type: 'text',
+    });
+  }
+
   // Add no-matches message if in that state (before it's saved to DB)
   if (chatState === 'no_matches' && !displayMessages.some(m => m.content.includes("couldn't find enough items"))) {
     displayMessages.push({
@@ -699,6 +712,34 @@ We're always adding new items, so check back soon! ✨`,
             )}
           </AnimatePresence>
 
+          {/* No credits card */}
+          <AnimatePresence>
+            {chatState === 'no_credits' && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="p-4 bg-surface rounded-2xl border border-border/60 flex items-center justify-between gap-4"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <Zap className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">Not enough credits</p>
+                    <p className="text-xs text-muted-foreground">3 credits needed per request</p>
+                  </div>
+                </div>
+                <Link
+                  href="/credits"
+                  className="shrink-0 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
+                >
+                  Get Credits
+                </Link>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* No matches - explore card */}
           <AnimatePresence>
             {chatState === 'no_matches' && <ExploreCard />}
@@ -735,6 +776,8 @@ We're always adding new items, so check back soon! ✨`,
                 ? 'Curating your looks...'
                 : chatState === 'generating'
                 ? 'Creating your try-on images...'
+                : chatState === 'no_credits'
+                ? 'Get credits to continue...'
                 : isAiLoading
                 ? 'Nima is typing...'
                 : 'Type your message...'

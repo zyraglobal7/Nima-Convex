@@ -488,8 +488,10 @@ http.route({
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
     const origin = request.headers.get('Origin');
+    console.log('[CONNECT] POST /api/v1/sessions');
     const auth = await validateConnectApiKey(ctx, request);
     if ('error' in auth) {
+      console.error('[CONNECT] POST /api/v1/sessions auth error:', auth.error);
       return new Response(JSON.stringify({ error: auth.error }), {
         status: auth.status,
         headers: { 'Content-Type': 'application/json' },
@@ -509,6 +511,7 @@ http.route({
     try {
       body = await request.json();
     } catch {
+      console.error('[CONNECT] POST /api/v1/sessions invalid JSON, partner:', partner.name);
       return addConnectCorsHeaders(
         new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
         origin, partner.allowedDomains,
@@ -516,6 +519,7 @@ http.route({
     }
 
     if (!body.productImageUrl || !body.externalProductId) {
+      console.error('[CONNECT] POST /api/v1/sessions missing required fields, partner:', partner.name);
       return addConnectCorsHeaders(
         new Response(JSON.stringify({ error: 'productImageUrl and externalProductId are required' }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
         origin, partner.allowedDomains,
@@ -555,6 +559,7 @@ http.route({
       wasAuthenticated: false,
     });
 
+    console.log(`[CONNECT] Session created: ${sessionToken}, partner: ${partner.name}, product: ${body.externalProductId}`);
     return addConnectCorsHeaders(
       new Response(
         JSON.stringify({
@@ -597,6 +602,7 @@ http.route({
     const origin = request.headers.get('Origin');
     const auth = await validateConnectApiKey(ctx, request);
     if ('error' in auth) {
+      console.error('[CONNECT] GET /api/v1/sessions/:token auth error:', auth.error);
       return new Response(JSON.stringify({ error: auth.error }), {
         status: auth.status,
         headers: { 'Content-Type': 'application/json' },
@@ -608,8 +614,10 @@ http.route({
     const parts = url.pathname.split('/');
     const token = parts[parts.length - 1];
 
+    console.log(`[CONNECT] GET /api/v1/sessions/${token}, partner: ${partner.name}`);
     const session = await ctx.runQuery(internal.connect.queries.getSessionByToken, { sessionToken: token });
     if (!session) {
+      console.error(`[CONNECT] GET /api/v1/sessions/${token} not found, partner: ${partner.name}`);
       return addConnectCorsHeaders(
         new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } }),
         origin, partner.allowedDomains,
@@ -621,6 +629,7 @@ http.route({
       resultImageUrl = await ctx.storage.getUrl(session.resultStorageId);
     }
 
+    console.log(`[CONNECT] GET /api/v1/sessions/${token} status: ${session.status}, partner: ${partner.name}`);
     return addConnectCorsHeaders(
       new Response(
         JSON.stringify({
@@ -665,57 +674,71 @@ http.route({
 
     // ── photo/url: generate a Convex upload URL ──────────────────────────────
     if (subPath === 'photo/url') {
+      console.log(`[CONNECT] photo/url: session=${sessionToken}`);
       const session = await ctx.runQuery(internal.connect.queries.getSessionByToken, { sessionToken });
       if (!session) {
+        console.error(`[CONNECT] photo/url: session not found: ${sessionToken}`);
         return new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: CORS_HEADERS });
       }
       const uploadUrl = await ctx.storage.generateUploadUrl();
+      console.log(`[CONNECT] photo/url: upload URL generated for session=${sessionToken}`);
       return new Response(JSON.stringify({ uploadUrl }), { status: 200, headers: CORS_HEADERS });
     }
 
     // ── photo/save: link uploaded storage ID to session ──────────────────────
     if (subPath === 'photo/save') {
+      console.log(`[CONNECT] photo/save: session=${sessionToken}`);
       let body: { storageId?: string } = {};
       try { body = await request.json(); } catch { /* ignore */ }
       if (!body.storageId) {
+        console.error(`[CONNECT] photo/save: missing storageId, session=${sessionToken}`);
         return new Response(JSON.stringify({ error: 'storageId required' }), { status: 400, headers: CORS_HEADERS });
       }
       const session = await ctx.runQuery(internal.connect.queries.getSessionByToken, { sessionToken });
       if (!session) {
+        console.error(`[CONNECT] photo/save: session not found: ${sessionToken}`);
         return new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: CORS_HEADERS });
       }
       await ctx.runMutation(internal.connect.mutations.saveGuestPhoto, {
         sessionToken,
         storageId: body.storageId as Id<'_storage'>,
       });
+      console.log(`[CONNECT] photo/save: photo saved for session=${sessionToken}`);
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: CORS_HEADERS });
     }
 
     // ── generate: trigger try-on generation ─────────────────────────────────
     if (subPath === 'generate') {
+      console.log(`[CONNECT] generate: session=${sessionToken}`);
       const session = await ctx.runQuery(internal.connect.queries.getSessionByToken, { sessionToken });
       if (!session) {
+        console.error(`[CONNECT] generate: session not found: ${sessionToken}`);
         return new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: CORS_HEADERS });
       }
       if (Date.now() > session.expiresAt) {
+        console.error(`[CONNECT] generate: session expired: ${sessionToken}`);
         await ctx.runMutation(internal.connect.mutations.updateSessionStatus, { sessionToken, status: 'expired' });
         return new Response(JSON.stringify({ error: 'Session expired' }), { status: 410, headers: CORS_HEADERS });
       }
       // Block guests who have used their 2-try limit
       const guestCount = session.guestTryOnCount ?? 0;
       if (guestCount >= 2 && !session.nimaUserId) {
+        console.warn(`[CONNECT] generate: guest limit reached, session=${sessionToken}, count=${guestCount}`);
         return new Response(JSON.stringify({ error: 'Guest try-on limit reached' }), { status: 429, headers: CORS_HEADERS });
       }
       // Look up partner for rate limit check
       const partner = await ctx.runQuery(internal.connect.queries.getPartnerById, { partnerId: session.partnerId });
       if (!partner || !partner.isActive) {
+        console.error(`[CONNECT] generate: partner inactive, session=${sessionToken}, partnerId=${session.partnerId}`);
         return new Response(JSON.stringify({ error: 'Partner inactive' }), { status: 403, headers: CORS_HEADERS });
       }
       const now = Date.now();
       const used = now > partner.billingResetAt ? 0 : partner.tryOnsUsedThisMonth;
       if (used >= partner.monthlyTryOnLimit) {
+        console.warn(`[CONNECT] generate: monthly limit exceeded, session=${sessionToken}, used=${used}, limit=${partner.monthlyTryOnLimit}`);
         return new Response(JSON.stringify({ error: 'Monthly try-on limit exceeded' }), { status: 429, headers: CORS_HEADERS });
       }
+      console.log(`[CONNECT] generate: scheduling try-on, session=${sessionToken}, authenticated=${!!session.nimaUserId}`);
       await ctx.scheduler.runAfter(0, internal.connect.actions.generateConnectTryOn, { sessionToken });
       return new Response(
         JSON.stringify({ status: 'processing', estimatedTimeMs: 30000 }),
@@ -758,6 +781,7 @@ http.route({
     const origin = request.headers.get('Origin');
     const auth = await validateConnectApiKey(ctx, request);
     if ('error' in auth) {
+      console.error('[CONNECT] GET /api/v1/usage auth error:', auth.error);
       return new Response(JSON.stringify({ error: auth.error }), {
         status: auth.status,
         headers: { 'Content-Type': 'application/json' },
@@ -767,6 +791,7 @@ http.route({
 
     const now = Date.now();
     const used = now > partner.billingResetAt ? 0 : partner.tryOnsUsedThisMonth;
+    console.log(`[CONNECT] GET /api/v1/usage, partner: ${partner.name}, used: ${used}/${partner.monthlyTryOnLimit}`);
 
     return addConnectCorsHeaders(
       new Response(
@@ -815,6 +840,7 @@ http.route({
     const origin = request.headers.get('Origin');
     const auth = await validateConnectApiKey(ctx, request);
     if ('error' in auth) {
+      console.error('[CONNECT] POST /api/v1/track auth error:', auth.error);
       return new Response(JSON.stringify({ error: auth.error }), {
         status: auth.status,
         headers: { 'Content-Type': 'application/json' },
@@ -832,6 +858,7 @@ http.route({
     try {
       body = await request.json();
     } catch {
+      console.error('[CONNECT] POST /api/v1/track invalid JSON, partner:', partner.name);
       return addConnectCorsHeaders(
         new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
         origin, partner.allowedDomains,
@@ -839,6 +866,7 @@ http.route({
     }
 
     if (!body.sessionToken) {
+      console.error('[CONNECT] POST /api/v1/track missing sessionToken, partner:', partner.name);
       return addConnectCorsHeaders(
         new Response(JSON.stringify({ error: 'sessionToken is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
         origin, partner.allowedDomains,
@@ -853,6 +881,7 @@ http.route({
     };
     const eventType = EVENT_MAP[(body.event ?? '').toLowerCase()];
     if (!eventType) {
+      console.error(`[CONNECT] POST /api/v1/track invalid event: "${body.event}", partner: ${partner.name}`);
       return addConnectCorsHeaders(
         new Response(JSON.stringify({ error: 'event must be "added_to_cart" or "purchased"' }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
         origin, partner.allowedDomains,
@@ -861,6 +890,7 @@ http.route({
 
     const session = await ctx.runQuery(internal.connect.queries.getSessionByToken, { sessionToken: body.sessionToken });
     if (!session) {
+      console.error(`[CONNECT] POST /api/v1/track session not found: ${body.sessionToken}, partner: ${partner.name}`);
       return addConnectCorsHeaders(
         new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } }),
         origin, partner.allowedDomains,
@@ -869,6 +899,7 @@ http.route({
 
     // Ensure this session belongs to the authenticated partner
     if (session.partnerId !== partner._id) {
+      console.error(`[CONNECT] POST /api/v1/track session ownership mismatch: ${body.sessionToken}, partner: ${partner.name}`);
       return addConnectCorsHeaders(
         new Response(JSON.stringify({ error: 'Session does not belong to this partner' }), { status: 403, headers: { 'Content-Type': 'application/json' } }),
         origin, partner.allowedDomains,
@@ -886,6 +917,7 @@ http.route({
       trackingId: body.trackingId,
     });
 
+    console.log(`[CONNECT] POST /api/v1/track: ${eventType}, session=${body.sessionToken}, partner=${partner.name}${body.itemValue != null ? `, value=${body.itemValue} ${body.currency ?? 'KES'}` : ''}`);
     return addConnectCorsHeaders(
       new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
       origin, partner.allowedDomains,
