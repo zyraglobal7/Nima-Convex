@@ -620,6 +620,8 @@ export const getMyRecentUsageLogs = query({
         v.literal('tryon_generated'),
         v.literal('tryon_failed'),
         v.literal('user_converted'),
+        v.literal('item_added_to_cart'),
+        v.literal('item_purchased'),
       ),
       wasAuthenticated: v.boolean(),
       generationTimeMs: v.optional(v.number()),
@@ -628,7 +630,7 @@ export const getMyRecentUsageLogs = query({
   ),
   handler: async (ctx: QueryCtx): Promise<Array<{
     _id: Id<'api_usage_logs'>;
-    eventType: 'session_created' | 'photo_uploaded' | 'tryon_generated' | 'tryon_failed' | 'user_converted';
+    eventType: 'session_created' | 'photo_uploaded' | 'tryon_generated' | 'tryon_failed' | 'user_converted' | 'item_added_to_cart' | 'item_purchased';
     wasAuthenticated: boolean;
     generationTimeMs?: number;
     createdAt: number;
