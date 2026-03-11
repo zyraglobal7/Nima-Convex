@@ -625,6 +625,9 @@ export const getMyRecentUsageLogs = query({
       ),
       wasAuthenticated: v.boolean(),
       generationTimeMs: v.optional(v.number()),
+      itemValue: v.optional(v.number()),
+      currency: v.optional(v.string()),
+      trackingId: v.optional(v.string()),
       createdAt: v.number(),
     })
   ),
@@ -633,6 +636,9 @@ export const getMyRecentUsageLogs = query({
     eventType: 'session_created' | 'photo_uploaded' | 'tryon_generated' | 'tryon_failed' | 'user_converted' | 'item_added_to_cart' | 'item_purchased';
     wasAuthenticated: boolean;
     generationTimeMs?: number;
+    itemValue?: number;
+    currency?: string;
+    trackingId?: string;
     createdAt: number;
   }>> => {
     const identity = await ctx.auth.getUserIdentity();
@@ -667,6 +673,9 @@ export const getMyRecentUsageLogs = query({
       eventType: l.eventType,
       wasAuthenticated: l.wasAuthenticated,
       generationTimeMs: l.generationTimeMs,
+      itemValue: l.itemValue,
+      currency: l.currency,
+      trackingId: l.trackingId,
       createdAt: l.createdAt,
     }));
   },
