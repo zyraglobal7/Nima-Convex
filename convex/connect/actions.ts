@@ -120,6 +120,7 @@ export const generateConnectTryOn = internalAction({
     | { success: false; error: string }
   > => {
     const startTime = Date.now();
+    console.log(`[CONNECT_TRYON] Starting generation for session=${args.sessionToken}`);
 
     // Mark as processing
     await ctx.runMutation(internal.connect.mutations.updateSessionStatus, {
@@ -132,6 +133,7 @@ export const generateConnectTryOn = internalAction({
     });
 
     if (!session) {
+      console.error(`[CONNECT_TRYON] Session not found: ${args.sessionToken}`);
       return { success: false as const, error: 'Session not found' };
     }
 
@@ -164,6 +166,7 @@ export const generateConnectTryOn = internalAction({
         });
         if (primaryImage?.url) {
           userImage = await fetchImage(primaryImage.url);
+          console.log(`[CONNECT_TRYON] Using authenticated user photo, session=${args.sessionToken}`);
         }
       }
 
@@ -171,6 +174,7 @@ export const generateConnectTryOn = internalAction({
         const guestImageUrl = await ctx.storage.getUrl(session.guestImageStorageId);
         if (guestImageUrl) {
           userImage = await fetchImage(guestImageUrl);
+          console.log(`[CONNECT_TRYON] Using guest upload photo, session=${args.sessionToken}`);
         }
       }
 
@@ -303,6 +307,7 @@ Important:
           count: 1,
         });
         if (!creditResult.success) {
+          console.error(`[CONNECT_TRYON] Insufficient credits for user=${session.nimaUserId}, session=${args.sessionToken}`);
           await ctx.runMutation(internal.connect.mutations.updateSessionStatus, {
             sessionToken: args.sessionToken,
             status: 'failed',
@@ -310,6 +315,7 @@ Important:
           });
           return { success: false as const, error: 'insufficient_credits' };
         }
+        console.log(`[CONNECT_TRYON] Credit deducted for user=${session.nimaUserId}, session=${args.sessionToken}`);
       }
 
       // For guest sessions: increment try-on count (gate fires at >= 2)
@@ -339,6 +345,7 @@ Important:
         generationTimeMs,
       });
 
+      console.log(`[CONNECT_TRYON] Success: session=${args.sessionToken}, generationTimeMs=${generationTimeMs}`);
       const resultImageUrl = await ctx.storage.getUrl(resultStorageId);
       return { success: true as const, resultImageUrl: resultImageUrl ?? '' };
     } catch (error) {

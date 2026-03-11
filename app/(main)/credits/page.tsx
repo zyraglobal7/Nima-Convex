@@ -203,19 +203,27 @@ function PaymentDialog({
     purchaseId ? { purchaseId } : 'skip',
   );
 
-  // React to status changes
+  // React to status changes.
+  // Always apply a backend `completed` state — even if the local 60s timeout already
+  // set the UI to `failed`. This prevents a race where the M-Pesa callback arrives
+  // slightly after the timeout, which would otherwise leave the user seeing failure
+  // while their credits were actually charged and added.
   useEffect(() => {
-    if (!purchaseStatus || paymentState !== 'pending') return;
+    if (!purchaseStatus) return;
     if (purchaseStatus.status === 'completed') {
+      // Override any local state (including post-timeout `failed`)
       setPaymentState('success');
       onSuccess();
-    } else if (purchaseStatus.status === 'failed') {
+    } else if (purchaseStatus.status === 'failed' && paymentState === 'pending') {
+      // Only apply backend failures while we're still in pending — avoid
+      // overwriting a timeout message with a redundant one.
       setPaymentState('failed');
       setErrorMessage(purchaseStatus.failureReason ?? 'Payment failed. Please try again.');
     }
   }, [purchaseStatus, paymentState, onSuccess]);
 
-  // 60-second timeout
+  // 60-second local timeout — sets UI to failed so the user can retry,
+  // but the effect above will correct this if the webhook arrives late.
   useEffect(() => {
     if (paymentState !== 'pending') return;
     const t = setTimeout(() => {
