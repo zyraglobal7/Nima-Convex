@@ -1,17 +1,20 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { Sparkles, User, ArrowLeft } from 'lucide-react';
+import { Sparkles, User, ArrowLeft, Zap } from 'lucide-react';
 import { MessagesIcon } from '@/components/messages/MessagesIcon';
 import { CartIcon } from '@/components/cart/CartIcon';
 import { ActivityIcon } from '@/components/activity/ActivityIcon';
 import { ThemeToggle } from '@/components/theme-toggle';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 
 export function Navigation() {
   const pathname = usePathname();
   const router = useRouter();
+  const credits = useQuery(api.credits.queries.getUserCredits);
 
   const isActive = (path: string) => pathname?.startsWith(path);
 
@@ -106,6 +109,20 @@ export function Navigation() {
             {/* Right actions */}
             <div className="flex items-center gap-1 md:gap-2">
               <ThemeToggle />
+              {credits !== undefined && (
+                <Link
+                  href="/credits"
+                  className={cn(
+                    'flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors border',
+                    isActive('/credits')
+                      ? 'bg-primary/10 text-primary border-primary/30'
+                      : 'bg-surface text-text-secondary border-border hover:text-text-primary hover:border-primary/30',
+                  )}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  {credits.total}
+                </Link>
+              )}
               <ActivityIcon />
               <MessagesIcon />
               <CartIcon />

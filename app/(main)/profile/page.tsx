@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion} from 'framer-motion';
-import { Sparkles, User, Camera, LogOut, ChevronRight, Save, Loader2, Users, ImageIcon, Heart, Check, Pencil, X, Moon, Sun, Trash2, Settings, Mail, Lock } from 'lucide-react';
+import { Sparkles, User, Camera, LogOut, ChevronRight, Save, Loader2, Users, ImageIcon, Heart, Check, Pencil, X, Moon, Sun, Trash2, Settings, Mail, Lock, Zap } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery, useMutation } from 'convex/react';
@@ -317,6 +317,25 @@ export default function ProfilePage() {
                     <p className="font-medium text-foreground">Discarded Looks</p>
                     <p className="text-xs text-muted-foreground">
                       View and restore discarded looks
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+              </Link>
+
+              {/* Credits */}
+              <Link
+                href="/credits"
+                className="flex items-center justify-between p-4 bg-surface rounded-xl border border-border hover:bg-surface-alt transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-5 h-5 flex items-center justify-center">
+                    <Zap className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Credits</p>
+                    <p className="text-xs text-muted-foreground">
+                      Buy credits for try-ons and looks
                     </p>
                   </div>
                 </div>
