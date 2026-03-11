@@ -504,6 +504,7 @@ http.route({
       productCategory?: string;
       guestFingerprint?: string;
       externalProductUrl?: string;
+      trackingId?: string;
     };
     try {
       body = await request.json();
@@ -542,6 +543,7 @@ http.route({
       productName: body.productName,
       productCategory: normalizedCategory,
       guestFingerprint: body.guestFingerprint,
+      trackingId: body.trackingId,
     });
 
     // Log session_created event
@@ -783,6 +785,116 @@ http.route({
 
 http.route({
   path: '/api/v1/usage',
+  method: 'OPTIONS',
+  handler: httpAction(async (_, request) => {
+    const origin = request.headers.get('Origin');
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': origin ?? '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400',
+      },
+    });
+  }),
+});
+
+/**
+ * POST /api/v1/track
+ * Partners call this to report a conversion event after a try-on:
+ *   - item_added_to_cart: user added the tried-on item to their cart
+ *   - item_purchased: user completed a purchase of the tried-on item
+ *
+ * Body: { sessionToken, event: 'added_to_cart' | 'purchased', itemValue?: number, currency?: string, trackingId?: string }
+ */
+http.route({
+  path: '/api/v1/track',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const origin = request.headers.get('Origin');
+    const auth = await validateConnectApiKey(ctx, request);
+    if ('error' in auth) {
+      return new Response(JSON.stringify({ error: auth.error }), {
+        status: auth.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const { partner } = auth;
+
+    let body: {
+      sessionToken?: string;
+      event?: string;
+      itemValue?: number;
+      currency?: string;
+      trackingId?: string;
+    };
+    try {
+      body = await request.json();
+    } catch {
+      return addConnectCorsHeaders(
+        new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
+        origin, partner.allowedDomains,
+      );
+    }
+
+    if (!body.sessionToken) {
+      return addConnectCorsHeaders(
+        new Response(JSON.stringify({ error: 'sessionToken is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
+        origin, partner.allowedDomains,
+      );
+    }
+
+    const EVENT_MAP: Record<string, 'item_added_to_cart' | 'item_purchased'> = {
+      added_to_cart: 'item_added_to_cart',
+      item_added_to_cart: 'item_added_to_cart',
+      purchased: 'item_purchased',
+      item_purchased: 'item_purchased',
+    };
+    const eventType = EVENT_MAP[(body.event ?? '').toLowerCase()];
+    if (!eventType) {
+      return addConnectCorsHeaders(
+        new Response(JSON.stringify({ error: 'event must be "added_to_cart" or "purchased"' }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
+        origin, partner.allowedDomains,
+      );
+    }
+
+    const session = await ctx.runQuery(internal.connect.queries.getSessionByToken, { sessionToken: body.sessionToken });
+    if (!session) {
+      return addConnectCorsHeaders(
+        new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } }),
+        origin, partner.allowedDomains,
+      );
+    }
+
+    // Ensure this session belongs to the authenticated partner
+    if (session.partnerId !== partner._id) {
+      return addConnectCorsHeaders(
+        new Response(JSON.stringify({ error: 'Session does not belong to this partner' }), { status: 403, headers: { 'Content-Type': 'application/json' } }),
+        origin, partner.allowedDomains,
+      );
+    }
+
+    await ctx.runMutation(internal.connect.mutations.logUsageEvent, {
+      partnerId: partner._id,
+      sessionId: session._id,
+      eventType,
+      externalProductId: session.externalProductId,
+      wasAuthenticated: session.nimaUserId !== undefined,
+      itemValue: typeof body.itemValue === 'number' ? body.itemValue : undefined,
+      currency: body.currency,
+      trackingId: body.trackingId,
+    });
+
+    return addConnectCorsHeaders(
+      new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      origin, partner.allowedDomains,
+    );
+  }),
+});
+
+http.route({
+  path: '/api/v1/track',
   method: 'OPTIONS',
   handler: httpAction(async (_, request) => {
     const origin = request.headers.get('Origin');

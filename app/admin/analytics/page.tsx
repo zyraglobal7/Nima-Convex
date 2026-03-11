@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Wand2,
   TrendingUp,
+  Link2,
 } from 'lucide-react';
 
 import { api } from '@/convex/_generated/api';
@@ -110,6 +111,14 @@ export default function AnalyticsDashboard() {
         href="/admin/analytics/users"
         trend={summary.users.trend}
         trendDirection={summary.users.activeInPeriod > 0 ? 'up' : 'neutral'}
+      />
+
+      <MetricCard
+        title="Connect Conversions"
+        value="—"
+        subtitle="Try-on → cart → purchase"
+        icon={Link2}
+        href="/admin/analytics/connect"
       />
     </div>
   );

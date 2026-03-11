@@ -27,6 +27,7 @@ export const createSession = internalMutation({
       )
     ),
     guestFingerprint: v.optional(v.string()),
+    trackingId: v.optional(v.string()),
   },
   returns: v.id('api_sessions'),
   handler: async (
@@ -40,6 +41,7 @@ export const createSession = internalMutation({
       productName?: string;
       productCategory?: 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear';
       guestFingerprint?: string;
+      trackingId?: string;
     }
   ): Promise<Id<'api_sessions'>> => {
     const now = Date.now();
@@ -52,6 +54,7 @@ export const createSession = internalMutation({
       productName: args.productName,
       productCategory: args.productCategory,
       guestFingerprint: args.guestFingerprint,
+      trackingId: args.trackingId,
       guestTryOnUsed: false,
       status: 'photo_needed',
       expiresAt: now + 60 * 60 * 1000, // 1 hour
@@ -190,10 +193,15 @@ export const logUsageEvent = internalMutation({
       v.literal('tryon_generated'),
       v.literal('tryon_failed'),
       v.literal('user_converted'),
+      v.literal('item_added_to_cart'),
+      v.literal('item_purchased'),
     ),
     externalProductId: v.optional(v.string()),
     wasAuthenticated: v.boolean(),
     generationTimeMs: v.optional(v.number()),
+    itemValue: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    trackingId: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (
@@ -201,10 +209,13 @@ export const logUsageEvent = internalMutation({
     args: {
       partnerId: Id<'api_partners'>;
       sessionId: Id<'api_sessions'>;
-      eventType: 'session_created' | 'photo_uploaded' | 'tryon_generated' | 'tryon_failed' | 'user_converted';
+      eventType: 'session_created' | 'photo_uploaded' | 'tryon_generated' | 'tryon_failed' | 'user_converted' | 'item_added_to_cart' | 'item_purchased';
       externalProductId?: string;
       wasAuthenticated: boolean;
       generationTimeMs?: number;
+      itemValue?: number;
+      currency?: string;
+      trackingId?: string;
     }
   ): Promise<null> => {
     await ctx.db.insert('api_usage_logs', {
@@ -214,6 +225,9 @@ export const logUsageEvent = internalMutation({
       externalProductId: args.externalProductId,
       wasAuthenticated: args.wasAuthenticated,
       generationTimeMs: args.generationTimeMs,
+      itemValue: args.itemValue,
+      currency: args.currency,
+      trackingId: args.trackingId,
       createdAt: Date.now(),
     });
     return null;
