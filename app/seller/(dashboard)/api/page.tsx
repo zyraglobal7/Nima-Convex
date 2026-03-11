@@ -254,7 +254,7 @@ export default function SellerApiPage() {
 </button>`;
 
   const apiSnippet = `// Create a session (Node.js / server-side)
-const res = await fetch('https://convex.shopnima.ai/api/v1/sessions', {
+const res = await fetch('https://rare-guineapig-47.convex.site/api/v1/sessions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -274,7 +274,7 @@ const { sessionToken, widgetUrl } = await res.json();
 // Call this from your checkout/cart backend — keep the sessionToken from step 1.
 
 // When the shopper adds to cart:
-await fetch('https://convex.shopnima.ai/api/v1/track', {
+await fetch('https://rare-guineapig-47.convex.site/api/v1/track', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -290,7 +290,7 @@ await fetch('https://convex.shopnima.ai/api/v1/track', {
 });
 
 // When the shopper completes purchase:
-await fetch('https://convex.shopnima.ai/api/v1/track', {
+await fetch('https://rare-guineapig-47.convex.site/api/v1/track', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
