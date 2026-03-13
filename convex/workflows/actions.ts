@@ -31,7 +31,7 @@ const FALLBACK_IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
  * when the primary model returns a 503 (high demand / unavailable) error.
  */
 async function generateContentWithFallback(
-  params: Parameters<typeof genAI.models.generateContent>[0]
+  params: Omit<Parameters<typeof genAI.models.generateContent>[0], 'model'>
 ): ReturnType<typeof genAI.models.generateContent> {
   try {
     return await genAI.models.generateContent({ ...params, model: PRIMARY_IMAGE_MODEL });
