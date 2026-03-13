@@ -88,6 +88,7 @@ export const getCurrentSeller = query({
       updatedAt: v.number(),
       logoUrl: v.optional(v.string()),
       bannerUrl: v.optional(v.string()),
+      tryOnCredits: v.optional(v.number()),
     }),
     v.null()
   ),
