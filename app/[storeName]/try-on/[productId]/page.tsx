@@ -167,7 +167,7 @@ export default function SellerTryOnPage({ params }: PageProps) {
       const uploadUrl = await generateUploadUrl({ sellerId: sellerAndItem.seller._id });
 
       const response = await fetch(uploadUrl, {
-        method: 'PUT',
+        method: 'POST',
         body: capturedBlob,
         headers: { 'Content-Type': 'image/jpeg' },
       });
