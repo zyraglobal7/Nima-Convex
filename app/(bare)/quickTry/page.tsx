@@ -7,7 +7,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Camera, SwitchCamera, X, Zap, RotateCcw, Download, ArrowLeft } from 'lucide-react';
+import { Camera, SwitchCamera, X, Zap, RotateCcw, BookmarkPlus, ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -27,8 +27,12 @@ export default function QuickTryPage() {
   const [quickTryOnId, setQuickTryOnId] = useState<Id<'quick_try_ons'> | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedToLookbook, setSavedToLookbook] = useState(false);
+
   const generateUploadUrl = useMutation(api.quickTryOns.mutations.generateQuickCaptureUploadUrl);
   const createQuickTryOn = useMutation(api.quickTryOns.mutations.createQuickTryOn);
+  const saveToLookbook = useMutation(api.quickTryOns.mutations.saveQuickTryOnToLookbook);
   const credits = useQuery(api.credits.queries.getUserCredits);
 
   // Poll for try-on status
@@ -186,16 +190,23 @@ export default function QuickTryPage() {
     setQuickTryOnId(null);
     setCapturedBlob(null);
     setCapturedPreview(null);
+    setSavedToLookbook(false);
     setPageState('camera');
     await startCamera(facingMode);
   };
 
-  const handleDownload = () => {
-    if (!tryOnResult?.resultUrl) return;
-    const a = document.createElement('a');
-    a.href = tryOnResult.resultUrl;
-    a.download = 'nima-tryon.png';
-    a.click();
+  const handleSaveToLookbook = async () => {
+    if (!quickTryOnId || isSaving) return;
+    setIsSaving(true);
+    try {
+      await saveToLookbook({ quickTryOnId });
+      setSavedToLookbook(true);
+      toast.success('Saved to Tried On Looks');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -372,11 +383,12 @@ export default function QuickTryPage() {
               Try Another
             </Button>
             <Button
-              onClick={handleDownload}
-              className="flex-1 bg-primary text-white hover:bg-primary/90"
+              onClick={handleSaveToLookbook}
+              disabled={isSaving || savedToLookbook}
+              className="flex-1 bg-primary text-white hover:bg-primary/90 disabled:opacity-70"
             >
-              <Download className="w-4 h-4 mr-2" />
-              Save
+              <BookmarkPlus className="w-4 h-4 mr-2" />
+              {savedToLookbook ? 'Saved!' : isSaving ? 'Saving...' : 'Save'}
             </Button>
           </div>
         )}

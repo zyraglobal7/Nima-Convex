@@ -2,6 +2,7 @@ import { mutation, internalMutation, MutationCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import { internal } from '../_generated/api';
 import type { Id } from '../_generated/dataModel';
+import { generateShareToken, generatePublicId } from '../types';
 
 /**
  * Generate an upload URL for a quick try-on item capture
@@ -143,5 +144,128 @@ export const updateQuickTryOnStatus = internalMutation({
 
     await ctx.db.patch(args.quickTryOnId, updates);
     return null;
+  },
+});
+
+/**
+ * Save a quick try-on result to a "Tried On Looks" lookbook
+ */
+export const saveQuickTryOnToLookbook = mutation({
+  args: {
+    quickTryOnId: v.id('quick_try_ons'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    lookbookId: v.optional(v.id('lookbooks')),
+    message: v.string(),
+  }),
+  handler: async (
+    ctx: MutationCtx,
+    args: { quickTryOnId: Id<'quick_try_ons'> }
+  ): Promise<{
+    success: boolean;
+    lookbookId?: Id<'lookbooks'>;
+    message: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Not authenticated');
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+    if (!user) throw new Error('User not found');
+
+    const tryOn = await ctx.db.get(args.quickTryOnId);
+    if (!tryOn) throw new Error('Try-on not found');
+    if (tryOn.userId !== user._id) throw new Error('Not authorized');
+    if (tryOn.status !== 'completed' || !tryOn.resultStorageId) {
+      throw new Error('Try-on is not completed');
+    }
+
+    // Find or create "Tried On Looks" lookbook
+    let lookbook = await ctx.db
+      .query('lookbooks')
+      .withIndex('by_user', (q) => q.eq('userId', user._id))
+      .filter((q) => q.eq(q.field('name'), 'Tried On Looks'))
+      .first();
+
+    if (!lookbook) {
+      const now = Date.now();
+      const lookbookId = await ctx.db.insert('lookbooks', {
+        userId: user._id,
+        name: 'Tried On Looks',
+        description: 'My virtual try-on history',
+        isPublic: false,
+        shareToken: generateShareToken(),
+        itemCount: 0,
+        isArchived: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      lookbook = await ctx.db.get(lookbookId);
+    }
+
+    if (!lookbook) throw new Error('Failed to create lookbook');
+
+    const now = Date.now();
+
+    // Create a Look to represent this try-on
+    const lookId = await ctx.db.insert('looks', {
+      publicId: generatePublicId('look'),
+      itemIds: [],
+      totalPrice: 0,
+      currency: 'KES',
+      name: 'Quick Try-On',
+      styleTags: [],
+      targetGender: 'unisex' as const,
+      isActive: true,
+      isFeatured: false,
+      isPublic: false,
+      sharedWithFriends: false,
+      viewCount: 0,
+      saveCount: 1,
+      generationStatus: 'completed',
+      status: 'saved',
+      createdBy: 'user',
+      creatorUserId: user._id,
+      creationSource: 'apparel',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Link try-on image to the look
+    await ctx.db.insert('look_images', {
+      lookId,
+      userId: user._id,
+      storageId: tryOn.resultStorageId,
+      userImageId: tryOn.userImageId,
+      status: 'completed',
+      generationProvider: 'google-gemini',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Check not already saved (belt-and-suspenders)
+    const existing = await ctx.db
+      .query('lookbook_items')
+      .withIndex('by_lookbook', (q) => q.eq('lookbookId', lookbook!._id))
+      .collect();
+
+    await ctx.db.insert('lookbook_items', {
+      lookbookId: lookbook._id,
+      userId: user._id,
+      itemType: 'look',
+      lookId,
+      sortOrder: existing.length,
+      createdAt: now,
+    });
+
+    await ctx.db.patch(lookbook._id, {
+      itemCount: lookbook.itemCount + 1,
+      updatedAt: now,
+    });
+
+    return { success: true, lookbookId: lookbook._id, message: 'Saved to Tried On Looks' };
   },
 });
