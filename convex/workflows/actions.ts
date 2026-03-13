@@ -23,6 +23,27 @@ const openai = createOpenAI({
 // Initialize Google GenAI for image generation (gemini-3-pro-image-preview)
 const genAI = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_STUDIO_KEY });
 
+const PRIMARY_IMAGE_MODEL = 'gemini-3-pro-image-preview';
+const FALLBACK_IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
+
+/**
+ * Wraps genAI.models.generateContent with automatic fallback to FALLBACK_IMAGE_MODEL
+ * when the primary model returns a 503 (high demand / unavailable) error.
+ */
+async function generateContentWithFallback(
+  params: Parameters<typeof genAI.models.generateContent>[0]
+): ReturnType<typeof genAI.models.generateContent> {
+  try {
+    return await genAI.models.generateContent({ ...params, model: PRIMARY_IMAGE_MODEL });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const is503 = msg.includes('503') || msg.includes('UNAVAILABLE') || msg.includes('high demand');
+    if (!is503) throw err;
+    console.warn(`[IMAGE_GEN] Primary model unavailable (503), falling back to ${FALLBACK_IMAGE_MODEL}`);
+    return genAI.models.generateContent({ ...params, model: FALLBACK_IMAGE_MODEL });
+  }
+}
+
 // ============================================
 // TYPES
 // ============================================
@@ -715,9 +736,8 @@ Important:
 
       console.log(`[WORKFLOW:ONBOARDING] Calling Gemini image generation with ${contents.length - 1} reference images...`);
 
-      // Call Google GenAI with gemini-3-pro-image-preview for high-quality image generation
-      const response = await genAI.models.generateContent({
-        model: 'gemini-3-pro-image-preview',
+      // Call Google GenAI with primary model, falling back on 503
+      const response = await generateContentWithFallback({
         contents: contents,
         config: {
           responseModalities: ['TEXT', 'IMAGE'],
@@ -743,11 +763,10 @@ Important:
         console.warn(`[WORKFLOW:ONBOARDING] No image from first attempt, trying simpler approach...`);
         
         // Try with just text prompt (the model might generate based on description)
-        const simpleResponse = await genAI.models.generateContent({
-          model: "gemini-3-pro-image-preview", 
+        const simpleResponse = await generateContentWithFallback({
           contents: [
             {
-              text: `Generate a professional fashion photograph of THIS PERSON (shown in the first reference image) wearing: ${outfitDescription}. 
+              text: `Generate a professional fashion photograph of THIS PERSON (shown in the first reference image) wearing: ${outfitDescription}.
 Make it look like a high-end fashion editorial photo with clean background and natural lighting.
 Keep the person's identity, face, and body type EXACTLY as shown in the reference image.`,
             },
@@ -986,9 +1005,8 @@ Important:
 
       console.log(`[WORKFLOW:ITEM_TRYON] Calling Gemini image generation...`);
 
-      // Call Google GenAI
-      const response = await genAI.models.generateContent({
-        model: 'gemini-3-pro-image-preview',
+      // Call Google GenAI with primary model, falling back on 503
+      const response = await generateContentWithFallback({
         contents: contents,
         config: {
           responseModalities: ['TEXT', 'IMAGE'],
@@ -1013,11 +1031,10 @@ Important:
       if (!generatedImageBase64) {
         console.warn(`[WORKFLOW:ITEM_TRYON] No image from first attempt, trying simpler approach...`);
 
-        const simpleResponse = await genAI.models.generateContent({
-          model: 'gemini-3-pro-image-preview',
+        const simpleResponse = await generateContentWithFallback({
           contents: [
             {
-              text: `Generate a professional fashion photograph of a person wearing: ${itemDescription}. 
+              text: `Generate a professional fashion photograph of a person wearing: ${itemDescription}.
 Make it look like a high-end fashion editorial photo with clean background and natural lighting.
 Show ONLY this single item prominently.`,
             },
@@ -1142,9 +1159,8 @@ export const generateQuickTryOnImage = internalAction({
           .then((b) => Buffer.from(b).toString('base64')),
       ]);
 
-      // Generate the try-on image
-      const response = await genAI.models.generateContent({
-        model: 'gemini-3-pro-image-preview',
+      // Generate the try-on image with primary model, falling back on 503
+      const response = await generateContentWithFallback({
         contents: [
           {
             text: `Virtual try-on: Show the person from Reference Image 1 wearing the clothing item captured in Reference Image 2. Keep the person's face, body, and identity exactly as shown. Professional fashion photo, clean background.`,
@@ -1270,8 +1286,7 @@ export const generateSellerTryOnImage = internalAction({
         contents.push({ inlineData: { mimeType: 'image/jpeg', data: itemImageBase64 } });
       }
 
-      const response = await genAI.models.generateContent({
-        model: 'gemini-3-pro-image-preview',
+      const response = await generateContentWithFallback({
         contents,
         config: { responseModalities: ['TEXT', 'IMAGE'] },
       });
