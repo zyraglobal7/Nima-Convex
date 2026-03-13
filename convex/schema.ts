@@ -758,6 +758,7 @@ export default defineSchema({
 
     // Status
     isActive: v.boolean(),
+    tryOnCredits: v.optional(v.number()),
 
     // Timestamps
     createdAt: v.number(),
@@ -1200,5 +1201,57 @@ export default defineSchema({
     .index('by_partner', ['partnerId'])
     .index('by_partner_and_created', ['partnerId', 'createdAt'])
     .index('by_event_type', ['eventType']),
+
+  // ============================================
+  // QUICK TRY-ONS (Camera-captured item try-on)
+  // ============================================
+
+  /**
+   * quick_try_ons - Try-on using camera-captured item image
+   * User captures an item they see, tries it on using their primary profile image
+   */
+  quick_try_ons: defineTable({
+    userId: v.id('users'),
+    userImageId: v.id('user_images'), // User's primary profile image
+    capturedItemStorageId: v.id('_storage'), // Camera-captured item photo
+    resultStorageId: v.optional(v.id('_storage')),
+    status: v.union(
+      v.literal('pending'),
+      v.literal('processing'),
+      v.literal('completed'),
+      v.literal('failed')
+    ),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_status', ['status']),
+
+  // ============================================
+  // SELLER TRY-ONS (Customer try-on via seller link)
+  // ============================================
+
+  /**
+   * seller_try_ons - Customer try-ons triggered by seller try-on links
+   * Credits are deducted from the seller's tryOnCredits balance
+   */
+  seller_try_ons: defineTable({
+    sellerId: v.id('sellers'),
+    itemId: v.id('items'),
+    customerImageStorageId: v.id('_storage'), // Customer's uploaded photo
+    resultStorageId: v.optional(v.id('_storage')),
+    status: v.union(
+      v.literal('pending'),
+      v.literal('processing'),
+      v.literal('completed'),
+      v.literal('failed')
+    ),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_seller', ['sellerId'])
+    .index('by_status', ['status']),
 
 });
