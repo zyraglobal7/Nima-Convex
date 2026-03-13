@@ -34,6 +34,8 @@ export default authkitMiddleware({
       // Nima Connect widget (unauthenticated popup)
       '/connect',
       '/connect/(.*)',
+      // Seller try-on pages (public, customer-facing)
+      '/(.*)/try-on/(.*)',
     ],
   },
 });

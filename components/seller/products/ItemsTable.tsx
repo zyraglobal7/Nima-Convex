@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { MoreHorizontal, Search, Eye, EyeOff, Pencil, Trash2, ChevronLeft, ChevronRight, Package } from 'lucide-react';
+import { MoreHorizontal, Search, Eye, EyeOff, Pencil, Trash2, ChevronLeft, ChevronRight, Package, Link2, Copy, Check, ExternalLink } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -69,6 +69,7 @@ interface ItemsTableProps {
 }
 
 export function ItemsTable({ onEdit }: ItemsTableProps) {
+  const seller = useQuery(api.sellers.queries.getCurrentSeller);
   const [searchQuery, setSearchQuery] = useState('');
   // Note: Current seller query doesn't support category/gender filter yet in backend,
   // so we might these filters might be client-side filtered or we need to update the query.
@@ -88,6 +89,19 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<Id<'items'> | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const getTryOnLink = (productId: Id<'items'>) =>
+    seller ? `${window.location.origin}/${seller.slug}/try-on/${productId}` : null;
+
+  const copyLink = async (productId: Id<'items'>, label = '') => {
+    const url = getTryOnLink(productId);
+    if (!url) return;
+    await navigator.clipboard.writeText(url);
+    setCopiedId(productId);
+    toast.success(`Try-on link copied${label ? ` — ${label}` : ''}!`);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   const itemsResult = useQuery(api.sellers.queries.getSellerProducts, {
     isActive: activeFilter === 'all' ? undefined : activeFilter === 'active',
@@ -282,13 +296,14 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
               <TableHead>Category</TableHead>
               <TableHead>Price</TableHead>
               <TableHead>Status</TableHead>
+              {seller && <TableHead className="w-40">Try-On Link</TableHead>}
               <TableHead className="w-16">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center">
+                <TableCell colSpan={seller ? 7 : 6} className="h-32 text-center">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <Package className="h-8 w-8" />
                     <p>No products found</p>
@@ -335,6 +350,33 @@ export function ItemsTable({ onEdit }: ItemsTableProps) {
                       {product.isActive ? 'Active' : 'Inactive'}
                     </Badge>
                   </TableCell>
+                  {seller && (
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => copyLink(product._id, product.name)}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border border-border hover:border-primary/40 hover:bg-primary/5 transition-colors text-muted-foreground hover:text-primary"
+                          title="Copy try-on link"
+                        >
+                          {copiedId === product._id ? (
+                            <Check className="h-3 w-3 text-green-500" />
+                          ) : (
+                            <Link2 className="h-3 w-3" />
+                          )}
+                          {copiedId === product._id ? 'Copied!' : 'Copy Link'}
+                        </button>
+                        <a
+                          href={getTryOnLink(product._id) ?? '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1 rounded text-muted-foreground hover:text-primary transition-colors"
+                          title="Preview try-on page"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      </div>
+                    </TableCell>
+                  )}
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
