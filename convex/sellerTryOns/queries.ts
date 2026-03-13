@@ -178,6 +178,124 @@ export const getSellerAndItemForTryOn = query({
 });
 
 /**
+ * Get seller with multiple items for multi-product try-on page (public, no auth)
+ */
+export const getSellerWithItemsForTryOn = query({
+  args: {
+    sellerSlug: v.string(),
+    itemIds: v.array(v.id('items')),
+  },
+  returns: v.union(
+    v.object({
+      seller: v.object({
+        _id: v.id('sellers'),
+        shopName: v.string(),
+        slug: v.string(),
+        logoUrl: v.union(v.string(), v.null()),
+        tryOnCredits: v.number(),
+      }),
+      items: v.array(
+        v.object({
+          _id: v.id('items'),
+          name: v.string(),
+          brand: v.optional(v.string()),
+          price: v.number(),
+          currency: v.string(),
+          imageUrl: v.union(v.string(), v.null()),
+          category: v.string(),
+        })
+      ),
+    }),
+    v.null()
+  ),
+  handler: async (
+    ctx: QueryCtx,
+    args: { sellerSlug: string; itemIds: Id<'items'>[] }
+  ): Promise<{
+    seller: {
+      _id: Id<'sellers'>;
+      shopName: string;
+      slug: string;
+      logoUrl: string | null;
+      tryOnCredits: number;
+    };
+    items: {
+      _id: Id<'items'>;
+      name: string;
+      brand?: string;
+      price: number;
+      currency: string;
+      imageUrl: string | null;
+      category: string;
+    }[];
+  } | null> => {
+    const seller = await ctx.db
+      .query('sellers')
+      .withIndex('by_slug', (q) => q.eq('slug', args.sellerSlug))
+      .unique();
+
+    if (!seller || !seller.isActive) return null;
+
+    let logoUrl: string | null = null;
+    if (seller.logoStorageId) {
+      logoUrl = await ctx.storage.getUrl(seller.logoStorageId);
+    }
+
+    const items: {
+      _id: Id<'items'>;
+      name: string;
+      brand?: string;
+      price: number;
+      currency: string;
+      imageUrl: string | null;
+      category: string;
+    }[] = [];
+
+    for (const itemId of args.itemIds.slice(0, 50)) {
+      const item = await ctx.db.get(itemId);
+      if (!item || !item.isActive || item.sellerId !== seller._id) continue;
+
+      const primaryImage = await ctx.db
+        .query('item_images')
+        .withIndex('by_item_and_primary', (q) => q.eq('itemId', item._id).eq('isPrimary', true))
+        .unique();
+
+      let imageUrl: string | null = null;
+      if (primaryImage) {
+        if (primaryImage.storageId) {
+          imageUrl = await ctx.storage.getUrl(primaryImage.storageId);
+        } else if (primaryImage.externalUrl) {
+          imageUrl = primaryImage.externalUrl;
+        }
+      }
+
+      items.push({
+        _id: item._id,
+        name: item.name,
+        brand: item.brand,
+        price: item.price,
+        currency: item.currency,
+        imageUrl,
+        category: item.category,
+      });
+    }
+
+    if (items.length === 0) return null;
+
+    return {
+      seller: {
+        _id: seller._id,
+        shopName: seller.shopName,
+        slug: seller.slug,
+        logoUrl,
+        tryOnCredits: seller.tryOnCredits ?? 0,
+      },
+      items,
+    };
+  },
+});
+
+/**
  * Internal query to get seller try-on record (for workflow)
  */
 export const getSellerTryOnInternal = internalQuery({
