@@ -137,6 +137,7 @@ export const createSeller = mutation({
       contactPhone: args.contactPhone,
       verificationStatus: 'pending',
       isActive: true,
+      tryOnCredits: 25,
       createdAt: now,
       updatedAt: now,
     });

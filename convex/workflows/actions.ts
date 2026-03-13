@@ -1083,3 +1083,237 @@ Show ONLY this single item prominently.`,
     }
   },
 });
+
+/**
+ * Generate a try-on image for QuickTry (camera-captured item)
+ * User's primary image + camera-captured item photo
+ */
+export const generateQuickTryOnImage = internalAction({
+  args: {
+    quickTryOnId: v.id('quick_try_ons'),
+    userId: v.id('users'),
+  },
+  returns: v.union(
+    v.object({ success: v.literal(true), storageId: v.id('_storage') }),
+    v.object({ success: v.literal(false), error: v.string() })
+  ),
+  handler: async (
+    ctx: ActionCtx,
+    args: { quickTryOnId: Id<'quick_try_ons'>; userId: Id<'users'> }
+  ): Promise<
+    | { success: true; storageId: Id<'_storage'> }
+    | { success: false; error: string }
+  > => {
+    console.log(`[QUICK_TRYON] Starting generation for ${args.quickTryOnId}`);
+
+    try {
+      // Mark as processing
+      await ctx.runMutation(internal.quickTryOns.mutations.updateQuickTryOnStatus, {
+        quickTryOnId: args.quickTryOnId,
+        status: 'processing',
+      });
+
+      // Get the quick try-on record to get image IDs
+      const tryOnRecord = await ctx.runQuery(internal.quickTryOns.queries.getQuickTryOnInternal, {
+        quickTryOnId: args.quickTryOnId,
+      });
+
+      if (!tryOnRecord) throw new Error('Quick try-on record not found');
+
+      // Get user's primary image URL
+      const userImage = await ctx.runQuery(internal.workflows.queries.getUserPrimaryImage, {
+        userId: args.userId,
+      });
+
+      if (!userImage?.url) throw new Error('User primary image not found');
+
+      // Get the captured item image URL
+      const capturedItemUrl = await ctx.storage.getUrl(tryOnRecord.capturedItemStorageId);
+      if (!capturedItemUrl) throw new Error('Captured item image not found');
+
+      console.log(`[QUICK_TRYON] Fetching images...`);
+
+      const [userImageBase64, capturedItemBase64] = await Promise.all([
+        fetch(userImage.url)
+          .then((r) => r.arrayBuffer())
+          .then((b) => Buffer.from(b).toString('base64')),
+        fetch(capturedItemUrl)
+          .then((r) => r.arrayBuffer())
+          .then((b) => Buffer.from(b).toString('base64')),
+      ]);
+
+      // Generate the try-on image
+      const response = await genAI.models.generateContent({
+        model: 'gemini-3-pro-image-preview',
+        contents: [
+          {
+            text: `Virtual try-on: Show the person from Reference Image 1 wearing the clothing item captured in Reference Image 2. Keep the person's face, body, and identity exactly as shown. Professional fashion photo, clean background.`,
+          },
+          { inlineData: { mimeType: 'image/jpeg', data: userImageBase64 } },
+          { inlineData: { mimeType: 'image/jpeg', data: capturedItemBase64 } },
+        ],
+        config: { responseModalities: ['TEXT', 'IMAGE'] },
+      });
+
+      const parts = response.candidates?.[0]?.content?.parts;
+      let generatedImageBase64: string | null = null;
+
+      if (parts) {
+        for (const part of parts) {
+          if (part.inlineData?.data) {
+            generatedImageBase64 = part.inlineData.data;
+            break;
+          }
+        }
+      }
+
+      if (!generatedImageBase64) {
+        throw new Error('Image generation failed - model returned no image');
+      }
+
+      const imageBlob = new Blob([Buffer.from(generatedImageBase64, 'base64')], { type: 'image/png' });
+      const storageId: Id<'_storage'> = await ctx.storage.store(imageBlob);
+
+      await ctx.runMutation(internal.quickTryOns.mutations.updateQuickTryOnStatus, {
+        quickTryOnId: args.quickTryOnId,
+        status: 'completed',
+        resultStorageId: storageId,
+      });
+
+      console.log(`[QUICK_TRYON] Generation complete`);
+      return { success: true, storageId };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[QUICK_TRYON] Failed:`, errorMessage);
+
+      await ctx.runMutation(internal.quickTryOns.mutations.updateQuickTryOnStatus, {
+        quickTryOnId: args.quickTryOnId,
+        status: 'failed',
+        errorMessage,
+      });
+
+      return { success: false, error: errorMessage };
+    }
+  },
+});
+
+/**
+ * Generate a try-on image for a seller try-on link
+ * Customer's uploaded photo + seller's catalog item image
+ */
+export const generateSellerTryOnImage = internalAction({
+  args: {
+    sellerTryOnId: v.id('seller_try_ons'),
+    itemId: v.id('items'),
+  },
+  returns: v.union(
+    v.object({ success: v.literal(true), storageId: v.id('_storage') }),
+    v.object({ success: v.literal(false), error: v.string() })
+  ),
+  handler: async (
+    ctx: ActionCtx,
+    args: { sellerTryOnId: Id<'seller_try_ons'>; itemId: Id<'items'> }
+  ): Promise<
+    | { success: true; storageId: Id<'_storage'> }
+    | { success: false; error: string }
+  > => {
+    console.log(`[SELLER_TRYON] Starting generation for ${args.sellerTryOnId}`);
+
+    try {
+      await ctx.runMutation(internal.sellerTryOns.mutations.updateSellerTryOnStatus, {
+        sellerTryOnId: args.sellerTryOnId,
+        status: 'processing',
+      });
+
+      // Get seller try-on record
+      const tryOnRecord = await ctx.runQuery(internal.sellerTryOns.queries.getSellerTryOnInternal, {
+        sellerTryOnId: args.sellerTryOnId,
+      });
+
+      if (!tryOnRecord) throw new Error('Seller try-on record not found');
+
+      // Get item data with primary image
+      const itemData = await ctx.runQuery(internal.workflows.queries.getItemWithPrimaryImage, {
+        itemId: args.itemId,
+      });
+
+      if (!itemData) throw new Error('Item not found');
+
+      // Get customer image URL
+      const customerImageUrl = await ctx.storage.getUrl(tryOnRecord.customerImageStorageId);
+      if (!customerImageUrl) throw new Error('Customer image not found');
+
+      console.log(`[SELLER_TRYON] Fetching images for item: ${itemData.item.name}`);
+
+      const [customerBase64, itemImageBase64] = await Promise.all([
+        fetch(customerImageUrl)
+          .then((r) => r.arrayBuffer())
+          .then((b) => Buffer.from(b).toString('base64')),
+        itemData.primaryImageUrl
+          ? fetch(itemData.primaryImageUrl)
+              .then((r) => r.arrayBuffer())
+              .then((b) => Buffer.from(b).toString('base64'))
+          : Promise.resolve(null),
+      ]);
+
+      const colorStr = itemData.item.colors.length > 0 ? itemData.item.colors.join('/') : '';
+      const itemDescription = `${colorStr} ${itemData.item.name}${itemData.item.brand ? ` by ${itemData.item.brand}` : ''}`.trim();
+
+      const contents: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
+        {
+          text: `Virtual try-on: Show the person from Reference Image 1 wearing the ${itemDescription} shown in Reference Image 2. Keep the person's face, body, and identity exactly as shown. Professional fashion photo, clean background.`,
+        },
+        { inlineData: { mimeType: 'image/jpeg', data: customerBase64 } },
+      ];
+
+      if (itemImageBase64) {
+        contents.push({ inlineData: { mimeType: 'image/jpeg', data: itemImageBase64 } });
+      }
+
+      const response = await genAI.models.generateContent({
+        model: 'gemini-3-pro-image-preview',
+        contents,
+        config: { responseModalities: ['TEXT', 'IMAGE'] },
+      });
+
+      const parts = response.candidates?.[0]?.content?.parts;
+      let generatedImageBase64: string | null = null;
+
+      if (parts) {
+        for (const part of parts) {
+          if (part.inlineData?.data) {
+            generatedImageBase64 = part.inlineData.data;
+            break;
+          }
+        }
+      }
+
+      if (!generatedImageBase64) {
+        throw new Error('Image generation failed - model returned no image');
+      }
+
+      const imageBlob = new Blob([Buffer.from(generatedImageBase64, 'base64')], { type: 'image/png' });
+      const storageId: Id<'_storage'> = await ctx.storage.store(imageBlob);
+
+      await ctx.runMutation(internal.sellerTryOns.mutations.updateSellerTryOnStatus, {
+        sellerTryOnId: args.sellerTryOnId,
+        status: 'completed',
+        resultStorageId: storageId,
+      });
+
+      console.log(`[SELLER_TRYON] Generation complete`);
+      return { success: true, storageId };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[SELLER_TRYON] Failed:`, errorMessage);
+
+      await ctx.runMutation(internal.sellerTryOns.mutations.updateSellerTryOnStatus, {
+        sellerTryOnId: args.sellerTryOnId,
+        status: 'failed',
+        errorMessage,
+      });
+
+      return { success: false, error: errorMessage };
+    }
+  },
+});
