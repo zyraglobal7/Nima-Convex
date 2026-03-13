@@ -147,7 +147,7 @@ export default function QuickTryPage() {
 
       // 2. Upload captured image
       const response = await fetch(uploadUrl, {
-        method: 'PUT',
+        method: 'POST',
         body: capturedBlob,
         headers: { 'Content-Type': 'image/jpeg' },
       });

@@ -23,7 +23,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { Plus, Sparkles, Package, Zap, Link2, Copy, Check, ExternalLink } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Plus, Sparkles, Package, Zap, Link2, Copy, Check, ExternalLink, LayoutGrid } from 'lucide-react';
 import { ItemsTable } from '@/components/seller/products/ItemsTable';
 import { AIGenerateForm } from '@/components/seller/products/AIGenerateForm';
 import { CreateProductForm } from '@/components/seller/products/CreateProductForm';
@@ -36,6 +37,8 @@ export default function SellerProductsPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'create' | 'tryon-links'>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [allCopied, setAllCopied] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+  const [copiedSelected, setCopiedSelected] = useState<'individual' | 'multi' | null>(null);
 
   const stats = useQuery(api.sellers.queries.getSellerDashboardStats);
   const tryOnCredits = useQuery(api.sellerTryOns.queries.getSellerTryOnCredits);
@@ -58,6 +61,44 @@ export default function SellerProductsPage() {
     await navigator.clipboard.writeText(links);
     setAllCopied(true);
     setTimeout(() => setAllCopied(false), 2500);
+  };
+
+  const toggleProduct = (id: string) => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (!productsResult) return;
+    if (selectedProductIds.size === productsResult.products.length) {
+      setSelectedProductIds(new Set());
+    } else {
+      setSelectedProductIds(new Set(productsResult.products.map((p) => p._id)));
+    }
+  };
+
+  const copySelectedIndividual = async () => {
+    if (!seller || selectedProductIds.size === 0 || !productsResult) return;
+    const links = productsResult.products
+      .filter((p) => selectedProductIds.has(p._id))
+      .map((p) => `${p.name}: ${window.location.origin}/${seller.slug}/try-on/${p._id}`)
+      .join('\n');
+    await navigator.clipboard.writeText(links);
+    setCopiedSelected('individual');
+    setTimeout(() => setCopiedSelected(null), 2500);
+  };
+
+  const copySelectedMulti = async () => {
+    if (!seller || selectedProductIds.size === 0) return;
+    const ids = Array.from(selectedProductIds).join(',');
+    const url = `${window.location.origin}/${seller.slug}/try-on?products=${ids}`;
+    await navigator.clipboard.writeText(url);
+    setCopiedSelected('multi');
+    setTimeout(() => setCopiedSelected(null), 2500);
   };
   const atLimit =
     stats !== undefined &&
@@ -200,9 +241,10 @@ export default function SellerProductsPage() {
             </Card>
           </div>
         </TabsContent>
-        <TabsContent value="tryon-links" className="mt-6">
+        <TabsContent value="tryon-links" className="mt-6 space-y-4">
+          {/* Header card */}
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <CardTitle className="flex items-center gap-2">
@@ -210,89 +252,205 @@ export default function SellerProductsPage() {
                     Customer Try-On Links
                   </CardTitle>
                   <CardDescription className="mt-1">
-                    Share these links with customers so they can virtually try on your products — credits are deducted from your balance.
+                    Share try-on links with customers — they upload a photo and see how your products look on them. Credits are deducted from your balance per try-on.
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <div className="flex items-center gap-1.5 text-sm border border-border rounded-lg px-3 py-1.5">
-                    <Zap className="h-3.5 w-3.5 text-primary" />
-                    <span className="font-medium">{tryOnCredits ?? '—'}</span>
-                    <span className="text-muted-foreground">credits</span>
-                  </div>
-                  {productsResult && productsResult.products.length > 0 && seller && (
-                    <Button variant="outline" size="sm" onClick={copyAllLinks}>
-                      {allCopied ? (
-                        <><Check className="h-4 w-4 mr-1.5 text-green-500" />Copied all!</>
-                      ) : (
-                        <><Copy className="h-4 w-4 mr-1.5" />Copy All Links</>
-                      )}
-                    </Button>
-                  )}
+                <div className="flex items-center gap-1.5 text-sm border border-border rounded-lg px-3 py-1.5 flex-shrink-0">
+                  <Zap className="h-3.5 w-3.5 text-primary" />
+                  <span className="font-medium">{tryOnCredits ?? '—'}</span>
+                  <span className="text-muted-foreground">credits</span>
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              {(tryOnCredits === 0 || tryOnCredits === null) && (
-                <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-600 dark:text-amber-400 flex items-center gap-2">
-                  <Zap className="h-4 w-4 flex-shrink-0" />
-                  <span>You have no try-on credits. Customers won&apos;t be able to generate try-ons until you top up.</span>
-                </div>
-              )}
-              {!productsResult ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">Loading products…</p>
-              ) : productsResult.products.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground">
-                  <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">No active products yet. Add products first.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {productsResult.products.map((product) => {
-                    const tryOnUrl = seller ? `${window.location.origin}/${seller.slug}/try-on/${product._id}` : null;
-                    const isCopied = copiedId === product._id;
-                    return (
-                      <div
+          </Card>
+
+          {(tryOnCredits === 0 || tryOnCredits === null) && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-600 dark:text-amber-400 flex items-center gap-2">
+              <Zap className="h-4 w-4 flex-shrink-0" />
+              <span>You have no try-on credits. Customers won&apos;t be able to generate try-ons until you top up.</span>
+            </div>
+          )}
+
+          {!productsResult ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                Loading products…
+              </CardContent>
+            </Card>
+          ) : productsResult.products.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">No active products yet. Add products first.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Link Builder */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <LayoutGrid className="h-4 w-4 text-primary" />
+                        Create Custom Try-On Link
+                      </CardTitle>
+                      <CardDescription className="mt-0.5 text-xs">
+                        Select products, then generate individual links or one combined link for all selected items.
+                      </CardDescription>
+                    </div>
+                    <button
+                      onClick={toggleSelectAll}
+                      className="text-xs text-primary hover:underline flex-shrink-0"
+                    >
+                      {selectedProductIds.size === productsResult.products.length ? 'Deselect all' : 'Select all'}
+                    </button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                    {productsResult.products.map((product) => (
+                      <label
                         key={product._id}
-                        className="flex items-center gap-3 rounded-lg border border-border p-3 hover:border-primary/30 transition-colors"
+                        className="flex items-center gap-3 rounded-lg border border-border p-3 hover:border-primary/30 transition-colors cursor-pointer"
                       >
+                        <Checkbox
+                          checked={selectedProductIds.has(product._id)}
+                          onCheckedChange={() => toggleProduct(product._id)}
+                          className="flex-shrink-0"
+                        />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-foreground truncate">{product.name}</p>
-                          {tryOnUrl && (
-                            <p className="text-xs text-muted-foreground truncate mt-0.5">{tryOnUrl}</p>
-                          )}
                         </div>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          {tryOnUrl && (
-                            <a
-                              href={tryOnUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                              title="Preview try-on page"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </a>
+                      </label>
+                    ))}
+                  </div>
+
+                  {selectedProductIds.size > 0 && seller && (
+                    <div className="pt-2 border-t border-border space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        {selectedProductIds.size} product{selectedProductIds.size !== 1 ? 's' : ''} selected
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={copySelectedIndividual}
+                          className="gap-1.5"
+                        >
+                          {copiedSelected === 'individual' ? (
+                            <><Check className="h-3.5 w-3.5 text-green-500" />Copied!</>
+                          ) : (
+                            <><Copy className="h-3.5 w-3.5" />Copy Individual Links</>
                           )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs gap-1.5"
-                            onClick={() => copyLink(product._id, product.name)}
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={copySelectedMulti}
+                          className="gap-1.5"
+                        >
+                          {copiedSelected === 'multi' ? (
+                            <><Check className="h-3.5 w-3.5" />Copied!</>
+                          ) : (
+                            <><Link2 className="h-3.5 w-3.5" />Copy Combined Link</>
+                          )}
+                        </Button>
+                        {selectedProductIds.size > 1 && (
+                          <a
+                            href={`${typeof window !== 'undefined' ? window.location.origin : ''}/${seller.slug}/try-on?products=${Array.from(selectedProductIds).join(',')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors px-2"
                           >
-                            {isCopied ? (
-                              <><Check className="h-3 w-3 text-green-500" />Copied!</>
-                            ) : (
-                              <><Link2 className="h-3 w-3" />Copy Link</>
-                            )}
-                          </Button>
-                        </div>
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Preview
+                          </a>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                      {selectedProductIds.size === 1 && seller && (() => {
+                        const singleId = Array.from(selectedProductIds)[0];
+                        const url = `${window.location.origin}/${seller.slug}/try-on/${singleId}`;
+                        return (
+                          <p className="text-xs text-muted-foreground font-mono bg-surface rounded px-2 py-1 break-all">
+                            {url}
+                          </p>
+                        );
+                      })()}
+                      {selectedProductIds.size > 1 && seller && (
+                        <p className="text-xs text-muted-foreground font-mono bg-surface rounded px-2 py-1 break-all">
+                          {window.location.origin}/{seller.slug}/try-on?products={Array.from(selectedProductIds).join(',')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* All Product Links */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">All Product Links</CardTitle>
+                    {seller && (
+                      <Button variant="outline" size="sm" onClick={copyAllLinks}>
+                        {allCopied ? (
+                          <><Check className="h-4 w-4 mr-1.5 text-green-500" />Copied all!</>
+                        ) : (
+                          <><Copy className="h-4 w-4 mr-1.5" />Copy All</>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {productsResult.products.map((product) => {
+                      const tryOnUrl = seller ? `${window.location.origin}/${seller.slug}/try-on/${product._id}` : null;
+                      const isCopied = copiedId === product._id;
+                      return (
+                        <div
+                          key={product._id}
+                          className="flex items-center gap-3 rounded-lg border border-border p-3 hover:border-primary/30 transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{product.name}</p>
+                            {tryOnUrl && (
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">{tryOnUrl}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {tryOnUrl && (
+                              <a
+                                href={tryOnUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
+                                title="Preview try-on page"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs gap-1.5"
+                              onClick={() => copyLink(product._id, product.name)}
+                            >
+                              {isCopied ? (
+                                <><Check className="h-3 w-3 text-green-500" />Copied!</>
+                              ) : (
+                                <><Link2 className="h-3 w-3" />Copy Link</>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </TabsContent>
       </Tabs>
 
