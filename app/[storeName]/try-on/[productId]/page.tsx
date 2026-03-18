@@ -377,7 +377,6 @@ export default function SellerTryOnPage({ params }: PageProps) {
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          capture="user"
           className="hidden"
           onChange={handleFileSelect}
         />
