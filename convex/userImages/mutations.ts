@@ -310,7 +310,11 @@ export const deleteAllOnboardingImages = mutation({
 
     // Delete storage and records
     for (const image of imagesToDelete) {
-      await ctx.storage.delete(image.storageId);
+      try {
+        await ctx.storage.delete(image.storageId);
+      } catch {
+        // Storage may already be deleted — continue
+      }
       await ctx.db.delete(image._id);
     }
 
@@ -358,7 +362,11 @@ export const deleteAllUserImages = mutation({
 
     // Delete storage and records
     for (const image of images) {
-      await ctx.storage.delete(image.storageId);
+      try {
+        await ctx.storage.delete(image.storageId);
+      } catch {
+        // Storage may already be deleted — continue
+      }
       await ctx.db.delete(image._id);
     }
 
