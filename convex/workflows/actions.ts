@@ -676,7 +676,7 @@ export const generateLookImage = internalAction({
       
       const promptResult = await generateText({
         model: openai('gpt-4o'),
-        prompt: `You are a fashion photography director. Write a detailed image generation prompt for a virtual try-on photo.
+        prompt: `You are a fashion photography director. Write a detailed image generation prompt for a virtual try-on photo - their identity is crucial and must be maintained.
 
 The person in the reference photo should be shown wearing these clothing items:
 ${itemImagesBase64.map((item, i) => `${i + 1}. ${item.description}`).join('\n')}

@@ -72,6 +72,7 @@ import type * as sellers_tierConfig from "../sellers/tierConfig.js";
 import type * as threads_mutations from "../threads/mutations.js";
 import type * as threads_queries from "../threads/queries.js";
 import type * as types from "../types.js";
+import type * as userImages_actions from "../userImages/actions.js";
 import type * as userImages_mutations from "../userImages/mutations.js";
 import type * as userImages_queries from "../userImages/queries.js";
 import type * as users_mutations from "../users/mutations.js";
@@ -160,6 +161,7 @@ declare const fullApi: ApiFromModules<{
   "threads/mutations": typeof threads_mutations;
   "threads/queries": typeof threads_queries;
   types: typeof types;
+  "userImages/actions": typeof userImages_actions;
   "userImages/mutations": typeof userImages_mutations;
   "userImages/queries": typeof userImages_queries;
   "users/mutations": typeof users_mutations;
