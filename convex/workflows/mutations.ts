@@ -10,6 +10,29 @@ import type { Id } from '../_generated/dataModel';
 import { generatePublicId } from '../types';
 
 // ============================================
+// STYLE PROFILE MUTATIONS
+// ============================================
+
+/**
+ * Save the AI-generated detailed style profile to the user record.
+ * Called by generateStyleProfile action after AI generation.
+ */
+export const saveStyleProfile = internalMutation({
+  args: {
+    userId: v.id('users'),
+    styleProfile: v.string(),
+  },
+  returns: v.null(),
+  handler: async (
+    ctx: MutationCtx,
+    args: { userId: Id<'users'>; styleProfile: string }
+  ): Promise<null> => {
+    await ctx.db.patch(args.userId, { styleProfile: args.styleProfile });
+    return null;
+  },
+});
+
+// ============================================
 // LOOK MUTATIONS
 // ============================================
 

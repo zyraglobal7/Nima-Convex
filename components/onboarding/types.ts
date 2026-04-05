@@ -31,7 +31,10 @@ export interface OnboardingFormData {
   country: string;
   currency: string;
   budgetRange: BudgetRange;
-  
+
+  // Occasions (new chat flow)
+  occasions: string[];
+
   // Photos & Account
   photos: File[]; // Local file objects (deprecated - use uploadedImages)
   uploadedImages: UploadedImage[]; // Uploaded image records
@@ -46,7 +49,7 @@ export interface StepProps {
   onBack?: () => void;
 }
 
-export const TOTAL_STEPS = 8; // Added gender step
+export const TOTAL_STEPS = 4; // Photo → StyleChat → Loading → Success
 
 export const SIZE_OPTIONS = {
   shirt: ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'],

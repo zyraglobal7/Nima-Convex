@@ -163,6 +163,16 @@ export const startOnboardingWorkflow = mutation({
       };
     }
 
+    // Check if workflow was already started recently (prevents race-condition double-start)
+    // The workflow creates looks asynchronously, so checking for existing looks alone is insufficient
+    const TEN_MINUTES = 10 * 60 * 1000;
+    if (user.onboardingWorkflowStartedAt && Date.now() - user.onboardingWorkflowStartedAt < TEN_MINUTES) {
+      return {
+        success: false,
+        error: 'Workflow already started',
+      };
+    }
+
     // Check if user already has looks
     const existingLook = await ctx.db
       .query('looks')
@@ -188,6 +198,9 @@ export const startOnboardingWorkflow = mutation({
         error: 'Please upload at least one photo first',
       };
     }
+
+    // Mark workflow as started BEFORE launching (atomic guard against concurrent triggers)
+    await ctx.db.patch(user._id, { onboardingWorkflowStartedAt: Date.now() });
 
     console.log(`[WORKFLOW:ONBOARDING] Starting workflow for user ${user._id}`);
 

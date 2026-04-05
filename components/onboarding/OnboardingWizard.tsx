@@ -1,18 +1,12 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { ProgressBar } from './ProgressBar';
-import { WelcomeStep } from './steps/WelcomeStep';
-import { GenderAgeStep } from './steps/GenderAgeStep';
-import { StyleVibeStep } from './steps/StyleVibeStep';
-import { SizeFitStep } from './steps/SizeFitStep';
-import { LocationBudgetStep } from './steps/LocationBudgetStep';
 import { PhotoUploadStep } from './steps/PhotoUploadStep';
-import { AccountStep } from './steps/AccountStep';
+import { StyleChatStep } from './steps/StyleChatStep';
+import { LoadingStep } from './steps/LoadingStep';
 import { SuccessStep } from './steps/SuccessStep';
 import { OnboardingFormData, TOTAL_STEPS } from './types';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { trackStepViewed, ONBOARDING_STEPS, OnboardingStep } from '@/lib/analytics';
 
 interface OnboardingWizardProps {
   onComplete: () => void;
@@ -29,17 +23,12 @@ function generateOnboardingToken(): string {
   return `onb_${result}`;
 }
 
-// Get existing token from localStorage or generate new one
 function getOrCreateOnboardingToken(): string {
   if (typeof window === 'undefined') {
     return generateOnboardingToken();
   }
-  
   const stored = localStorage.getItem('nima-onboarding-token');
-  if (stored) {
-    return stored;
-  }
-  
+  if (stored) return stored;
   const newToken = generateOnboardingToken();
   localStorage.setItem('nima-onboarding-token', newToken);
   return newToken;
@@ -49,49 +38,31 @@ const initialFormData: OnboardingFormData = {
   gender: '',
   age: '',
   stylePreferences: [],
-  shirtSize: 'M', // Default to Medium
-  waistSize: '32', // Default to 32 inches
-  height: '170', // Default to 170cm
+  occasions: [],
+  shirtSize: 'M',
+  waistSize: '32',
+  height: '170',
   heightUnit: 'cm',
-  shoeSize: '40', // Default to EU 40
+  shoeSize: '40',
   shoeSizeUnit: 'EU',
-  country: '',
-  currency: '',
+  country: 'KE',
+  currency: 'KES',
   budgetRange: 'mid',
   photos: [],
   uploadedImages: [],
-  onboardingToken: '', // Will be set on mount
+  onboardingToken: '',
   email: '',
 };
 
-export function OnboardingWizard({ onComplete, onBack }: OnboardingWizardProps) {
+export function OnboardingWizard({ onComplete, onBack: _onBack }: OnboardingWizardProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<OnboardingFormData>(initialFormData);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
 
-  // Set onboarding token on mount
   useEffect(() => {
     const token = getOrCreateOnboardingToken();
     setFormData((prev) => ({ ...prev, onboardingToken: token }));
   }, []);
-
-  // Track step views when step changes
-  useEffect(() => {
-    const stepNames: OnboardingStep[] = [
-      ONBOARDING_STEPS.WELCOME,
-      ONBOARDING_STEPS.GENDER_AGE,
-      ONBOARDING_STEPS.STYLE_VIBE,
-      ONBOARDING_STEPS.SIZE_FIT,
-      ONBOARDING_STEPS.LOCATION_BUDGET,
-      ONBOARDING_STEPS.PHOTO_UPLOAD,
-      ONBOARDING_STEPS.ACCOUNT,
-      ONBOARDING_STEPS.SUCCESS,
-    ];
-    const stepName = stepNames[currentStep];
-    if (stepName) {
-      trackStepViewed(stepName);
-    }
-  }, [currentStep]);
 
   const updateFormData = useCallback((data: Partial<OnboardingFormData>) => {
     setFormData((prev) => ({ ...prev, ...data }));
@@ -106,65 +77,54 @@ export function OnboardingWizard({ onComplete, onBack }: OnboardingWizardProps) 
     }
   }, [currentStep, onComplete]);
 
-  const handleBack = useCallback(() => {
-    setDirection('back');
-    if (currentStep > 0) {
-      setCurrentStep((prev) => prev - 1);
-    } else {
-      onBack();
-    }
-  }, [currentStep, onBack]);
-
   const stepProps = {
     formData,
     updateFormData,
     onNext: handleNext,
-    onBack: handleBack,
+    onBack: undefined,
   };
 
   const renderStep = () => {
     switch (currentStep) {
       case 0:
-        return <WelcomeStep {...stepProps} />;
-      case 1:
-        return <GenderAgeStep {...stepProps} />;
-      case 2:
-        return <StyleVibeStep {...stepProps} />;
-      case 3:
-        return <SizeFitStep {...stepProps} />;
-      case 4:
-        return <LocationBudgetStep {...stepProps} />;
-      case 5:
         return <PhotoUploadStep {...stepProps} />;
-      case 6:
-        return <AccountStep {...stepProps} />;
-      case 7:
+      case 1:
+        return <StyleChatStep {...stepProps} />;
+      case 2:
+        return <LoadingStep {...stepProps} />;
+      case 3:
         return <SuccessStep {...stepProps} />;
       default:
         return null;
     }
   };
 
-  // Show progress bar only for steps 1-6 (not welcome or success)
-  const showProgressBar = currentStep > 0 && currentStep < TOTAL_STEPS - 1;
+  // No progress bar on loading/success steps
+  const showProgressBar = currentStep < 2;
 
   return (
     <div className="min-h-screen flex flex-col bg-background relative">
-      {/* Theme toggle - always visible in top right */}
+      {/* Theme toggle */}
       <div className="absolute top-4 right-4 z-20">
         <ThemeToggle />
       </div>
 
-      {/* Header with progress */}
+      {/* Step indicator (dots) for photo + chat steps */}
       {showProgressBar && (
         <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border/50">
-          <div className="max-w-2xl mx-auto px-4 pr-16">
-            <ProgressBar currentStep={currentStep - 1} totalSteps={TOTAL_STEPS - 2} />
+          <div className="max-w-2xl mx-auto px-4 py-3 pr-16 flex justify-center gap-2">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  i === currentStep ? 'w-6 bg-primary' : 'w-1.5 bg-border'
+                }`}
+              />
+            ))}
           </div>
         </header>
       )}
 
-      {/* Step content with animation */}
       <main className="flex-1 flex flex-col">
         <div
           key={currentStep}

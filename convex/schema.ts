@@ -42,6 +42,7 @@ export default defineSchema({
     country: v.optional(v.string()),
     currency: v.optional(v.string()),
     budgetRange: v.optional(v.union(v.literal('low'), v.literal('mid'), v.literal('premium'))),
+    occasions: v.optional(v.array(v.string())), // ["Work/Office", "Casual Hangouts", etc.]
 
     // Optional contact (for future)
     phoneNumber: v.optional(v.string()),
@@ -59,6 +60,8 @@ export default defineSchema({
 
     // Status
     onboardingCompleted: v.boolean(),
+    onboardingWorkflowStartedAt: v.optional(v.number()), // Prevents double-triggering the look generation workflow
+    styleProfile: v.optional(v.string()), // AI-generated detailed style profile (derived from raw preferences)
     isActive: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),

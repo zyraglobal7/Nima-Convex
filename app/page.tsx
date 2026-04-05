@@ -121,8 +121,11 @@ function AuthenticatedContent() {
     onboardingState,
   });
 
-  // Show loading while processing onboarding
-  if (isProcessing || user === undefined || onboardingState === undefined) {
+  // Show loading while:
+  // - queries are still loading (undefined)
+  // - onboarding hook is processing localStorage data
+  // - user is null (Convex record not yet created — getOrCreateUser is still running)
+  if (isProcessing || user === undefined || user === null || onboardingState === undefined) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
         <div className="max-w-md text-center space-y-6">

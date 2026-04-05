@@ -310,6 +310,58 @@ export const completeOnboarding = mutation({
 });
 
 /**
+ * Complete onboarding with the new simplified flow (v2)
+ * Auth-first flow: user is already authenticated when this is called.
+ * Collects stylePreferences, occasions, and budgetRange only.
+ * Country/currency default to KE/KES (only Kenya is currently supported).
+ */
+export const completeOnboardingV2 = mutation({
+  args: {
+    stylePreferences: v.array(v.string()),
+    occasions: v.array(v.string()),
+    budgetRange: v.union(v.literal('low'), v.literal('mid'), v.literal('premium')),
+    gender: v.optional(v.union(v.literal('male'), v.literal('female'), v.literal('prefer-not-to-say'))),
+  },
+  returns: v.id('users'),
+  handler: async (
+    ctx: MutationCtx,
+    args: {
+      stylePreferences: string[];
+      occasions: string[];
+      budgetRange: 'low' | 'mid' | 'premium';
+      gender?: 'male' | 'female' | 'prefer-not-to-say';
+    }
+  ): Promise<Id<'users'>> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error('Not authenticated');
+    }
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    await ctx.db.patch(user._id, {
+      ...(args.gender ? { gender: args.gender } : {}),
+      stylePreferences: sanitizeTags(args.stylePreferences),
+      occasions: sanitizeTags(args.occasions),
+      budgetRange: args.budgetRange,
+      country: 'KE',
+      currency: 'KES',
+      onboardingCompleted: true,
+      updatedAt: Date.now(),
+    });
+
+    return user._id;
+  },
+});
+
+/**
  * Mark onboarding as complete without requiring all profile data
  * Used when user has images but localStorage expired
  * Only sets the flag if user already has profile data and images
@@ -346,8 +398,10 @@ export const markOnboardingComplete = mutation({
       return { success: true };
     }
 
-    // Check if user has required profile data
-    const hasProfileData = !!user.gender && user.stylePreferences && user.stylePreferences.length > 0;
+    // Check if user has required profile data (style preferences are the minimum for new flow)
+    const hasProfileData =
+      user.onboardingCompleted ||
+      (user.stylePreferences && user.stylePreferences.length > 0);
     if (!hasProfileData) {
       return { success: false, reason: 'Missing profile data' };
     }
@@ -612,6 +666,7 @@ export const getOrCreateUser = mutation({
       country: v.optional(v.string()),
       currency: v.optional(v.string()),
       budgetRange: v.optional(v.union(v.literal('low'), v.literal('mid'), v.literal('premium'))),
+      occasions: v.optional(v.array(v.string())),
       phoneNumber: v.optional(v.string()),
       phoneVerified: v.optional(v.boolean()),
       subscriptionTier: v.union(v.literal('free'), v.literal('style_pass'), v.literal('vip')),
@@ -621,6 +676,8 @@ export const getOrCreateUser = mutation({
       freeCreditsUsedThisWeek: v.optional(v.number()),
       weeklyCreditsResetAt: v.optional(v.number()),
       onboardingCompleted: v.boolean(),
+      onboardingWorkflowStartedAt: v.optional(v.float64()),
+      styleProfile: v.optional(v.string()),
       isActive: v.boolean(),
       role: v.optional(v.union(v.literal('user'), v.literal('admin'), v.literal('seller'))),
       savedShippingAddress: v.optional(v.object({
