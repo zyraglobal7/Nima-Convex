@@ -66,6 +66,16 @@ async function runLookGenerationWorkflow(
   console.log(`[WORKFLOW:${workflowName}] ========================================`);
 
   // ========================================
+  // STEP 0: Generate Detailed Style Profile
+  // ========================================
+  console.log(`[WORKFLOW:${workflowName}] Step 0: Generating detailed style profile...`);
+  await ctx.runAction(
+    internal.workflows.actions.generateStyleProfile,
+    { userId },
+    { retry: true }
+  );
+
+  // ========================================
   // STEP 1: Curate Personalized Looks
   // ========================================
   console.log(`[WORKFLOW:${workflowName}] Step 1: Curating personalized looks...`);

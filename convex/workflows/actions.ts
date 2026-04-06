@@ -52,8 +52,10 @@ interface UserProfile {
   _id: Id<'users'>;
   gender?: 'male' | 'female' | 'prefer-not-to-say';
   stylePreferences: string[];
+  occasions?: string[];
   budgetRange?: 'low' | 'mid' | 'premium';
   firstName?: string;
+  styleProfile?: string; // AI-generated detailed style profile (set by generateStyleProfile action)
 }
 
 interface ItemForAI {
@@ -96,6 +98,85 @@ function validateNoDuplicateCategories(
     return true;
   });
 }
+
+// ============================================
+// STEP 0: GENERATE DETAILED STYLE PROFILE
+// ============================================
+
+/**
+ * Uses o3-mini to transform raw onboarding inputs (gender, style vibes, occasions, budget)
+ * into a rich, detailed style profile that is stored on the user record and used
+ * in all subsequent AI prompts for look generation.
+ */
+export const generateStyleProfile = internalAction({
+  args: {
+    userId: v.id('users'),
+  },
+  returns: v.string(),
+  handler: async (
+    ctx: ActionCtx,
+    args: { userId: Id<'users'> }
+  ): Promise<string> => {
+    const userProfile = (await ctx.runQuery(internal.workflows.queries.getUserForWorkflow, {
+      userId: args.userId,
+    })) as UserProfile | null;
+
+    if (!userProfile) {
+      throw new Error(`User not found: ${args.userId}`);
+    }
+
+    const genderLabel =
+      userProfile.gender === 'male'
+        ? "Men's Fashion"
+        : userProfile.gender === 'female'
+          ? "Women's Fashion"
+          : 'Gender-neutral / Prefer not to say';
+
+    const budgetLabel =
+      userProfile.budgetRange === 'low'
+        ? 'Smart Saver (up to KES 2,000 per item)'
+        : userProfile.budgetRange === 'premium'
+          ? 'Treat Yourself (KES 10,000+ per item)'
+          : 'Best of Both (KES 2,000–10,000 per item)';
+
+    const prompt = `You are an expert fashion stylist. Based on the user's onboarding preferences below, write a detailed style profile that will guide an AI to select the perfect outfit combinations for them.
+
+User Preferences:
+- Shopping for: ${genderLabel}
+- Style vibes they selected: ${userProfile.stylePreferences.join(', ') || 'not specified'}
+- Occasions they dress for: ${userProfile.occasions?.join(', ') || 'various occasions'}
+- Budget range: ${budgetLabel}
+- Name: ${userProfile.firstName || 'the user'}
+
+Write a detailed 2–3 paragraph style profile that covers:
+1. Their core aesthetic and what visual style identity this implies (silhouettes, vibe, personality)
+2. A typical outfit formula that would work for them (e.g. "fitted top + wide-leg trousers + minimal accessories")
+3. Colours, textures, and fabrics that would suit this style
+4. How their occasion mix should influence item selection
+5. Budget-smart styling tips specific to their range
+
+Be specific and actionable — this profile will be fed directly into an AI stylist to select real clothing items. Do not include generic advice. Focus on concrete styling direction.`;
+
+    console.log(`[WORKFLOW:ONBOARDING] Step 0: Generating detailed style profile for user ${args.userId}`);
+
+    const result = await generateText({
+      model: openai('o3-mini'),
+      prompt,
+    });
+
+    const styleProfile = result.text.trim();
+
+    console.log(`[WORKFLOW:ONBOARDING] Step 0 complete: style profile generated (${styleProfile.length} chars)`);
+
+    // Persist to user record
+    await ctx.runMutation(internal.workflows.mutations.saveStyleProfile, {
+      userId: args.userId,
+      styleProfile,
+    });
+
+    return styleProfile;
+  },
+});
 
 // ============================================
 // STEP 1: AI ITEM SELECTION
@@ -152,7 +233,10 @@ export const selectItemsForLooks = internalAction({
     console.log(`[WORKFLOW:ONBOARDING] User profile:`, {
       gender: userProfile.gender,
       stylePreferences: userProfile.stylePreferences,
+      occasions: userProfile.occasions,
       budgetRange: userProfile.budgetRange,
+      hasStyleProfile: !!userProfile.styleProfile,
+      styleProfileLength: userProfile.styleProfile?.length ?? 0,
     });
 
     // Determine user's gender for filtering (male/female get gender-specific + unisex, others get all)
@@ -205,14 +289,16 @@ export const selectItemsForLooks = internalAction({
     }
 
     // Build prompt for AI - Generate 3 looks with smart outfit composition
-    const systemPrompt = `You are Nima, an expert fashion stylist with a fun, energetic personality. 
+    const systemPrompt = `You are Nima, an expert fashion stylist with a fun, energetic personality.
 Your task is to create 3 unique, stylish outfit combinations (looks) for a new user based on their preferences.
 
 User Profile:
 - Gender preference: ${userProfile.gender || 'not specified'}
 - Style preferences: ${userProfile.stylePreferences.join(', ') || 'casual'}
+- Occasions they dress for: ${userProfile.occasions?.join(', ') || 'various occasions'}
 - Budget range: ${userProfile.budgetRange || 'mid'}
 - Name: ${userProfile.firstName || 'friend'}
+${userProfile.styleProfile ? `\nDetailed Style Profile (use this as the primary guide for their aesthetic):\n${userProfile.styleProfile}` : ''}
 
 Available Items (use these item IDs exactly):
 ${uniqueItems.map((item) => `- ID: ${item._id}, Name: "${item.name}", Category: ${item.category}, Colors: ${item.colors.join(', ')}, Tags: ${item.tags.join(', ')}, Price: ${item.price} ${item.currency}`).join('\n')}
@@ -237,7 +323,7 @@ SMART OUTFIT COMPOSITION RULES:
 4. Items in each look must complement each other in style and color
 5. Use ONLY the item IDs from the available items list
 6. Give each look a catchy, creative name
-7. Include variety in occasions: casual, work, date night, weekend, brunch, etc.
+7. Prioritize the occasions the user dresses for (listed in their profile above); include variety across those occasions
 8. NEVER repeat items across the 3 looks
 9. CRITICAL - NO DUPLICATE CATEGORIES IN A SINGLE LOOK:
    - Each look should have AT MOST ONE item per category type

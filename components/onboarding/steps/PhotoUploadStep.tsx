@@ -5,9 +5,9 @@ import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
 import { StepProps, UploadedImage } from '../types';
-import { ArrowLeft, Upload, X, Camera, Shield, Loader2, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
+import { Upload, X, Camera, Shield, Loader2, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
 import type { Id } from '@/convex/_generated/dataModel';
-import { trackStepCompleted, trackBackClicked, trackPhotoUploaded, trackPhotoRemoved, ONBOARDING_STEPS } from '@/lib/analytics';
+import { trackStepCompleted, trackPhotoUploaded, trackPhotoRemoved, ONBOARDING_STEPS } from '@/lib/analytics';
 
 // Constants for validation
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -387,24 +387,13 @@ export function PhotoUploadStep({ formData, updateFormData, onNext, onBack }: St
       {/* Header */}
       <div className="px-4 py-6">
         <div className="max-w-md mx-auto">
-          <div className="flex items-center gap-4 mb-6">
-            <button
-              onClick={() => {
-                trackBackClicked(ONBOARDING_STEPS.PHOTO_UPLOAD);
-                onBack?.();
-              }}
-              className="p-2 -ml-2 rounded-full hover:bg-surface transition-colors duration-200"
-              aria-label="Go back"
-              disabled={hasUploading}
-            >
-              <ArrowLeft className="w-5 h-5 text-muted-foreground" />
-            </button>
+          <div className="flex items-start gap-4 mb-6">
             <div className="flex-1">
               <h1 className="text-2xl font-serif font-semibold text-foreground">
-                Now for the fun part!
+                Be the model in every look
               </h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Upload 2-4 photos so I can show you in every outfit
+              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                This is the fun part. We use these image(s) to put you in every look on Nima. Use portrait images or selfies to get the best out of Nima.
               </p>
             </div>
             {hasPhotos && !hasUploading && (

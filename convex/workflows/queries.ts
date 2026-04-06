@@ -26,8 +26,10 @@ export const getUserForWorkflow = internalQuery({
         v.union(v.literal('male'), v.literal('female'), v.literal('prefer-not-to-say'))
       ),
       stylePreferences: v.array(v.string()),
+      occasions: v.optional(v.array(v.string())),
       budgetRange: v.optional(v.union(v.literal('low'), v.literal('mid'), v.literal('premium'))),
       firstName: v.optional(v.string()),
+      styleProfile: v.optional(v.string()),
     }),
     v.null()
   ),
@@ -38,8 +40,10 @@ export const getUserForWorkflow = internalQuery({
     _id: Id<'users'>;
     gender?: 'male' | 'female' | 'prefer-not-to-say';
     stylePreferences: string[];
+    occasions?: string[];
     budgetRange?: 'low' | 'mid' | 'premium';
     firstName?: string;
+    styleProfile?: string;
   } | null> => {
     const user = await ctx.db.get(args.userId);
     if (!user) {
@@ -50,8 +54,10 @@ export const getUserForWorkflow = internalQuery({
       _id: user._id,
       gender: user.gender,
       stylePreferences: user.stylePreferences,
+      occasions: user.occasions,
       budgetRange: user.budgetRange,
       firstName: user.firstName,
+      styleProfile: user.styleProfile,
     };
   },
 });
