@@ -28,8 +28,22 @@ function AuthenticatedOnboardingContent() {
     router.push('/');
   };
 
-  // Show loading while checking status
-  if (isProcessing || user === undefined || onboardingState === undefined) {
+  const shouldRedirect =
+    !isProcessing &&
+    user !== undefined &&
+    user !== null &&
+    onboardingState !== undefined &&
+    onboardingState.hasProfileData &&
+    onboardingState.hasImages;
+
+  useEffect(() => {
+    if (shouldRedirect) {
+      router.replace('/discover');
+    }
+  }, [shouldRedirect, router]);
+
+  // Show loading while checking status (also wait for user to be created in Convex)
+  if (isProcessing || user === undefined || user === null || onboardingState === undefined) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
         <div className="max-w-md text-center space-y-6">
@@ -41,10 +55,7 @@ function AuthenticatedOnboardingContent() {
   }
 
   // ROUTE PROTECTION: If user has BOTH profile data AND images, redirect to discover
-  // They don't need to go through onboarding again
-  if (onboardingState.hasProfileData && onboardingState.hasImages) {
-    // Redirect to discover - onboarding is already complete
-    router.replace('/discover');
+  if (shouldRedirect) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
         <div className="max-w-md text-center space-y-6">
@@ -84,19 +95,23 @@ function AuthenticatedOnboardingContent() {
 
 /**
  * Inner component for unauthenticated users
+ * In the new auth-first flow, unauthenticated users are redirected to sign-in.
  */
 function UnauthenticatedOnboardingContent() {
   const router = useRouter();
 
-  const handleComplete = () => {
-    router.push('/discover');
-  };
+  useEffect(() => {
+    router.replace('/sign-in');
+  }, [router]);
 
-  const handleBack = () => {
-    router.push('/');
-  };
-
-  return <OnboardingWizard onComplete={handleComplete} onBack={handleBack} />;
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
+      <div className="max-w-md text-center space-y-6">
+        <Loader2 className="w-12 h-12 mx-auto text-primary animate-spin" />
+        <p className="text-muted-foreground">Redirecting to sign in...</p>
+      </div>
+    </div>
+  );
 }
 
 /**
