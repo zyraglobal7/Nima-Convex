@@ -275,8 +275,23 @@ export const selectItemsForLooks = internalAction({
     // Deduplicate items
     const deduplicatedItems = Array.from(new Map(allItems.map((item) => [item._id, item])).values());
 
+    // Hard gender filter — enforced in code regardless of DB tags or AI behavior
+    // Prevents dresses/skirts tagged as 'unisex' from appearing in male users' looks
+    const MALE_EXCLUDED_CATEGORIES = new Set(['dress']);
+    const FEMALE_EXCLUDED_CATEGORIES = new Set<string>(); // no exclusions for female
+    const genderFilteredItems = deduplicatedItems.filter((item) => {
+      if (userGender === 'male') return !MALE_EXCLUDED_CATEGORIES.has(item.category);
+      if (userGender === 'female') return !FEMALE_EXCLUDED_CATEGORIES.has(item.category);
+      return true;
+    });
+
+    if (userGender === 'male') {
+      const removed = deduplicatedItems.length - genderFilteredItems.length;
+      if (removed > 0) console.log(`[WORKFLOW:ONBOARDING] Hard-filtered ${removed} female-only items from male catalog`);
+    }
+
     // Filter out excluded items (from previous looks)
-    const uniqueItems = deduplicatedItems.filter((item) => !excludeSet.has(item._id));
+    const uniqueItems = genderFilteredItems.filter((item) => !excludeSet.has(item._id));
     
     if (excludeSet.size > 0) {
       console.log(`[WORKFLOW:ONBOARDING] After exclusions: ${uniqueItems.length} items available (excluded ${deduplicatedItems.length - uniqueItems.length})`);
@@ -303,11 +318,12 @@ ${userProfile.styleProfile ? `\nDetailed Style Profile (use this as the primary 
 Available Items (use these item IDs exactly):
 ${uniqueItems.map((item) => `- ID: ${item._id}, Name: "${item.name}", Category: ${item.category}, Colors: ${item.colors.join(', ')}, Tags: ${item.tags.join(', ')}, Price: ${item.price} ${item.currency}`).join('\n')}
 
-CRITICAL GENDER RULES (MUST FOLLOW):
-${userProfile.gender === 'male' ? `- User is MALE: NEVER include dresses, skirts, blouses, heels, or feminine clothing.
-- ONLY use items categorized as: top, bottom, outerwear, shoes, accessory, bag, jewelry (no dress category for males!)` : ''}
-${userProfile.gender === 'female' ? `- User is FEMALE: You may include dresses, skirts, blouses, heels, and any clothing items.` : ''}
-${!userProfile.gender || userProfile.gender === 'prefer-not-to-say' ? `- Gender not specified: Use gender-neutral items only. Prefer tops, bottoms, outerwear, and unisex accessories.` : ''}
+CRITICAL GENDER RULES (MUST FOLLOW — catalog is already pre-filtered):
+${userProfile.gender === 'male' ? `- User is MALE. The catalog has already been filtered to male/unisex items only.
+- You MUST NOT reference any item with category "dress". No dresses, skirts, or feminine clothing under any circumstance.
+- Valid categories for male: top, bottom, outerwear, shoes, accessory, bag, jewelry` : ''}
+${userProfile.gender === 'female' ? `- User is FEMALE. All catalog items are appropriate. Dresses, skirts, blouses, and heels are all valid choices.` : ''}
+${!userProfile.gender || userProfile.gender === 'prefer-not-to-say' ? `- Gender not specified. Prefer gender-neutral pieces: tops, bottoms, outerwear, unisex shoes and accessories.` : ''}
 
 SMART OUTFIT COMPOSITION RULES:
 1. Create exactly 3 different outfit looks with VARIED item counts (not all the same size!)
