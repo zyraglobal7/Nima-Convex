@@ -36,13 +36,11 @@ export default function QuickTryPage() {
   const saveToLookbook = useMutation(api.quickTryOns.mutations.saveQuickTryOnToLookbook);
   const credits = useQuery(api.credits.queries.getUserCredits);
 
-  // Poll for try-on status
   const tryOnResult = useQuery(
     api.quickTryOns.queries.getQuickTryOn,
     quickTryOnId ? { quickTryOnId } : 'skip'
   );
 
-  // Handle result ready
   useEffect(() => {
     if (tryOnResult?.status === 'completed' && tryOnResult.resultUrl) {
       setPageState('result');
@@ -54,11 +52,9 @@ export default function QuickTryPage() {
 
   const startCamera = useCallback(async (facing: 'user' | 'environment') => {
     try {
-      // Stop any existing stream
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
-
       setCameraError(null);
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -68,7 +64,6 @@ export default function QuickTryPage() {
         },
         audio: false,
       });
-
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -80,7 +75,6 @@ export default function QuickTryPage() {
     }
   }, []);
 
-  // Start camera on mount
   useEffect(() => {
     startCamera(facingMode);
     return () => {
@@ -105,7 +99,6 @@ export default function QuickTryPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Mirror if front camera
     if (facingMode === 'user') {
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
@@ -119,8 +112,6 @@ export default function QuickTryPage() {
         setCapturedBlob(blob);
         setCapturedPreview(canvas.toDataURL('image/jpeg', 0.85));
         setPageState('preview');
-
-        // Stop camera stream to save battery
         streamRef.current?.getTracks().forEach((t) => t.stop());
       },
       'image/jpeg',
@@ -144,10 +135,7 @@ export default function QuickTryPage() {
     setCapturedBlob(file);
     setPageState('preview');
 
-    // Stop camera stream to save battery
     streamRef.current?.getTracks().forEach((t) => t.stop());
-
-    // Reset input so the same file can be re-selected if needed
     e.target.value = '';
   };
 
@@ -163,10 +151,8 @@ export default function QuickTryPage() {
     setPageState('processing');
 
     try {
-      // 1. Get upload URL
       const uploadUrl = await generateUploadUrl();
 
-      // 2. Upload captured image
       const response = await fetch(uploadUrl, {
         method: 'POST',
         body: capturedBlob,
@@ -175,10 +161,8 @@ export default function QuickTryPage() {
 
       if (!response.ok) throw new Error('Upload failed');
 
-      // Extract storage ID from response
       const { storageId } = await response.json();
 
-      // 3. Create the quick try-on
       const result = await createQuickTryOn({ capturedItemStorageId: storageId });
 
       if (!result.success) {
@@ -227,218 +211,246 @@ export default function QuickTryPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0D0B0A] text-white flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-safe-area-inset-top pt-4 pb-3">
-        <button
-          onClick={() => router.back()}
-          className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5 text-white" />
-        </button>
+    // fixed inset-0 + overflow-hidden pins the entire UI to the viewport — no scrolling ever
+    <div className="fixed inset-0 bg-[#0D0B0A] text-white overflow-hidden">
 
-        <div className="flex flex-col items-center">
-          <span className="text-white font-medium text-sm">Quick Try-On</span>
-          {credits !== undefined && (
-            <Link href="/credits" className="flex items-center gap-1 text-xs text-white/60 mt-0.5">
-              <Zap className="w-3 h-3" />
-              <span>{credits.total} credits</span>
-            </Link>
+      {/* ── CAMERA STATE: full-bleed video + floating overlays ── */}
+      {pageState === 'camera' && (
+        <>
+          {/* Video fills the entire screen */}
+          {!cameraError && (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className={cn(
+                'absolute inset-0 w-full h-full object-cover',
+                facingMode === 'user' && 'scale-x-[-1]'
+              )}
+            />
           )}
-        </div>
 
-        {pageState === 'camera' && (
-          <button
-            onClick={handleSwitchCamera}
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-          >
-            <SwitchCamera className="w-5 h-5 text-white" />
-          </button>
-        )}
-        {pageState !== 'camera' && <div className="w-10" />}
-      </div>
+          {/* Camera error state */}
+          {cameraError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
+              <Camera className="w-12 h-12 text-white/40" />
+              <p className="text-white/60 text-sm">{cameraError}</p>
+              <Button
+                variant="outline"
+                onClick={() => startCamera(facingMode)}
+                className="border-white/20 text-white bg-transparent hover:bg-white/10"
+              >
+                Retry
+              </Button>
+            </div>
+          )}
 
-      {/* Main Content */}
-      <div className="flex-1 relative flex flex-col items-center">
-        {/* Camera View */}
-        {(pageState === 'camera') && (
-          <div className="w-full flex-1 relative overflow-hidden">
-            {cameraError ? (
-              <div className="h-full flex flex-col items-center justify-center gap-4 px-8 text-center">
-                <Camera className="w-12 h-12 text-white/40" />
-                <p className="text-white/60 text-sm">{cameraError}</p>
-                <Button
-                  variant="outline"
-                  onClick={() => startCamera(facingMode)}
-                  className="border-white/20 text-white bg-transparent hover:bg-white/10"
-                >
-                  Retry
-                </Button>
+          {/* Framing guide */}
+          {!cameraError && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="border-2 border-white/30 rounded-2xl w-64 h-80 flex items-center justify-center">
+                <p className="text-white/50 text-xs text-center px-4">
+                  Point at the item you want to try on
+                </p>
               </div>
-            ) : (
-              <>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={cn(
-                    'w-full h-full object-cover',
-                    facingMode === 'user' && 'scale-x-[-1]'
-                  )}
+            </div>
+          )}
+
+          {/* Top bar — floats over the video */}
+          <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-safe-area-inset-top pt-4 pb-10 bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
+            <button
+              onClick={() => router.back()}
+              className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors pointer-events-auto"
+            >
+              <ArrowLeft className="w-5 h-5 text-white" />
+            </button>
+
+            <div className="flex flex-col items-center pointer-events-auto">
+              <span className="text-white font-medium text-sm">Quick Try-On</span>
+              {credits !== undefined && (
+                <Link href="/credits" className="flex items-center gap-1 text-xs text-white/60 mt-0.5">
+                  <Zap className="w-3 h-3" />
+                  <span>{credits.total} credits</span>
+                </Link>
+              )}
+            </div>
+
+            <button
+              onClick={handleSwitchCamera}
+              className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors pointer-events-auto"
+            >
+              <SwitchCamera className="w-5 h-5 text-white" />
+            </button>
+          </div>
+
+          {/* Bottom bar — floats over the video, always visible without scrolling */}
+          <div className="absolute bottom-0 left-0 right-0 px-6 pb-safe-area-inset-bottom pb-10 pt-16 bg-gradient-to-t from-black/70 to-transparent">
+            {!cameraError && (
+              <div className="relative flex items-center justify-center">
+                {/* Gallery button — bottom left */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute left-0 p-3 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition-all"
+                  aria-label="Upload from gallery"
+                >
+                  <Images className="w-6 h-6 text-white" />
+                </button>
+
+                {/* Shutter button — center */}
+                <button
+                  onClick={handleCapture}
+                  className="w-20 h-20 rounded-full border-4 border-white bg-white/20 flex items-center justify-center active:scale-95 transition-transform shadow-lg"
+                >
+                  <div className="w-14 h-14 rounded-full bg-white" />
+                </button>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleGallerySelect}
                 />
-                {/* Overlay hint */}
-                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-                  <div className="flex-1 flex items-center justify-center">
-                    <div className="border-2 border-white/30 rounded-2xl w-64 h-80 flex items-center justify-center">
-                      <p className="text-white/50 text-xs text-center px-4">
-                        Point at the item you want to try on
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </>
+              </div>
             )}
           </div>
-        )}
+        </>
+      )}
 
-        {/* Preview */}
-        {pageState === 'preview' && capturedPreview && (
-          <div className="w-full flex-1 relative">
-            <Image
-              src={capturedPreview}
-              alt="Captured item"
-              fill
-              className="object-contain"
-              unoptimized
-            />
+      {/* ── NON-CAMERA STATES: flex layout locked to viewport height ── */}
+      {pageState !== 'camera' && (
+        <div className="flex flex-col h-full">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 pt-safe-area-inset-top pt-4 pb-3 shrink-0">
+            <button
+              onClick={() => router.back()}
+              className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 text-white" />
+            </button>
+
+            <div className="flex flex-col items-center">
+              <span className="text-white font-medium text-sm">Quick Try-On</span>
+              {credits !== undefined && (
+                <Link href="/credits" className="flex items-center gap-1 text-xs text-white/60 mt-0.5">
+                  <Zap className="w-3 h-3" />
+                  <span>{credits.total} credits</span>
+                </Link>
+              )}
+            </div>
+
+            <div className="w-10" />
           </div>
-        )}
 
-        {/* Processing State */}
-        {pageState === 'processing' && (
-          <div className="flex-1 flex flex-col items-center justify-center gap-6 px-8 text-center">
-            <div className="relative">
-              <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
-                <Zap className="w-8 h-8 text-primary" />
+          {/* Content area — fills remaining space */}
+          <div className="flex-1 relative overflow-hidden">
+            {/* Preview */}
+            {pageState === 'preview' && capturedPreview && (
+              <Image
+                src={capturedPreview}
+                alt="Captured item"
+                fill
+                className="object-contain"
+                unoptimized
+              />
+            )}
+
+            {/* Processing */}
+            {pageState === 'processing' && (
+              <div className="h-full flex flex-col items-center justify-center gap-6 px-8 text-center">
+                <div className="relative">
+                  <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
+                    <Zap className="w-8 h-8 text-primary" />
+                  </div>
+                  <div className="absolute inset-0 rounded-full border-2 border-primary/40 animate-spin border-t-transparent" />
+                </div>
+                <div>
+                  <p className="text-white font-medium text-lg">Generating your look...</p>
+                  <p className="text-white/50 text-sm mt-1">This takes about 15–30 seconds</p>
+                </div>
               </div>
-              <div className="absolute inset-0 rounded-full border-2 border-primary/40 animate-spin border-t-transparent" />
-            </div>
-            <div>
-              <p className="text-white font-medium text-lg">Generating your look...</p>
-              <p className="text-white/50 text-sm mt-1">This takes about 15–30 seconds</p>
-            </div>
+            )}
+
+            {/* Result */}
+            {pageState === 'result' && tryOnResult?.resultUrl && (
+              <Image
+                src={tryOnResult.resultUrl}
+                alt="Try-on result"
+                fill
+                className="object-contain"
+                unoptimized
+              />
+            )}
+
+            {/* Error */}
+            {pageState === 'error' && (
+              <div className="h-full flex flex-col items-center justify-center gap-4 text-center px-8">
+                <X className="w-12 h-12 text-destructive" />
+                <p className="text-white/70">
+                  {tryOnResult?.errorMessage ?? 'Generation failed. Please try again.'}
+                </p>
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Result */}
-        {pageState === 'result' && tryOnResult?.resultUrl && (
-          <div className="w-full flex-1 relative">
-            <Image
-              src={tryOnResult.resultUrl}
-              alt="Try-on result"
-              fill
-              className="object-contain"
-              unoptimized
-            />
+          {/* Bottom Actions */}
+          <div className="px-6 pb-safe-area-inset-bottom pb-10 pt-4 shrink-0">
+            {pageState === 'preview' && (
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleRetake}
+                  className="flex-1 border-white/20 text-white bg-transparent hover:bg-white/10"
+                >
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Retake
+                </Button>
+                <Button
+                  onClick={handleTryOn}
+                  className="flex-1 bg-primary text-white hover:bg-primary/90"
+                >
+                  <Zap className="w-4 h-4 mr-2" />
+                  Try It On
+                </Button>
+              </div>
+            )}
+
+            {pageState === 'result' && (
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleReset}
+                  className="flex-1 border-white/20 text-white bg-transparent hover:bg-white/10"
+                >
+                  <Camera className="w-4 h-4 mr-2" />
+                  Try Another
+                </Button>
+                <Button
+                  onClick={handleSaveToLookbook}
+                  disabled={isSaving || savedToLookbook}
+                  className="flex-1 bg-primary text-white hover:bg-primary/90 disabled:opacity-70"
+                >
+                  <BookmarkPlus className="w-4 h-4 mr-2" />
+                  {savedToLookbook ? 'Saved!' : isSaving ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            )}
+
+            {pageState === 'error' && (
+              <Button
+                onClick={handleReset}
+                className="w-full bg-primary text-white hover:bg-primary/90"
+              >
+                Try Again
+              </Button>
+            )}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Error */}
-        {pageState === 'error' && (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
-            <X className="w-12 h-12 text-destructive" />
-            <p className="text-white/70">
-              {tryOnResult?.errorMessage ?? 'Generation failed. Please try again.'}
-            </p>
-          </div>
-        )}
-
-        {/* Canvas (hidden) */}
-        <canvas ref={canvasRef} className="hidden" />
-      </div>
-
-      {/* Bottom Actions */}
-      <div className="px-6 pb-8 pt-4 flex flex-col gap-3">
-        {pageState === 'camera' && !cameraError && (
-          <div className="relative flex items-center justify-center">
-            {/* Gallery upload button — bottom left */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="absolute left-0 p-3 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition-all"
-              aria-label="Upload from gallery"
-            >
-              <Images className="w-6 h-6 text-white" />
-            </button>
-
-            {/* Capture button — centered */}
-            <button
-              onClick={handleCapture}
-              className="w-16 h-16 rounded-full bg-white border-4 border-white/30 flex items-center justify-center active:scale-95 transition-transform shadow-lg"
-            >
-              <div className="w-12 h-12 rounded-full bg-white" />
-            </button>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleGallerySelect}
-            />
-          </div>
-        )}
-
-        {pageState === 'preview' && (
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={handleRetake}
-              className="flex-1 border-white/20 text-white bg-transparent hover:bg-white/10"
-            >
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Retake
-            </Button>
-            <Button
-              onClick={handleTryOn}
-              className="flex-1 bg-primary text-white hover:bg-primary/90"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              Try It On
-            </Button>
-          </div>
-        )}
-
-        {pageState === 'result' && (
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={handleReset}
-              className="flex-1 border-white/20 text-white bg-transparent hover:bg-white/10"
-            >
-              <Camera className="w-4 h-4 mr-2" />
-              Try Another
-            </Button>
-            <Button
-              onClick={handleSaveToLookbook}
-              disabled={isSaving || savedToLookbook}
-              className="flex-1 bg-primary text-white hover:bg-primary/90 disabled:opacity-70"
-            >
-              <BookmarkPlus className="w-4 h-4 mr-2" />
-              {savedToLookbook ? 'Saved!' : isSaving ? 'Saving...' : 'Save'}
-            </Button>
-          </div>
-        )}
-
-        {pageState === 'error' && (
-          <Button
-            onClick={handleReset}
-            className="w-full bg-primary text-white hover:bg-primary/90"
-          >
-            Try Again
-          </Button>
-        )}
-      </div>
+      {/* Canvas (hidden) */}
+      <canvas ref={canvasRef} className="hidden" />
     </div>
   );
 }
