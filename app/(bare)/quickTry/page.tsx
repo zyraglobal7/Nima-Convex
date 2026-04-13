@@ -7,7 +7,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Camera, SwitchCamera, X, Zap, RotateCcw, BookmarkPlus, ArrowLeft } from 'lucide-react';
+import { Camera, SwitchCamera, X, Zap, RotateCcw, BookmarkPlus, ArrowLeft, Images } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -19,6 +19,7 @@ export default function QuickTryPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [pageState, setPageState] = useState<PageState>('camera');
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
@@ -132,6 +133,22 @@ export default function QuickTryPage() {
     setCapturedPreview(null);
     setPageState('camera');
     await startCamera(facingMode);
+  };
+
+  const handleGallerySelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const previewUrl = URL.createObjectURL(file);
+    setCapturedPreview(previewUrl);
+    setCapturedBlob(file);
+    setPageState('preview');
+
+    // Stop camera stream to save battery
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+
+    // Reset input so the same file can be re-selected if needed
+    e.target.value = '';
   };
 
   const handleTryOn = async () => {
@@ -344,12 +361,32 @@ export default function QuickTryPage() {
       {/* Bottom Actions */}
       <div className="px-6 pb-8 pt-4 flex flex-col gap-3">
         {pageState === 'camera' && !cameraError && (
-          <button
-            onClick={handleCapture}
-            className="mx-auto w-16 h-16 rounded-full bg-white border-4 border-white/30 flex items-center justify-center active:scale-95 transition-transform shadow-lg"
-          >
-            <div className="w-12 h-12 rounded-full bg-white" />
-          </button>
+          <div className="relative flex items-center justify-center">
+            {/* Gallery upload button — bottom left */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute left-0 p-3 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition-all"
+              aria-label="Upload from gallery"
+            >
+              <Images className="w-6 h-6 text-white" />
+            </button>
+
+            {/* Capture button — centered */}
+            <button
+              onClick={handleCapture}
+              className="w-16 h-16 rounded-full bg-white border-4 border-white/30 flex items-center justify-center active:scale-95 transition-transform shadow-lg"
+            >
+              <div className="w-12 h-12 rounded-full bg-white" />
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleGallerySelect}
+            />
+          </div>
         )}
 
         {pageState === 'preview' && (
