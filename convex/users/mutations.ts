@@ -1,4 +1,4 @@
-import { mutation, internalMutation, MutationCtx } from '../_generated/server';
+import { mutation, internalMutation, MutationCtx, ActionCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id, Doc } from '../_generated/dataModel';
 import { isValidUsername, getStartOfDayUTC } from '../types';
@@ -1132,6 +1132,36 @@ export const mergeDuplicateUsers = internalMutation({
     }
 
     return result;
+  },
+});
+
+/**
+ * Update the user's AI-generated structured style profile.
+ * Called by the generateRichStyleProfile action after Claude generates the profile.
+ */
+export const updateStyleProfile = mutation({
+  args: {
+    styleProfile: v.any(),
+  },
+  returns: v.null(),
+  handler: async (
+    ctx: MutationCtx,
+    args: { styleProfile: unknown }
+  ): Promise<null> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Not authenticated');
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_workos_user_id', (q) => q.eq('workosUserId', identity.subject))
+      .unique();
+    if (!user) throw new Error('User not found');
+
+    await ctx.db.patch(user._id, {
+      styleProfile: args.styleProfile,
+      updatedAt: Date.now(),
+    });
+    return null;
   },
 });
 

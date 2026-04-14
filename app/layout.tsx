@@ -41,6 +41,9 @@ export const viewport = {
   maximumScale: 1,
   userScalable: false,
   themeColor: '#5C2A33', // Nima burgundy
+  // Keyboard only resizes visual viewport, not layout viewport.
+  // Prevents the sheet from collapsing when the soft keyboard opens on Android.
+  interactiveWidget: 'resizes-visual',
 };
 
 export default function RootLayout({
