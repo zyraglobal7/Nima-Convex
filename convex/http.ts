@@ -306,36 +306,58 @@ http.route({
     const body = await request.text();
 
     // Verify webhook signature using FINGO_WEBHOOK_SECRET
+    // Header format: X-Fingo-Signature: t=<unix_timestamp>, v1=<hex_hmac>
+    // Signed payload: "<timestamp>.<raw_body>"
     const webhookSecret = process.env.FINGO_WEBHOOK_SECRET;
-    const webhookSecretKey = process.env.FINGO_WEBHOOK_SECRET_KEY;
-    const signature = request.headers.get('X-Webhook-Signature') ||
-                      request.headers.get('x-webhook-signature') ||
-                      request.headers.get('Webhook-Signature') ||
-                      request.headers.get('X-Fingo-Signature');
+    const sigHeader = request.headers.get('X-Fingo-Signature');
 
-    if (webhookSecret && signature) {
-      // Verify HMAC signature
-      const encoder = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        'raw',
-        encoder.encode(webhookSecretKey || webhookSecret),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign', 'verify'],
-      );
+    if (!webhookSecret) {
+      console.error('[FINGO WEBHOOK] FINGO_WEBHOOK_SECRET not configured — cannot verify signature');
+      return new Response('Webhook secret not configured', { status: 500 });
+    }
 
-      const signatureBuffer = encoder.encode(body);
-      const expectedSignature = await crypto.subtle.sign('HMAC', key, signatureBuffer);
-      const expectedHex = Array.from(new Uint8Array(expectedSignature))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
+    if (!sigHeader) {
+      console.error('[FINGO WEBHOOK] Missing X-Fingo-Signature header');
+      return new Response('Missing signature', { status: 401 });
+    }
 
-      if (signature !== expectedHex) {
-        console.error('[FINGO WEBHOOK] Signature verification failed');
-        // Log but don't reject - Fingo's exact signature format may vary
-        // In production, uncomment the line below:
-        // return new Response('Invalid signature', { status: 401 });
-      }
+    // Parse "t=<timestamp>, v1=<hex>"
+    const tMatch = sigHeader.match(/t=(\d+)/);
+    const v1Match = sigHeader.match(/v1=([a-f0-9]+)/);
+    if (!tMatch || !v1Match) {
+      console.error('[FINGO WEBHOOK] Malformed X-Fingo-Signature header:', sigHeader);
+      return new Response('Malformed signature', { status: 401 });
+    }
+
+    const timestamp = tMatch[1];
+    const receivedHex = v1Match[1];
+
+    // Replay protection: reject events older than 5 minutes
+    const eventAgeSeconds = Math.floor(Date.now() / 1000) - parseInt(timestamp, 10);
+    if (eventAgeSeconds > 300) {
+      console.error(`[FINGO WEBHOOK] Replay attack detected — event is ${eventAgeSeconds}s old`);
+      return new Response('Request too old', { status: 401 });
+    }
+
+    // Compute expected HMAC-SHA256 over "<timestamp>.<body>"
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(webhookSecret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify'],
+    );
+
+    const signedPayload = encoder.encode(`${timestamp}.${body}`);
+    const receivedBytes = new Uint8Array(
+      receivedHex.match(/.{2}/g)!.map((b) => parseInt(b, 16))
+    );
+
+    const isValid = await crypto.subtle.verify('HMAC', key, receivedBytes, signedPayload);
+    if (!isValid) {
+      console.error('[FINGO WEBHOOK] Signature verification failed');
+      return new Response('Invalid signature', { status: 401 });
     }
 
     // Parse the webhook payload
@@ -386,8 +408,10 @@ http.route({
       // Determine the status from the event
       const status = (data.status || payload.status || '').toString().toLowerCase();
       const isCompleted =
+        eventType === 'transaction.succeeded' ||
         eventType.includes('completed') ||
         eventType.includes('success') ||
+        eventType.includes('succeeded') ||
         status === 'completed' ||
         status === 'success' ||
         status === 'successful';
