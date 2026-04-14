@@ -31,6 +31,8 @@ export default authkitMiddleware({
       '/privacyPolicy',
       // Health check (if exposed)
       '/api/health',
+      // Fingo Pay webhook (called by Fingo servers, not users)
+      '/api/fingo/webhook',
       // Nima Connect widget (unauthenticated popup)
       '/connect',
       '/connect/(.*)',
