@@ -22,6 +22,7 @@ export function Navigation() {
   // These should match the bottom navigation items
   const isRootPage =
     pathname === '/discover' ||
+    pathname === '/engine' ||
     pathname === '/ask' ||
     pathname === '/lookbooks' ||
     pathname === '/orders' ||
@@ -68,10 +69,10 @@ export function Navigation() {
                   Discover
                 </Link>
                 <Link
-                  href="/ask"
+                  href="/engine"
                   className={cn(
                     'text-sm font-medium transition-colors',
-                    isActive('/ask') ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+                    isActive('/engine') ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
                   Ask Nima
@@ -142,9 +143,9 @@ export function Navigation() {
               Discover
             </span>
           </Link>
-          <Link href="/ask" className="flex flex-col items-center gap-1 p-2">
+          <Link href="/engine" className="flex flex-col items-center gap-1 p-2">
             <svg
-              className={cn('w-5 h-5', isActive('/ask') ? 'text-primary' : 'text-muted-foreground')}
+              className={cn('w-5 h-5', isActive('/engine') ? 'text-primary' : 'text-muted-foreground')}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -156,7 +157,7 @@ export function Navigation() {
                 d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
               />
             </svg>
-            <span className={cn('text-xs', isActive('/ask') ? 'text-primary font-medium' : 'text-muted-foreground')}>
+            <span className={cn('text-xs', isActive('/engine') ? 'text-primary font-medium' : 'text-muted-foreground')}>
               Ask Nima
             </span>
           </Link>

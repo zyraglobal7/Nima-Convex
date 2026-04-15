@@ -60,7 +60,7 @@ function DiscoverPageContent() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [workflowStarted, setWorkflowStarted] = useState(false);
 
-  // Get active filter from URL params, default to 'my-look'
+  // Get active filter from URL params, default to 'apparel'
   // Also check for 'from=apparel' param (used when returning from category pages)
   const tabFromUrl = searchParams.get('tab') as FilterType | null;
   const fromParam = searchParams.get('from');
@@ -69,7 +69,7 @@ function DiscoverPageContent() {
       ? tabFromUrl
       : fromParam === 'apparel'
         ? 'apparel'
-        : 'my-look';
+        : 'apparel';
   const [activeFilter, setActiveFilterState] = useState<FilterType>(initialFilter);
 
   // Track if we initialized from a category return (to preserve selection)
@@ -568,9 +568,9 @@ function DiscoverPageContent() {
           className="mb-4 flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
         >
           {[
-            { id: 'my-look' as FilterType, label: 'My Look', icon: Sparkles },
-            { id: 'explore' as FilterType, label: 'Explore', icon: User },
             { id: 'apparel' as FilterType, label: 'Apparel', icon: Shirt },
+            { id: 'explore' as FilterType, label: 'Explore', icon: User },
+            { id: 'my-look' as FilterType, label: 'My Look', icon: Sparkles },
           ].map((filter) => (
             <button
               key={filter.id}

@@ -1,10 +1,12 @@
 'use client';
 
+import React from 'react';
 import { motion } from 'framer-motion';
 import { MessageCircle, Plus, Clock, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import { Id } from '@/convex/_generated/dataModel';
 import {
   Sheet,
   SheetContent,
@@ -17,6 +19,7 @@ interface ChatHistoryDrawerProps {
   currentChatId?: string;
   onNewChat?: () => void;
   trigger?: React.ReactNode;
+  onSelectThread?: (threadId: Id<'threads'>) => void;
 }
 
 // Format relative time helper
@@ -39,7 +42,10 @@ export function ChatHistoryDrawer({
   currentChatId,
   onNewChat,
   trigger,
+  onSelectThread,
 }: ChatHistoryDrawerProps) {
+  const [open, setOpen] = React.useState(false);
+
   // Use real thread data from Convex
   const threadsData = useQuery(api.threads.queries.listThreadsWithPreview, {
     includeArchived: false,
@@ -56,15 +62,15 @@ export function ChatHistoryDrawer({
   };
 
   return (
-    <Sheet>
-      <SheetTrigger asChild>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild onClick={() => setOpen(true)}>
         {trigger || (
           <button className="p-2 rounded-full hover:bg-surface transition-colors">
             <Clock className="w-5 h-5 text-muted-foreground" />
           </button>
         )}
       </SheetTrigger>
-      <SheetContent side="right" className="w-full sm:max-w-md p-0">
+      <SheetContent side="right" className="w-full sm:max-w-md p-0 z-[210]" overlayClassName="z-[209]">
         <SheetHeader className="p-4 border-b border-border/50">
           <SheetTitle className="text-lg font-serif">Chat History</SheetTitle>
         </SheetHeader>
@@ -73,7 +79,10 @@ export function ChatHistoryDrawer({
           {/* New chat button */}
           <div className="p-4 border-b border-border/30">
             <button
-              onClick={onNewChat}
+              onClick={() => {
+                onNewChat?.();
+                setOpen(false);
+              }}
               className="w-full flex items-center justify-center gap-2 h-12 bg-primary hover:bg-primary-hover text-primary-foreground rounded-xl font-medium transition-colors"
             >
               <Plus className="w-5 h-5" />
@@ -102,41 +111,24 @@ export function ChatHistoryDrawer({
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.3, delay: index * 0.05 }}
                   >
-                    <Link
-                      href={`/ask/${thread._id}`}
-                      className={`
-                        flex items-center gap-4 p-4 hover:bg-surface/50 transition-colors
-                        ${currentChatId === thread._id ? 'bg-surface/70' : ''}
-                      `}
-                    >
-                      {/* Icon */}
-                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
-                        <MessageCircle className="w-5 h-5 text-primary" />
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <h3 className="font-medium text-foreground truncate">
-                            {thread.title || 'New conversation'}
-                          </h3>
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {formatRelativeTime(thread.lastMessageAt)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {getPreview(lastMessage)}
-                        </p>
-                        {thread.messageCount > 0 && (
-                          <p className="text-xs text-secondary mt-1">
-                            {thread.messageCount} message{thread.messageCount > 1 ? 's' : ''}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Arrow */}
-                      <ChevronRight className="flex-shrink-0 w-5 h-5 text-muted-foreground" />
-                    </Link>
+                    {onSelectThread ? (
+                      <button
+                        className={`w-full flex items-center gap-4 p-4 hover:bg-surface/50 transition-colors text-left ${currentChatId === thread._id ? 'bg-surface/70' : ''}`}
+                        onClick={() => {
+                          onSelectThread(thread._id);
+                          setOpen(false);
+                        }}
+                      >
+                        <ThreadItemContent thread={thread} lastMessage={lastMessage} getPreview={getPreview} />
+                      </button>
+                    ) : (
+                      <Link
+                        href={`/ask/${thread._id}`}
+                        className={`flex items-center gap-4 p-4 hover:bg-surface/50 transition-colors ${currentChatId === thread._id ? 'bg-surface/70' : ''}`}
+                      >
+                        <ThreadItemContent thread={thread} lastMessage={lastMessage} getPreview={getPreview} />
+                      </Link>
+                    )}
                   </motion.div>
                 ))}
               </div>
@@ -155,18 +147,59 @@ export function ChatHistoryDrawer({
   );
 }
 
+// Shared inner content for a thread row (used in both Link and button variants)
+function ThreadItemContent({
+  thread,
+  lastMessage,
+  getPreview,
+}: {
+  thread: { _id: Id<'threads'>; title?: string; lastMessageAt: number; messageCount: number };
+  lastMessage: { content: string; role: 'user' | 'assistant' } | null;
+  getPreview: (msg: { content: string; role: 'user' | 'assistant' } | null) => string;
+}) {
+  return (
+    <>
+      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
+        <MessageCircle className="w-5 h-5 text-primary" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <h3 className="font-medium text-foreground truncate">
+            {thread.title || 'New conversation'}
+          </h3>
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {formatRelativeTime(thread.lastMessageAt)}
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground truncate">
+          {getPreview(lastMessage)}
+        </p>
+        {thread.messageCount > 0 && (
+          <p className="text-xs text-secondary mt-1">
+            {thread.messageCount} message{thread.messageCount > 1 ? 's' : ''}
+          </p>
+        )}
+      </div>
+      <ChevronRight className="flex-shrink-0 w-5 h-5 text-muted-foreground" />
+    </>
+  );
+}
+
 // History button for header
-export function ChatHistoryButton({ 
+export function ChatHistoryButton({
   currentChatId,
   onNewChat,
-}: { 
+  onSelectThread,
+}: {
   currentChatId?: string;
   onNewChat?: () => void;
+  onSelectThread?: (threadId: Id<'threads'>) => void;
 }) {
   return (
     <ChatHistoryDrawer
       currentChatId={currentChatId}
       onNewChat={onNewChat}
+      onSelectThread={onSelectThread}
       trigger={
         <button className="p-2 rounded-full hover:bg-surface transition-colors">
           <Clock className="w-5 h-5 text-muted-foreground" />
