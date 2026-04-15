@@ -1,4 +1,4 @@
-import { query, QueryCtx } from '../_generated/server';
+import { query, internalQuery, QueryCtx } from '../_generated/server';
 import { v } from 'convex/values';
 import type { Id, Doc } from '../_generated/dataModel';
 import { isValidUsername } from '../types';
@@ -650,3 +650,14 @@ export const searchUsers = query({
   },
 });
 
+
+/**
+ * Internal: get a user by ID (used from internal actions that cannot use auth context).
+ */
+export const getUserById = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.any(),
+  handler: async (ctx: QueryCtx, args: { userId: Id<"users"> }): Promise<Doc<"users"> | null> => {
+    return await ctx.db.get(args.userId);
+  },
+});

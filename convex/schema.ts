@@ -61,7 +61,7 @@ export default defineSchema({
     // Status
     onboardingCompleted: v.boolean(),
     onboardingWorkflowStartedAt: v.optional(v.number()), // Prevents double-triggering the look generation workflow
-    styleProfile: v.optional(v.string()), // AI-generated detailed style profile (derived from raw preferences)
+    styleProfile: v.optional(v.any()), // AI-generated style profile — string (legacy text) or structured object (richStyleProfile)
     isActive: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1256,5 +1256,63 @@ export default defineSchema({
   })
     .index('by_seller', ['sellerId'])
     .index('by_status', ['status']),
+
+  // ============================================
+  // WARDROBE — USER-OWNED ITEMS
+  // ============================================
+
+  /**
+   * wardrobeItems - Items the user already owns (from closet upload or single-item upload)
+   * Used by the recommendation engine to suggest outfits that mix new catalog items
+   * with things already in the user's wardrobe.
+   */
+  wardrobeItems: defineTable({
+    userId: v.id('users'),
+    imageStorageId: v.id('_storage'),           // processed image (background removed)
+    originalImageStorageId: v.id('_storage'),   // original upload
+    description: v.string(),                     // e.g. "Navy blue slim-fit chinos"
+    category: v.string(),                        // "tops" | "bottoms" | "shoes" | "outerwear" | "accessories" | "dresses"
+    subcategory: v.optional(v.string()),         // e.g. "chinos", "sneakers"
+    tags: v.array(v.string()),                   // ["navy", "slim-fit", "cotton", "casual"]
+    color: v.string(),                           // primary color
+    season: v.optional(v.array(v.string())),     // ["all-season"] or ["warm", "cool"]
+    formality: v.string(),                       // "casual" | "smart-casual" | "semi-formal" | "formal" | "athletic"
+    source: v.union(v.literal('single_upload'), v.literal('closet_scan')),
+    createdAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_user_and_category', ['userId', 'category'])
+    .index('by_user_and_formality', ['userId', 'formality']),
+
+  // ============================================
+  // RECOMMENDATION ENGINE
+  // ============================================
+
+  /**
+   * recommendations - Pre-generated weekly outfit recommendations per user
+   * Generated every Monday by a cron job. Shown on the /engine page.
+   * Each record is one outfit combination for a specific occasion.
+   */
+  recommendations: defineTable({
+    userId: v.id('users'),
+    itemIds: v.array(v.id('items')),            // 2–4 catalog items forming an outfit
+    occasion: v.string(),                        // "golf", "concert", "deal closing meeting"
+    nimaComment: v.string(),                     // short AI-generated contextual comment
+    status: v.union(
+      v.literal('pending_comment'),             // items selected, awaiting AI comment
+      v.literal('active'),                      // ready to show
+      v.literal('expired'),                     // past the 1-week window
+      v.literal('tried_on'),                    // user tapped "Try it On"
+    ),
+    weekOf: v.number(),                          // timestamp of the Monday this was generated for
+    createdAt: v.number(),
+    expiresAt: v.number(),                       // 1 week after creation
+    // Wardrobe mix — optional, when the rec pairs catalog items with user's own items
+    wardrobeItemIds: v.optional(v.array(v.id('wardrobeItems'))),
+    isWardrobeMix: v.optional(v.boolean()),
+  })
+    .index('by_user_and_status', ['userId', 'status'])
+    .index('by_user_and_created', ['userId', 'createdAt'])
+    .index('by_expires', ['expiresAt']),
 
 });
