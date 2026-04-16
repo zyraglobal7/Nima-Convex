@@ -35,7 +35,7 @@ export function Navigation() {
   return (
     <>
       {/* Desktop Header */}
-      <header className={`sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50 ${pathname?.startsWith('/lookbooks/') ? 'hidden' : ''}`}>
+      <header className={`sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50 ${pathname?.startsWith('/lookbooks/') || pathname === '/engine' ? 'hidden' : ''}`}>
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             {/* Left Section: Logo or Back Button */}
