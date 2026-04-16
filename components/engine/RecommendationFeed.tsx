@@ -240,8 +240,8 @@ function WardrobeTabContent({
 
   if (wardrobeItems === undefined) {
     return (
-      <div className="grid grid-cols-3 gap-2">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
+      <div className="grid grid-cols-2 gap-3">
+        {[1, 2, 3, 4].map((i) => (
           <div key={i} className="aspect-square rounded-xl bg-surface border border-border/40 animate-pulse" />
         ))}
       </div>
@@ -292,7 +292,7 @@ function WardrobeTabContent({
         {wardrobeItems.length === 0 ? (
           <p className="text-sm text-text-secondary text-center py-8">No {activeCategory} yet</p>
         ) : (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             {wardrobeItems.map((item, index) => (
               <WardrobeItemTile
                 key={item._id}

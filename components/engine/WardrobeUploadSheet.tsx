@@ -33,9 +33,11 @@ export function WardrobeUploadSheet({ open, onOpenChange, defaultSource }: Wardr
     setUploadState('idle');
     setResultCount(0);
     setErrorMsg('');
-    // Trigger file picker immediately
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
+    // Closet scan opens the camera directly; single upload opens the gallery
+    if (s === 'closet_scan') {
+      if (cameraInputRef.current) cameraInputRef.current.click();
+    } else {
+      if (fileInputRef.current) fileInputRef.current.click();
     }
   };
 

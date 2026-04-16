@@ -283,43 +283,31 @@ export const generateChatLookImages = action({
       };
     }
 
-    console.log(`[CHAT:GENERATE_IMAGES] Generating images for ${args.lookIds.length} looks`);
+    console.log(`[CHAT:GENERATE_IMAGES] Scheduling image generation for ${args.lookIds.length} looks`);
 
+    // Schedule each look generation as an independent task.
+    // Running them sequentially via ctx.runAction causes the parent action's auth token
+    // to expire (~30s) before looks 2 and 3 start. Scheduling gives each look its own
+    // execution context with a fresh auth state.
     const results: Array<{
       lookId: Id<'looks'>;
       success: boolean;
       error?: string;
     }> = [];
 
-    // Generate images for each look
     for (const lookId of args.lookIds) {
-      console.log(`[CHAT:GENERATE_IMAGES] Processing look ${lookId}...`);
-
-      try {
-        const result = await ctx.runAction(
-          internal.workflows.actions.generateLookImage,
-          { lookId, userId: user._id }
-        );
-
-        if (result.success) {
-          console.log(`[CHAT:GENERATE_IMAGES] Successfully generated image for look ${lookId}`);
-          results.push({ lookId, success: true });
-        } else {
-          console.error(`[CHAT:GENERATE_IMAGES] Failed to generate image for look ${lookId}: ${result.error}`);
-          results.push({ lookId, success: false, error: result.error });
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`[CHAT:GENERATE_IMAGES] Error generating image for look ${lookId}:`, error);
-        results.push({ lookId, success: false, error: errorMessage });
-      }
+      await ctx.scheduler.runAfter(0, internal.workflows.actions.generateLookImage, {
+        lookId,
+        userId: user._id,
+      });
+      results.push({ lookId, success: true });
+      console.log(`[CHAT:GENERATE_IMAGES] Scheduled image generation for look ${lookId}`);
     }
 
-    const successCount = results.filter((r) => r.success).length;
-    console.log(`[CHAT:GENERATE_IMAGES] Complete: ${successCount}/${args.lookIds.length} succeeded`);
+    console.log(`[CHAT:GENERATE_IMAGES] Scheduled ${args.lookIds.length} look generations`);
 
     return {
-      success: successCount > 0,
+      success: true,
       results,
     };
   },

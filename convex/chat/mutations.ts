@@ -28,24 +28,47 @@ const FORMALITY_ORDER: FormalityLevel[] = ['casual', 'smart_casual', 'formal', '
 // Keywords that indicate formality level (checked against name, subcategory, tags)
 const FORMALITY_KEYWORDS: Record<FormalityLevel, string[]> = {
   casual: [
-    'sweatpants', 'hoodie', 'sneakers', 'track pants', 't-shirt', 'tee',
-    'joggers', 'slides', 'flip-flops', 'cargo', 'denim', 'jeans', 'casual',
-    'streetwear', 'athleisure', 'sporty', 'relaxed', 'everyday', 'weekend'
+    // Clothing types
+    'sweatpants', 'hoodie', 'hooded', 'sweatshirt', 'tracksuit', 'track pants',
+    't-shirt', 'tee', 'graphic tee', 'crop top', 'tank top', 'vest top',
+    'joggers', 'leggings', 'shorts', 'mini skirt', 'denim shorts',
+    'sneakers', 'slides', 'flip-flops', 'flip flops', 'sandals', 'slippers',
+    // Fabrics/styles that signal casual
+    'cargo', 'denim', 'jeans', 'distressed', 'ripped',
+    // Explicit tags
+    'casual', 'streetwear', 'athleisure', 'sporty', 'relaxed',
+    'everyday', 'weekend', 'lounge', 'chill', 'comfort',
   ],
   smart_casual: [
-    'chinos', 'polo', 'loafers', 'blazer', 'cardigan', 'khaki', 'button-up',
+    // Clothing types
+    'chinos', 'polo', 'loafers', 'cardigan', 'khaki', 'button-up', 'button up',
+    'linen shirt', 'knit', 'midi dress', 'wrap dress', 'shirt dress',
+    'ankle boots', 'block heels', 'mules',
+    // Explicit tags
     'smart', 'brunch', 'date', 'work', 'office', 'business casual', 'preppy',
-    'classic', 'timeless', 'versatile', 'refined'
+    'classic', 'timeless', 'versatile', 'refined', 'smart casual',
   ],
   formal: [
-    'dress pants', 'dress shirt', 'oxford', 'heels', 'boots', 'formal',
-    'suit', 'tailored', 'professional', 'meeting', 'interview', 'elegant',
-    'sophisticated', 'polished', 'structured'
+    // Clothing types
+    'dress pants', 'dress shirt', 'button down', 'button-down', 'oxford shirt',
+    'blazer', 'suit jacket', 'trouser', 'pencil skirt', 'formal skirt',
+    'oxford shoes', 'derby shoes', 'court shoes', 'pointed heels', 'pumps',
+    'silk blouse', 'formal blouse', 'structured jacket',
+    // Fabrics that signal formal
+    'wool', 'tweed', 'crepe', 'satin blouse',
+    // Explicit tags
+    'formal', 'suit', 'tailored', 'professional', 'structured',
+    'meeting', 'interview', 'elegant', 'sophisticated', 'polished',
+    'business', 'corporate', 'power',
   ],
   evening: [
-    'gown', 'cocktail dress', 'tuxedo', 'evening', 'black tie', 'red carpet',
-    'glamorous', 'luxe', 'party', 'gala', 'wedding', 'prom', 'ball'
-  ]
+    // Clothing types
+    'gown', 'evening gown', 'maxi gown', 'cocktail dress', 'tuxedo',
+    'sequin', 'velvet dress', 'floor-length', 'floor length',
+    // Explicit tags
+    'evening', 'black tie', 'red carpet', 'glamorous', 'luxe',
+    'party', 'gala', 'wedding', 'prom', 'ball', 'formal dinner',
+  ],
 };
 
 /**
@@ -67,6 +90,42 @@ function isCompleteOutfit(item: Doc<'items'>): boolean {
   const nameLower = item.name.toLowerCase();
   
   return setKeywords.some(keyword => nameLower.includes(keyword));
+}
+
+/**
+ * Determine the required formality level from an occasion string.
+ * Returns null when the occasion is too ambiguous to constrain.
+ */
+function getRequiredFormalityFromOccasion(occasion?: string): FormalityLevel | null {
+  if (!occasion) return null;
+  const lower = occasion.toLowerCase();
+
+  // Evening / black-tie events
+  if (/wedding|gala|black[\s-]?tie|evening|cocktail|prom|ball|red[\s-]?carpet|formal dinner/.test(lower)) {
+    return 'evening';
+  }
+
+  // Strictly formal / professional
+  if (/interview|court|funeral|conference|presentation|pitch|suit|formal|professional|ceremony/.test(lower)) {
+    return 'formal';
+  }
+
+  // Smart casual (most daytime social / work contexts)
+  if (/work|office|business|date|brunch|lunch|dinner|meeting|church|smart|semi[\s-]?formal/.test(lower)) {
+    return 'smart_casual';
+  }
+
+  // Streetwear / concert / festival / nightlife → casual (hype/urban vibe, not formal)
+  if (/concert|festival|gig|rave|show|streetwear|hype|urban|club|night out|nightout|trap|hip.?hop|rap/.test(lower)) {
+    return 'casual';
+  }
+
+  // Casual / relaxed
+  if (/casual|weekend|hangout|grocery|beach|picnic|park|home|errand|gym|lounge|chill|party/.test(lower)) {
+    return 'casual';
+  }
+
+  return null; // Genuinely ambiguous — don't constrain by formality
 }
 
 /**
@@ -196,7 +255,7 @@ function getAllowedCategoriesForCompleteOutfit(): ItemCategory[] {
 }
 
 // Type for item category
-type ItemCategory = 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry';
+type ItemCategory = 'top' | 'bottom' | 'dress' | 'outfit' | 'outerwear' | 'shoes' | 'accessory' | 'bag' | 'jewelry' | 'swimwear';
 
 /**
  * Create a look from chat based on user preferences
@@ -356,6 +415,7 @@ export const createLooksFromChat = mutation({
   args: {
     occasion: v.optional(v.string()),
     context: v.optional(v.string()), // Additional context from chat (e.g., "date night", "work meeting")
+    source: v.optional(v.union(v.literal('new'), v.literal('wardrobe'), v.literal('both'))), // Whether to use catalog, wardrobe, or both
   },
   returns: v.union(
     v.object({
@@ -374,6 +434,7 @@ export const createLooksFromChat = mutation({
     args: {
       occasion?: string;
       context?: string;
+      source?: 'new' | 'wardrobe' | 'both';
     }
   ): Promise<
     | { success: true; lookIds: Id<'looks'>[]; scenario: 'fresh' | 'remix'; message: string }
@@ -443,13 +504,168 @@ export const createLooksFromChat = mutation({
     fetch('http://127.0.0.1:7242/ingest/5d407c11-6781-42e2-9459-00c476ac031a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mutations.ts:createLooksFromChat:userPrefs',message:'User preferences extracted',data:{userGender,userStyles,userBudget,userId:user._id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H3'})}).catch(()=>{});
     // #endregion
 
-    // Get user's previous looks to detect item overlap
+    // Map wardrobe formality strings to our FormalityLevel enum
+    function mapWardrobeFormality(formality: string): FormalityLevel {
+      switch (formality.toLowerCase()) {
+        case 'casual': return 'casual';
+        case 'smart-casual': return 'smart_casual';
+        case 'semi-formal': return 'smart_casual';
+        case 'formal': return 'formal';
+        case 'athletic': return 'casual';
+        default: return 'smart_casual';
+      }
+    }
+
+    // Normalize wardrobe category string ("tops", "dresses") → catalog ItemCategory ("top", "dress")
+    function normalizeWardrobeCategory(cat: string): ItemCategory | null {
+      const map: Record<string, ItemCategory> = {
+        tops: 'top', top: 'top',
+        bottoms: 'bottom', bottom: 'bottom',
+        shoes: 'shoes',
+        outerwear: 'outerwear',
+        accessories: 'accessory', accessory: 'accessory',
+        dresses: 'dress', dress: 'dress',
+      };
+      return map[cat.toLowerCase()] ?? null;
+    }
+
+    // Select wardrobe items to form a look base for the given occasion
+    function selectWardrobeItemsForLook(
+      items: Doc<'wardrobeItems'>[],
+      occasion: string | undefined,
+      excludeIds: Set<string>
+    ): Doc<'wardrobeItems'>[] {
+      const requiredFormality = getRequiredFormalityFromOccasion(occasion);
+
+      // Filter by formality compatibility
+      const compatible = items.filter((item) => {
+        if (excludeIds.has(item._id)) return false;
+        if (!requiredFormality) return true;
+        const diff = Math.abs(
+          FORMALITY_ORDER.indexOf(mapWardrobeFormality(item.formality)) -
+          FORMALITY_ORDER.indexOf(requiredFormality)
+        );
+        return diff <= 1;
+      });
+
+      const selected: Doc<'wardrobeItems'>[] = [];
+      const usedCats = new Set<string>();
+
+      // Prefer a dress/complete outfit
+      const dress = compatible.find(
+        (i) => ['dress', 'dresses'].includes(i.category.toLowerCase()) && !usedCats.has('dress')
+      );
+      if (dress) {
+        selected.push(dress);
+        usedCats.add('dress');
+        return selected; // dress is complete — catalog fills shoes/accessories
+      }
+
+      // Otherwise top + bottom
+      const top = compatible.find(
+        (i) => ['top', 'tops'].includes(i.category.toLowerCase()) && !usedCats.has('top')
+      );
+      if (top) { selected.push(top); usedCats.add('top'); }
+
+      const bottom = compatible.find(
+        (i) => ['bottom', 'bottoms'].includes(i.category.toLowerCase()) && !usedCats.has('bottom')
+      );
+      if (bottom) { selected.push(bottom); usedCats.add('bottom'); }
+
+      // Outerwear (hoodies, jackets, etc.) — treat as a top-level base item for casual occasions.
+      // This handles the common case where a user's wardrobe is mostly streetwear/outerwear
+      // (e.g. hoodies categorized as "outerwear" by GPT-4o) with no separate tops.
+      const outer = compatible.find(
+        (i) => i.category.toLowerCase() === 'outerwear' && !usedCats.has('outerwear')
+      );
+      if (outer) {
+        selected.push(outer);
+        usedCats.add('outerwear');
+        // If outerwear is filling the "top" role (no top was found), mark it so catalog
+        // skipping works correctly — the hoodie covers the top slot.
+        if (!usedCats.has('top')) {
+          usedCats.add('top');
+        }
+      }
+
+      return selected;
+    }
+
+    // Build wardrobe-informed context when source includes wardrobe
+    let occasionWithHint = args.occasion;
+    const source = args.source ?? 'new';
+
+    // wardrobeItemsPerLook[i] = wardrobe items to include in look i
+    const wardrobeItemsPerLook: Doc<'wardrobeItems'>[][] = [[], [], []];
+    // catalogCategoriesToSkip[i] = categories covered by wardrobe → skip in catalog matching
+    const catalogSkipPerLook: Set<ItemCategory>[] = [new Set(), new Set(), new Set()];
+    // Normalized catalog-format categories the user owns (for boost logic)
+    let normalizedWardrobeCats: ItemCategory[] = [];
+
+    if (source === 'wardrobe' || source === 'both') {
+      const allWardrobeItems = await ctx.db
+        .query('wardrobeItems')
+        .withIndex('by_user', (q) => q.eq('userId', user._id))
+        .take(50);
+
+      if (allWardrobeItems.length > 0) {
+        // Build normalized category list for the "boost missing categories" logic
+        normalizedWardrobeCats = [
+          ...new Set(
+            allWardrobeItems
+              .map((i) => normalizeWardrobeCategory(i.category))
+              .filter((c): c is ItemCategory => c !== null)
+          ),
+        ];
+
+        // Enrich occasion string with predominant wardrobe formality
+        const formalityCounts: Record<string, number> = {};
+        for (const item of allWardrobeItems) {
+          formalityCounts[item.formality] = (formalityCounts[item.formality] ?? 0) + 1;
+        }
+        const predominantFormality = Object.entries(formalityCounts)
+          .sort((a, b) => b[1] - a[1])[0]?.[0];
+        if (predominantFormality && args.occasion && !args.occasion.includes(predominantFormality)) {
+          occasionWithHint = [args.occasion, predominantFormality.replace('-', ' ')].filter(Boolean).join(' ');
+        }
+
+        // Pre-select wardrobe items for each of the 3 looks (no repeats across looks)
+        const usedWardrobeIds = new Set<string>();
+        for (let i = 0; i < 3; i++) {
+          const selected = selectWardrobeItemsForLook(allWardrobeItems, occasionWithHint, usedWardrobeIds);
+          wardrobeItemsPerLook[i] = selected;
+          selected.forEach((wi) => usedWardrobeIds.add(wi._id));
+
+          // For 'wardrobe' source, catalog should only fill categories wardrobe doesn't cover
+          if (source === 'wardrobe' && selected.length > 0) {
+            const covered = selected
+              .map((wi) => normalizeWardrobeCategory(wi.category))
+              .filter((c): c is ItemCategory => c !== null);
+            covered.forEach((c) => catalogSkipPerLook[i].add(c));
+            // If outerwear is in the look (e.g. a hoodie filling the top role),
+            // also skip "top" in the catalog so we don't add a redundant layer.
+            if (covered.includes('outerwear')) {
+              catalogSkipPerLook[i].add('top');
+            }
+          }
+        }
+
+        console.log(
+          `[Chat:Mutation] Wardrobe source: selected wardrobe items per look: ${wardrobeItemsPerLook.map((l) => l.length).join(',')}`
+        );
+      }
+    }
+
+    // Get user's recent looks for overlap tracking + deprioritising repeat items.
+    // Only look at the last 15 to avoid penalising the entire catalog for power users
+    // (50 previous looks → 58 unique items means almost nothing left to suggest fresh).
     const previousLooks = await ctx.db
       .query('looks')
       .withIndex('by_creator_and_status', (q) => q.eq('creatorUserId', user._id))
-      .take(20);
-    
-    // Build set of all previously used item IDs
+      .order('desc')
+      .take(15);
+
+    // Build set of recently used item IDs
     const previousItemIds = new Set<string>();
     for (const look of previousLooks) {
       for (const itemId of look.itemIds) {
@@ -482,28 +698,40 @@ export const createLooksFromChat = mutation({
 
       // Try to create 3 looks using different outfit strategies
       for (let i = 0; i < 3; i++) {
+        const thisLookWardrobeItems = wardrobeItemsPerLook[i] ?? [];
+        const skipCats = catalogSkipPerLook[i] ?? new Set<ItemCategory>();
+
         const matchedItems = await matchItemsForLookWithExclusions(ctx, {
           gender: userGender,
           stylePreferences: userStyles,
           budgetRange: userBudget,
-          occasion: args.occasion,
+          occasion: occasionWithHint,
           excludeItemIds: usedItemIds,
-          strategyIndex: i, // Use different strategies for variety
-          ignorePreferences: isFallback, // Pass fallback flag
+          previousItemIds: isFallback ? new Set() : previousItemIds,
+          wardrobeCategories: normalizedWardrobeCats.length > 0 ? normalizedWardrobeCats : undefined,
+          skipCategories: skipCats,
+          strategyIndex: i,
+          ignorePreferences: isFallback,
         });
 
-        if (matchedItems.length < 2) {
-          // Not enough items for this look, skip
+        // For wardrobe/both source with wardrobe items: allow a look with only 1 catalog item
+        // (shoes/accessories to complement the wardrobe base). For new-only: require 2+.
+        const minCatalogItems = thisLookWardrobeItems.length > 0 ? 0 : 2;
+        if (matchedItems.length < minCatalogItems) {
+          continue;
+        }
+        // Still need something to show — require at least wardrobe items if no catalog items
+        if (matchedItems.length === 0 && thisLookWardrobeItems.length === 0) {
           continue;
         }
 
-        // Mark items as used and track for overlap
+        // Mark catalog items as used and track for overlap
         matchedItems.forEach((item) => {
           usedItemIds.add(item._id);
           allMatchedItemIds.push(item._id);
         });
 
-        // Calculate total price
+        // Calculate total price from catalog items only (wardrobe items are owned)
         let totalPrice = 0;
         let currency = 'KES';
         for (const item of matchedItems) {
@@ -515,7 +743,6 @@ export const createLooksFromChat = mutation({
         const styleTags = [...new Set(matchedItems.flatMap((item) => item.tags))].slice(0, 5);
         const nimaComment = generateNimaComment(args.occasion, args.context, user.firstName);
 
-        // Vary the look names
         const lookNames = [
           args.occasion ? `${args.occasion} Look #1` : 'Option 1',
           args.occasion ? `${args.occasion} Look #2` : 'Option 2',
@@ -525,6 +752,9 @@ export const createLooksFromChat = mutation({
         const lookId = await ctx.db.insert('looks', {
           publicId,
           itemIds: matchedItems.map((item) => item._id),
+          wardrobeItemIds: thisLookWardrobeItems.length > 0
+            ? thisLookWardrobeItems.map((wi) => wi._id)
+            : undefined,
           totalPrice,
           currency,
           name: lookNames[i],
@@ -599,8 +829,11 @@ async function matchItemsForLookWithExclusions(
     budgetRange?: 'low' | 'mid' | 'premium';
     occasion?: string;
     excludeItemIds: Set<string>;
+    previousItemIds?: Set<string>; // items seen in past looks — deprioritised, not hard-excluded
+    wardrobeCategories?: ItemCategory[]; // catalog-normalized categories user already owns — boost complementary ones
+    skipCategories?: Set<ItemCategory>; // categories covered by wardrobe items — skip in strategy
     strategyIndex: number;
-    ignorePreferences?: boolean; // New flag for fallback
+    ignorePreferences?: boolean;
   }
 ): Promise<Doc<'items'>[]> {
   // Rotate through strategies based on index
@@ -654,12 +887,12 @@ async function matchItemsForLookWithExclusions(
 
     return items
       .filter((item) => item.isActive)
-      .filter((item) => !preferences.excludeItemIds.has(item._id)) // Exclude already used items
-      // REMOVED STRICT BUDGET FILTER - now handled in scoring
+      .filter((item) => !preferences.excludeItemIds.has(item._id)) // Hard-exclude within-session used items
       .map((item) => {
-        let score = Math.random() * 5; // Base score
+        // Base score: high randomness (0-30) so the full pool gets genuine variety
+        let score = Math.random() * 30;
 
-        // 1. Style Preferences Scoring (skipped if ignorePreferences is true)
+        // 1. Style Preferences Scoring (skipped on fallback)
         if (!preferences.ignorePreferences && preferences.stylePreferences.length > 0) {
           const styleSet = new Set(preferences.stylePreferences.map((s) => s.toLowerCase()));
           const matchingTags = item.tags.filter((tag) => styleSet.has(tag.toLowerCase()));
@@ -667,42 +900,80 @@ async function matchItemsForLookWithExclusions(
         }
 
         const occasionLower = preferences.occasion?.toLowerCase() || '';
-        
-        // 2. Occasion/Context Scoring (Name/Description match) - HIGH PRIORITY
+
+        // 2. Occasion/Context Scoring — keyword match in item metadata
         if (occasionLower) {
           const nameLower = item.name.toLowerCase();
           const descLower = item.description?.toLowerCase() || '';
-          
-          // Direct name match is huge
-          if (nameLower.includes(occasionLower)) {
-            score += 50; 
+          if (nameLower.includes(occasionLower)) score += 40;
+          else if (descLower.includes(occasionLower)) score += 25;
+          if (item.tags.some((t) => t.toLowerCase().includes(occasionLower))) score += 12;
+          if (item.occasion && item.occasion.some((o) => o.toLowerCase().includes(occasionLower))) score += 18;
+        }
+
+        // 2b. Formality Match — hard exclusion + scoring
+        // Items 2+ levels from the required formality are returned with score = -Infinity
+        // so they are sorted to the bottom and never enter the candidate pool.
+        const requiredFormality = getRequiredFormalityFromOccasion(preferences.occasion);
+        if (requiredFormality) {
+          const itemFormality = getFormalityLevel(item);
+          const diff = Math.abs(
+            FORMALITY_ORDER.indexOf(itemFormality) - FORMALITY_ORDER.indexOf(requiredFormality)
+          );
+          if (diff === 0) score += 40;       // Exact formality match — strong boost
+          else if (diff === 1) score += 15;  // Adjacent level — acceptable
+          else score = -Infinity;            // Hard exclusion: wrong formality entirely
+        }
+
+        // 2c. Direct occasion array match — item says it's good for this occasion type
+        if (requiredFormality && item.occasion && item.occasion.length > 0) {
+          const formalOccasions = new Set(['formal', 'professional', 'business', 'interview', 'work', 'office', 'meeting', 'corporate']);
+          const smartCasualOccasions = new Set(['smart_casual', 'smart casual', 'date', 'brunch', 'dinner', 'work', 'office']);
+          const casualOccasions = new Set(['casual', 'weekend', 'everyday', 'hangout', 'beach', 'outdoor']);
+          const eveningOccasions = new Set(['evening', 'party', 'wedding', 'gala', 'date_night', 'cocktail', 'formal_dinner']);
+
+          const occasionSets: Record<FormalityLevel, Set<string>> = {
+            formal: formalOccasions,
+            smart_casual: smartCasualOccasions,
+            casual: casualOccasions,
+            evening: eveningOccasions,
+          };
+
+          const itemOccasionsLower = item.occasion.map(o => o.toLowerCase());
+          const requiredSet = occasionSets[requiredFormality];
+          if (itemOccasionsLower.some(o => requiredSet.has(o))) {
+            score += 20; // Item explicitly tagged for this occasion type
           }
-          // Description match
-          else if (descLower.includes(occasionLower)) {
-            score += 30;
-          }
-          // Tag match
-          if (item.tags.some((t) => t.toLowerCase().includes(occasionLower))) {
-            score += 15;
-          }
-          // Occasion field match
-          if (item.occasion && item.occasion.some((o) => o.toLowerCase().includes(occasionLower))) {
-            score += 20;
+          // Penalise items whose occasion array contains conflicting uses
+          const conflictLevel = requiredFormality === 'formal' ? casualOccasions
+            : requiredFormality === 'casual' ? formalOccasions : null;
+          if (conflictLevel && itemOccasionsLower.some(o => conflictLevel.has(o))) {
+            score -= 30;
           }
         }
 
-        // 3. Budget Scoring (Penalty instead of Filter)
+        // 3. Budget Scoring
         if (!preferences.ignorePreferences && preferences.budgetRange) {
           const range = budgetRanges[preferences.budgetRange];
-          if (item.price >= range.min && item.price <= range.max) {
-             score += 10; // Bonus for matching budget
-          } else {
-             score -= 20; // Penalty for mismatch, but doesn't hard exclude
+          if (item.price >= range.min && item.price <= range.max) score += 10;
+          else score -= 15;
+        }
+
+        // 4. Penalise items already shown in previous looks (-25 soft penalty)
+        if (preferences.previousItemIds?.has(item._id)) {
+          score -= 25;
+        }
+
+        // 5. Boost items in categories the user is MISSING from their wardrobe
+        if (preferences.wardrobeCategories && preferences.wardrobeCategories.length > 0) {
+          if (!preferences.wardrobeCategories.includes(item.category)) {
+            score += 20; // User doesn't own this category — great complement to their wardrobe
           }
         }
 
         return { item, score };
       })
+      .filter(({ score }) => score !== -Infinity) // Hard-exclude formality mismatches
       .sort((a, b) => b.score - a.score);
   }
 
@@ -712,24 +983,28 @@ async function matchItemsForLookWithExclusions(
     const usedItemIds = new Set<string>();
     let baseIsCompleteOutfit = false;
 
-    // Step 1: Get base items
+    // Step 1: Get base items (skip categories already covered by wardrobe items)
     let baseComplete = true;
     for (const category of strategy.base) {
+      if (preferences.skipCategories?.has(category)) {
+        // This category is covered by a wardrobe item — no catalog item needed
+        continue;
+      }
       const items = await getItemsByCategory(category);
-      
-      // Find a compatible item
+
+      // Collect up to 6 qualifying candidates, then pick randomly for variety
       let selectedItem: Doc<'items'> | null = null;
-      
+      const candidates: Doc<'items'>[] = [];
+
       for (const { item } of items) {
         if (usedItemIds.has(item._id)) continue;
-        
-        // Check coherence with existing items
-        if (matchedItems.length > 0 && !isItemCoherentWithLook(item, matchedItems)) {
-          continue;
-        }
-        
-        selectedItem = item;
-        break;
+        if (matchedItems.length > 0 && !isItemCoherentWithLook(item, matchedItems)) continue;
+        candidates.push(item);
+        if (candidates.length >= 6) break;
+      }
+
+      if (candidates.length > 0) {
+        selectedItem = candidates[Math.floor(Math.random() * candidates.length)];
       }
       
       if (selectedItem) {
@@ -777,21 +1052,23 @@ async function matchItemsForLookWithExclusions(
       if (matchedItems.length >= strategy.base.length + optionalSlots) break;
 
       const items = await getItemsByCategory(category);
-      
-      // Find a coherent item
+
+      // Collect up to 6 qualifying candidates, then pick randomly for variety
       let selectedItem: Doc<'items'> | null = null;
-      
+      const candidates: Doc<'items'>[] = [];
+
       for (const { item } of items) {
         if (usedItemIds.has(item._id)) continue;
-        
-        // CRITICAL: Check coherence with all existing items
         if (!isItemCoherentWithLook(item, matchedItems)) {
           console.log(`[Chat:Matching] Skipping ${item.name} - not coherent with existing items`);
           continue;
         }
-        
-        selectedItem = item;
-        break;
+        candidates.push(item);
+        if (candidates.length >= 6) break;
+      }
+
+      if (candidates.length > 0) {
+        selectedItem = candidates[Math.floor(Math.random() * candidates.length)];
       }
       
       if (selectedItem) {
@@ -966,8 +1243,21 @@ async function matchItemsForLook(
           }
         }
 
+        // Formality match — hard exclusion + scoring
+        const requiredFormality = getRequiredFormalityFromOccasion(preferences.occasion);
+        if (requiredFormality) {
+          const itemFormality = getFormalityLevel(item);
+          const diff = Math.abs(
+            FORMALITY_ORDER.indexOf(itemFormality) - FORMALITY_ORDER.indexOf(requiredFormality)
+          );
+          if (diff === 0) score += 40;
+          else if (diff === 1) score += 15;
+          else score = -Infinity;
+        }
+
         return { item, score };
       })
+      .filter(({ score }) => score !== -Infinity) // Hard-exclude formality mismatches
       .sort((a, b) => b.score - a.score);
   }
 

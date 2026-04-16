@@ -728,15 +728,16 @@ export const generateLookImage = internalAction({
 
       console.log(`[WORKFLOW:ONBOARDING] Look has ${lookData.items.length} items`);
 
-      // Fetch user image and all item images in PARALLEL for faster processing
-      console.log(`[WORKFLOW:ONBOARDING] Fetching user image and ${lookData.items.length} item images in parallel...`);
+      // Fetch user image, catalog item images, and wardrobe item images in PARALLEL
+      const totalImages = lookData.items.length + (lookData.wardrobeItems?.length ?? 0);
+      console.log(`[WORKFLOW:ONBOARDING] Fetching user image + ${totalImages} item images in parallel...`);
       const fetchStartTime = Date.now();
 
-      // Prepare all fetch promises
       const userImagePromise = fetch(userImage.url)
         .then((res) => res.arrayBuffer())
         .then((buffer) => Buffer.from(buffer).toString('base64'));
 
+      // Catalog item image promises
       const itemImagePromises = lookData.items
         .filter((item) => item.primaryImageUrl)
         .map(async (item) => {
@@ -744,34 +745,45 @@ export const generateLookImage = internalAction({
             const response = await fetch(item.primaryImageUrl!);
             const buffer = await response.arrayBuffer();
             const base64 = Buffer.from(buffer).toString('base64');
-            
             const colorStr = item.colors.length > 0 ? item.colors.join('/') : '';
             const description = `${colorStr} ${item.name}${item.brand ? ` by ${item.brand}` : ''}`.trim();
-            
-            return {
-              base64,
-              name: item.name,
-              description,
-            };
+            return { base64, name: item.name, description };
           } catch (imgError) {
             console.warn(`[WORKFLOW:ONBOARDING] Failed to fetch item image for ${item.name}:`, imgError);
             return null;
           }
         });
 
+      // Wardrobe item image promises (background-removed images from Convex storage)
+      const wardrobeImagePromises = (lookData.wardrobeItems ?? [])
+        .filter((wi) => wi.imageUrl)
+        .map(async (wi) => {
+          try {
+            const response = await fetch(wi.imageUrl!);
+            const buffer = await response.arrayBuffer();
+            const base64 = Buffer.from(buffer).toString('base64');
+            const description = `${wi.color} ${wi.description} (user's own wardrobe item)`.trim();
+            return { base64, name: wi.description, description };
+          } catch (imgError) {
+            console.warn(`[WORKFLOW:ONBOARDING] Failed to fetch wardrobe item image for ${wi.description}:`, imgError);
+            return null;
+          }
+        });
+
       // Execute all fetches in parallel
-      const [userImageBase64, ...itemImageResults] = await Promise.all([
+      const [userImageBase64, ...allImageResults] = await Promise.all([
         userImagePromise,
         ...itemImagePromises,
+        ...wardrobeImagePromises,
       ]);
 
-      // Filter out failed fetches
-      const itemImagesBase64 = itemImageResults.filter(
+      // Filter out failed fetches — catalog + wardrobe images combined
+      const itemImagesBase64 = allImageResults.filter(
         (item): item is { base64: string; name: string; description: string } => item !== null
       );
 
       const fetchTime = Date.now() - fetchStartTime;
-      console.log(`[WORKFLOW:ONBOARDING] Fetched user + ${itemImagesBase64.length} item images in ${fetchTime}ms (parallel)`);
+      console.log(`[WORKFLOW:ONBOARDING] Fetched user + ${itemImagesBase64.length} item images (${lookData.items.length} catalog + ${lookData.wardrobeItems?.length ?? 0} wardrobe) in ${fetchTime}ms`);
 
       // Generate the prompt using Vercel AI SDK for better prompt quality
       const outfitDescription = itemImagesBase64.map((item) => item.description).join(', ');

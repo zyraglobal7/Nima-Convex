@@ -52,6 +52,7 @@ const lookValidator = v.object({
   ),
   originalLookId: v.optional(v.id('looks')),
   loveCount: v.optional(v.number()),
+  wardrobeItemIds: v.optional(v.array(v.id('wardrobeItems'))),
   createdAt: v.number(),
   updatedAt: v.number(),
 });
