@@ -181,6 +181,15 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   // Query messages for the thread when it exists (for stable timestamps)
   const messagesData = useQuery(api.messages.queries.getAllMessages, threadId ? { threadId } : 'skip');
 
+  // Wardrobe items for AI context
+  const wardrobeItemsRaw = useQuery(api.wardrobe.queries.getWardrobeItems, {});
+  const wardrobeItems = wardrobeItemsRaw?.map((item) => ({
+    description: item.description,
+    category: item.category,
+    color: item.color,
+    formality: item.formality,
+  })) ?? [];
+
   // useChat for AI streaming
   const {
     messages: aiMessages,
@@ -190,7 +199,7 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
   } = useChat({
     // @ts-expect-error - AI SDK v5 types may not include api/body options but they work at runtime
     api: '/api/chat',
-    body: { userData },
+    body: { userData, wardrobeItems },
     onError: (error) => {
       console.error('[Chat] useChat onError:', error);
       setChatState('idle');
@@ -214,12 +223,14 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
         }
       }
 
-      // Check for [MATCH_ITEMS:occasion] tag
+      // Check for [MATCH_ITEMS:occasion|source] tag
       const matchItemsMatch = messageContent.match(/\[MATCH_ITEMS:([^\]]+)\]/);
       if (matchItemsMatch) {
-        const occasion = matchItemsMatch[1];
-        console.log('[Chat] Detected MATCH_ITEMS with occasion:', occasion);
-        handleMatchItems(occasion);
+        const parts = matchItemsMatch[1].split('|');
+        const occasion = parts[0].trim();
+        const source = (['new', 'wardrobe', 'both'].includes(parts[1]?.trim() ?? '') ? parts[1].trim() : 'new') as 'new' | 'wardrobe' | 'both';
+        console.log('[Chat] Detected MATCH_ITEMS with occasion:', occasion, 'source:', source);
+        handleMatchItems(occasion, source);
       } else {
         // Check for [REMIX_LOOK:source|twist] tag
         const remixMatch = messageContent.match(/\[REMIX_LOOK:([^|]+)\|([^\]]+)\]/);
@@ -259,15 +270,15 @@ function AskNimaInner({ authExpired, userData, currentUser }: AskNimaInnerProps)
 
   // Handle item matching
   const handleMatchItems = useCallback(
-    async (occasion: string) => {
+    async (occasion: string, source: 'new' | 'wardrobe' | 'both' = 'new') => {
       const targetThreadId = threadId || pendingThreadIdRef.current;
-      console.log('[Chat] handleMatchItems starting:', { occasion, threadId: targetThreadId });
+      console.log('[Chat] handleMatchItems starting:', { occasion, source, threadId: targetThreadId });
 
       setChatState('curating');
       setGenerationProgress('Curating based on your preferences...');
 
       try {
-        const result = await createLooksFromChat({ occasion, context: occasion });
+        const result = await createLooksFromChat({ occasion, context: occasion, source });
         console.log('[Chat] createLooksFromChat result:', result);
 
         if (!result.success) {

@@ -21,7 +21,7 @@ export function FloatingAskButton({ isVisible, onPress }: FloatingAskButtonProps
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 10 }}
           transition={{ duration: 0.2, ease: 'easeOut' }}
-          className="fixed bottom-[80px] left-0 right-0 flex justify-center z-40 pointer-events-none"
+          className="fixed bottom-[108px] left-0 right-0 flex justify-center z-40 pointer-events-none"
         >
           <button
             onClick={onPress}

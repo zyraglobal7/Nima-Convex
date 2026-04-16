@@ -257,7 +257,10 @@ function ChatBody({
 
       const matchItemsMatch = messageContent.match(/\[MATCH_ITEMS:([^\]]+)\]/);
       if (matchItemsMatch) {
-        handleMatchItems(matchItemsMatch[1]);
+        const parts = matchItemsMatch[1].split('|');
+        const occasion = parts[0].trim();
+        const source = (['new', 'wardrobe', 'both'].includes(parts[1]?.trim() ?? '') ? parts[1].trim() : 'new') as 'new' | 'wardrobe' | 'both';
+        handleMatchItems(occasion, source);
       } else {
         const remixMatch = messageContent.match(/\[REMIX_LOOK:([^|]+)\|([^\]]+)\]/);
         if (remixMatch) handleRemixLook(remixMatch[1], remixMatch[2]);
@@ -274,11 +277,11 @@ function ChatBody({
   }, [messagesData, aiMessages, chatState]);
 
   const handleMatchItems = useCallback(
-    async (occasion: string) => {
+    async (occasion: string, source: 'new' | 'wardrobe' | 'both' = 'new') => {
       const targetThreadId = threadId || pendingThreadIdRef.current;
       setChatState('curating');
       try {
-        const result = await createLooksFromChat({ occasion, context: occasion });
+        const result = await createLooksFromChat({ occasion, context: occasion, source });
         if (!result.success) {
           setChatState(result.message === 'no_matches' || result.message === 'no_photo' ? 'no_matches' : 'idle');
           if ((result.message === 'no_matches' || result.message === 'no_photo') && targetThreadId) {

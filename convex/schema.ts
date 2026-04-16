@@ -339,6 +339,9 @@ export default defineSchema({
     // For recreated looks, track the original look
     originalLookId: v.optional(v.id('looks')),
 
+    // Wardrobe items included in this look (user's own items, for virtual try-on)
+    wardrobeItemIds: v.optional(v.array(v.id('wardrobeItems'))),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })

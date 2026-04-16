@@ -60,7 +60,7 @@ function DiscoverPageContent() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [workflowStarted, setWorkflowStarted] = useState(false);
 
-  // Get active filter from URL params, default to 'apparel'
+  // Get active filter from URL params, default to 'my-look'
   // Also check for 'from=apparel' param (used when returning from category pages)
   const tabFromUrl = searchParams.get('tab') as FilterType | null;
   const fromParam = searchParams.get('from');
@@ -69,7 +69,7 @@ function DiscoverPageContent() {
       ? tabFromUrl
       : fromParam === 'apparel'
         ? 'apparel'
-        : 'apparel';
+        : 'my-look';
   const [activeFilter, setActiveFilterState] = useState<FilterType>(initialFilter);
 
   // Track if we initialized from a category return (to preserve selection)
@@ -560,23 +560,23 @@ function DiscoverPageContent() {
           </motion.div>
         )}
 
-        {/* Filter tabs - 3 main pills + Create a Look button */}
+        {/* Filter tabs */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.4 }}
-          className="mb-4 flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
+          className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
         >
           {[
-            { id: 'apparel' as FilterType, label: 'Apparel', icon: Shirt },
-            { id: 'explore' as FilterType, label: 'Explore', icon: User },
             { id: 'my-look' as FilterType, label: 'My Look', icon: Sparkles },
+            { id: 'explore' as FilterType, label: 'Explore', icon: User },
+            { id: 'apparel' as FilterType, label: 'Apparel', icon: Shirt },
           ].map((filter) => (
             <button
               key={filter.id}
               onClick={() => {
                 setActiveFilter(filter.id);
-                // Reset selection mode when switching tabs
+                // Reset selection mode when switching away from apparel
                 if (filter.id !== 'apparel' && isSelectionMode) {
                   clearSelection();
                 }
@@ -595,31 +595,40 @@ function DiscoverPageContent() {
             </button>
           ))}
 
-          {/* Create a Look button - shown inline after Apparel tab */}
-          {activeFilter === 'apparel' && (
+          {/* Cancel button — only visible on Apparel tab when in selection mode */}
+          {activeFilter === 'apparel' && isSelectionMode && (
             <button
-              onClick={() => {
-                if (isSelectionMode) {
-                  clearSelection();
-                } else {
-                  setSelectionMode(true);
-                }
-              }}
-              className={`
-                px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
-                transition-all duration-200 flex items-center gap-2
-                ${
-                  isSelectionMode
-                    ? 'bg-destructive text-destructive-foreground'
-                    : 'bg-secondary text-secondary-foreground hover:bg-secondary-hover'
-                }
-              `}
+              onClick={() => clearSelection()}
+              className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 flex items-center gap-2 bg-destructive text-destructive-foreground"
             >
-              <Sparkles className="w-3 h-3" />
-              {isSelectionMode ? 'Cancel' : 'Create Look'}
+              Cancel
             </button>
           )}
         </motion.div>
+
+        {/* Create Look — appears directly below the My Look tab, outline only */}
+        <AnimatePresence>
+          {activeFilter === 'my-look' && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15 }}
+              className="mt-2 mb-4"
+            >
+              <button
+                onClick={() => {
+                  setActiveFilter('apparel');
+                  setSelectionMode(true);
+                }}
+                className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 flex items-center gap-2 border border-border text-text-primary hover:bg-surface"
+              >
+                <Sparkles className="w-3 h-3" />
+                Create Look
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Selection mode indicator */}
         {isSelectionMode && activeFilter === 'apparel' && (
